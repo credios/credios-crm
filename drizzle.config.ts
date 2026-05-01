@@ -10,6 +10,9 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL!,
   },
+  // Isola escopo do drizzle-kit ao schema `public`. O schema `auth` é gerenciado
+  // pelo Supabase; FKs cruzando para `auth.users` continuam funcionando.
+  schemaFilter: ["public"],
   verbose: true,
   strict: true,
 });

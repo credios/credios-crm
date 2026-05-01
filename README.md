@@ -36,13 +36,15 @@ Sistema interno de gestão de leads da **Credios** para o produto **CGI** (Créd
    ```
    > Senhas Postgres com caracteres especiais (`+ * / # @`) precisam estar **URL-encoded** na `DATABASE_URL`.
 
-4. **Dev server:**
+4. **Banco de dados** (ver seção [Banco de dados](#banco-de-dados) para o passo-a-passo completo).
+
+5. **Dev server:**
    ```bash
    npm run dev
    ```
    Abrir <http://localhost:3000>.
 
-   Na fase 0 (esqueleto), só a página inicial existe. Rotas (`/login`, `/leads`, etc.) chegam na Fase 1.
+   Na fase 0 (esqueleto), só a página inicial existe. Rotas (`/login`, `/leads`, etc.) chegam na Fase 2 em diante.
 
 ## Scripts
 
@@ -56,7 +58,54 @@ Sistema interno de gestão de leads da **Credios** para o produto **CGI** (Créd
 | `npm run db:migrate` | Aplica migrations no banco |
 | `npm run db:push` | Sincroniza schema diretamente (dev) |
 | `npm run db:studio` | Abre Drizzle Studio |
-| `npm run db:seed` | Roda seed inicial |
+| `npm run db:policies` | Aplica `db/policies.sql` (RLS, view, triggers) |
+| `npm run db:seed` | Roda seed inicial (2 usuários + 5 templates) |
+
+## Banco de dados
+
+Schema em [`db/schema.ts`](db/schema.ts). Migrations versionadas em [`db/migrations/`](db/migrations/). Policies de RLS, view de masking e triggers em [`db/policies.sql`](db/policies.sql) (aplicação manual). Seed de usuários iniciais e templates em [`db/seed.ts`](db/seed.ts).
+
+### Primeira aplicação (projeto novo)
+
+1. **Confirmar `DATABASE_URL` em `.env.local`** (senha URL-encoded). Ver [`.env.local.example`](.env.local.example).
+
+2. **Aplicar a migration de schema:**
+   ```bash
+   npm run db:migrate
+   ```
+   Isso roda `db/migrations/0000_useful_caretaker.sql` no Supabase. Verifica via dashboard que as 9 tabelas, 5 enums e 8 índices foram criados.
+
+   > Alternativa para dev rápido (sem versionamento): `npm run db:push` empurra o schema atual direto para o banco. Não usar em prod.
+
+3. **Aplicar policies/triggers/view:**
+   ```bash
+   npm run db:policies
+   ```
+   Roda `db/apply-policies.ts`, que executa `db/policies.sql` via `postgres-js`. Idempotente (cada policy tem `DROP POLICY IF EXISTS` antes do `CREATE POLICY`). Alternativa manual: copiar o conteúdo de [`db/policies.sql`](db/policies.sql) para o SQL Editor do Supabase Dashboard.
+
+4. **Rodar seed (cria 2 usuários no Supabase Auth + 5 templates):**
+   ```bash
+   npm run db:seed
+   ```
+   O script é idempotente — pode ser rodado múltiplas vezes sem duplicar.
+
+### Workflow de mudanças no schema
+
+1. Editar `db/schema.ts`.
+2. `npm run db:generate` → cria nova migration em `db/migrations/`.
+3. Revisar o SQL gerado (commitado no repo).
+4. `npm run db:migrate` para aplicar no Supabase.
+5. Se a mudança envolver RLS/policies, atualizar `db/policies.sql` e re-aplicar manualmente.
+
+### Validação RLS (Fase 1)
+
+Via SQL Editor do Supabase, simular um usuário (`SET LOCAL ROLE authenticated; SET LOCAL "request.jwt.claim.sub" = '<UUID>';`) e checar:
+- Admin vê todos os leads.
+- Consultor vê só os atribuídos.
+- Marketing vê 0 rows na tabela `leads`, e dados mascarados em `leads_marketing`.
+- audit_log: só admin lê.
+
+Comandos exatos no rodapé de [`db/policies.sql`](db/policies.sql).
 
 ## Estrutura de pastas
 
