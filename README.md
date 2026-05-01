@@ -165,6 +165,99 @@ Logs do middleware (proxy) são intencionalmente omitidos: roda no Edge runtime,
 
 Para usar email/senha, fazer "esqueci minha senha" para definir senha inicial (ou definir manualmente em `/perfil` após primeiro login Google).
 
+## Leads — ingestão e operações (Fase 3)
+
+### Webhook de ingestão
+
+`POST /api/webhooks/lead` — endpoint público para o site da Credios (substitui o destino atual no Notion).
+
+**Headers obrigatórios:**
+- `x-webhook-secret: $WEBHOOK_SECRET` (compare timing-safe)
+- `content-type: application/json`
+
+**Resposta:**
+- `201 { leadId, duplicate: false, possivelDuplicidadeCpf }` — lead criado
+- `200 { duplicate: true, leadId }` — payload idêntico recebido em <60s
+- `400 { error, details }` — payload inválido
+- `401 { error: "unauthorized" }` — secret faltando ou errado
+
+**Comportamento:**
+- **Idempotência**: SHA256 das top-level keys ordenadas; janela de 60s via tabela `webhook_idempotency`
+- **CPF duplicado**: NÃO bloqueia — cria o lead e registra row em `duplicidades_pendentes` para revisão manual (CLAUDE.md §6.2)
+- **Routing**: MVP placeholder → `consultor_id = null` (pool); engine real entra na Fase 4
+- **Email para admins**: dispara via Resend se `foraHorarioComercial()` (08:00-18:00 BRT seg-sex; sem feriados ainda — TODO)
+- **Audit**: grava `lead_criado_webhook` com metadata de routing
+- **Interação automática**: insere `evento_sistema` no timeline do lead
+
+**Exemplo cURL:**
+```bash
+curl -X POST http://localhost:3000/api/webhooks/lead \
+  -H "x-webhook-secret: $WEBHOOK_SECRET" \
+  -H "content-type: application/json" \
+  -d '{
+    "nome": "João Silva",
+    "whatsapp": "+5547999990001",
+    "cpf": "12345678901",
+    "email": "joao@example.com",
+    "valor_credito": 350000,
+    "valor_imovel": 900000,
+    "renda_mensal": 12000,
+    "cidade": "Blumenau",
+    "estado": "SC",
+    "tipo_imovel": "Casa",
+    "situacao_imovel": "Quitado",
+    "origem": "YouTube",
+    "utm_campaign": "campanha-x"
+  }'
+```
+
+### APIs autenticadas (sessão Supabase)
+
+| Método | Rota | Quem | Notas |
+|---|---|---|---|
+| GET | `/api/leads` | qualquer authenticated | filtros: status, consultorId, origem, q (nome/email/cpf/telefone), valorMin/Max, dataDe/Ate; paginação 50 default; consultor vê só atribuídos; marketing recebe leads mascarados |
+| POST | `/api/leads` | admin/gerente/consultor | criação manual; consultor não pode atribuir a outro |
+| GET | `/api/leads/[id]` | conforme RLS app | inclui timeline com `autorNome` via JOIN |
+| PATCH | `/api/leads/[id]` | admin/gerente; consultor (atribuído) | edita campos do lead; ignora `consultorId` (use endpoint próprio) |
+| PATCH | `/api/leads/[id]/status` | mesmo de update; reabertura de fechado só admin | exige `bancoAprovador`/`valorLiberadoCentavos`/`comissaoCentavos`/`dataFechamento` p/ status `fechado`; exige `motivoDesqualificacao` p/ `desqualificado`/`perdido` |
+| PATCH | `/api/leads/[id]/atribuicao` | admin/gerente | `{ consultorId: uuid \| null }`; cria interação `mudanca_atribuicao` |
+| POST | `/api/leads/[id]/interacoes` | admin/gerente; consultor (atribuído) | tipos: ligacao, whatsapp_*, email, reuniao, anotacao, documento_recebido; atualiza `ultimo_contato` |
+
+### Mascaramento (perfil `marketing`)
+
+`src/lib/auth/mascaramento.ts` aplica server-side ao response de listas/detalhes:
+- `cpf` → `***.***.***-XX`
+- `email` → `***@dominio.com`
+- `whatsapp` → `null`
+- `rendaMensalCentavos` → `null` + adiciona `rendaFaixa` ("Até R$ 5k", "R$ 5k–10k", etc.)
+- `bancoAprovador` / `valorLiberadoCentavos` / `comissaoCentavos` → `null`
+
+A view `leads_marketing` no Postgres (Fase 1) faz o mesmo masking — mas o backend prefere fazer em JS pra simplicidade (single query path com Drizzle).
+
+### Permissions
+
+`src/lib/auth/permissions.ts` exporta `checkPermission(user, action, resource?)` usado nos route handlers. Actions: `lead.list`, `lead.read`, `lead.create`, `lead.update`, `lead.assign`, `lead.change_status`, `interacao.create`, `user.manage`, `config.manage`, `audit.read`. Para `lead.read/update/change_status/interacao.create` em consultor, o `resource.consultorId` precisa bater com `user.id`.
+
+### Audit log estendido
+
+Eventos novos gravados:
+- `lead_criado_webhook`, `lead_criado_manual`
+- `lead_visualizado`, `lead_editado`
+- `lead_status_mudou` (metadata: `de`, `para`, e campos extras se terminal)
+- `lead_atribuido` (metadata: `de`, `para`)
+- `interacao_criada` (metadata: `interacaoId`, `tipo`)
+
+### Tabela auxiliar `webhook_idempotency`
+
+- Schema: `id`, `payload_hash UNIQUE`, `lead_id` (FK leads), `created_at`
+- RLS habilitada sem policies → só `service_role` acessa (backend)
+- Cleanup de rows antigas: TODO Fase 4 (`/api/cron/cleanup-idempotency`)
+
+### UI
+
+- `/leads/novo` (admin/gerente/consultor): form com seções Pessoais / Contato / Operação / Origem-atribuição. RHF + Zod, conversão de R$ → centavos no submit. Consultor não vê o select de atribuição.
+- `/leads`, `/leads/kanban`, `/leads/[id]`: ainda placeholders — visualizações entram na Fase 4.
+
 ## Estrutura de pastas
 
 Layout completo em `CLAUDE.md` §8. Diretórios criados na Fase 0 ficam vazios (com `.gitkeep`); arquivos chegam ao longo das fases.

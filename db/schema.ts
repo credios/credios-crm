@@ -337,3 +337,25 @@ export const auditLog = pgTable(
     ),
   ],
 );
+
+// ============================================================================
+// webhook_idempotency — dedup de chamadas ao /api/webhooks/lead
+// (CLAUDE.md §6.2 etapa 3 — janela de 60s por hash de payload).
+// Usado apenas pelo backend (service_role bypassa RLS).
+// Cleanup de rows antigas: TODO via cron na Fase 4.
+// ============================================================================
+
+export const webhookIdempotency = pgTable(
+  "webhook_idempotency",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    payloadHash: text("payload_hash").notNull().unique(),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_webhook_idem_created").on(sql`${table.createdAt} DESC`),
+  ],
+);

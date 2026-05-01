@@ -21,3 +21,89 @@ export function canAccessAudit(user: AppUser | null): boolean {
 export function shouldEnforceMfa(user: { perfil: Perfil } | null): boolean {
   return isAdmin(user);
 }
+
+// ============================================================================
+// checkPermission — gate de ações no backend (API routes, server actions)
+// ============================================================================
+
+export type Action =
+  | "lead.list"
+  | "lead.read"
+  | "lead.create"
+  | "lead.update"
+  | "lead.assign"
+  | "lead.change_status"
+  | "interacao.create"
+  | "user.manage"
+  | "config.manage"
+  | "audit.read";
+
+export type Resource =
+  | { type: "lead"; consultorId?: string | null }
+  | { type: "user"; targetUserId?: string }
+  | { type: "config" }
+  | { type: "audit" };
+
+/**
+ * Decide se `user` pode executar `action` opcionalmente sobre `resource`.
+ * Uso típico em API routes:
+ *
+ *   if (!checkPermission(appUser, "lead.update", { type: "lead", consultorId: lead.consultorId })) {
+ *     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+ *   }
+ */
+export function checkPermission(
+  user: AppUser | null,
+  action: Action,
+  resource?: Resource,
+): boolean {
+  if (!user || !user.ativo) return false;
+  const perfil = user.perfil;
+
+  switch (action) {
+    case "lead.list":
+      // Qualquer authenticated lista; o filtro server-side aplica os scopes.
+      return true;
+
+    case "lead.read": {
+      if (perfil === "admin" || perfil === "gerente" || perfil === "marketing") {
+        return true;
+      }
+      if (perfil === "consultor") {
+        if (resource?.type !== "lead") return false;
+        return resource.consultorId === user.id;
+      }
+      return false;
+    }
+
+    case "lead.create":
+      return perfil === "admin" || perfil === "gerente" || perfil === "consultor";
+
+    case "lead.update":
+    case "lead.change_status": {
+      if (perfil === "admin" || perfil === "gerente") return true;
+      if (perfil === "consultor") {
+        if (resource?.type !== "lead") return false;
+        return resource.consultorId === user.id;
+      }
+      return false;
+    }
+
+    case "lead.assign":
+      return perfil === "admin" || perfil === "gerente";
+
+    case "interacao.create": {
+      if (perfil === "admin" || perfil === "gerente") return true;
+      if (perfil === "consultor") {
+        if (resource?.type !== "lead") return false;
+        return resource.consultorId === user.id;
+      }
+      return false;
+    }
+
+    case "user.manage":
+    case "config.manage":
+    case "audit.read":
+      return perfil === "admin";
+  }
+}

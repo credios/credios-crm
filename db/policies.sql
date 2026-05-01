@@ -81,6 +81,9 @@ ALTER TABLE public.mensagens_template     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.duplicidades_pendentes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sla_alertas            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log              ENABLE ROW LEVEL SECURITY;
+-- webhook_idempotency: somente backend (service_role bypassa RLS).
+-- Não criamos policies → nega tudo para anon/authenticated.
+ALTER TABLE public.webhook_idempotency    ENABLE ROW LEVEL SECURITY;
 
 -- ----------------------------------------------------------------
 -- 4. Policies — public.users
