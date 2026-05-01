@@ -1,6 +1,27 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Rotas que NÃO exigem autenticação.
+const PUBLIC_PATH_PREFIXES = [
+  "/login",
+  "/recuperar-senha",
+  "/auth/callback",
+  "/auth/logout",
+  "/auth/desafio-mfa",
+  "/api/webhooks",
+];
+
+// Rotas que, se acessadas por usuário já autenticado, devem ser redirecionadas para a app.
+const AUTH_ONLY_PUBLIC_PREFIXES = ["/login", "/recuperar-senha"];
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+function isAuthOnlyPublicPath(pathname: string): boolean {
+  return AUTH_ONLY_PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -25,12 +46,40 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // IMPORTANTE: não inserir lógica entre createServerClient e getUser().
-  // Movê-las pode causar logouts aleatórios — ver docs do @supabase/ssr.
-  await supabase.auth.getUser();
+  // IMPORTANTE: getUser() é a única chamada entre createServerClient e o return.
+  // Inserir lógica entre eles pode silenciosamente deslogar usuários (ver docs do
+  // @supabase/ssr).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // TODO Fase 1: redirecionar não-autenticados para /login
-  // (exceto rotas públicas: /login, /recuperar-senha, /primeiro-acesso, /api/webhooks/*).
+  const path = request.nextUrl.pathname;
+
+  // Logado e tentando acessar /login ou /recuperar-senha → manda para a app.
+  if (user && isAuthOnlyPublicPath(path)) {
+    return NextResponse.redirect(new URL("/leads", request.url));
+  }
+
+  // Rotas públicas em geral: passa.
+  if (isPublicPath(path)) {
+    return supabaseResponse;
+  }
+
+  // Raiz: redireciona conforme estado de auth.
+  if (path === "/") {
+    return NextResponse.redirect(
+      new URL(user ? "/leads" : "/login", request.url),
+    );
+  }
+
+  // Demais rotas: exigem autenticação.
+  if (!user) {
+    const loginUrl = new URL("/login", request.url);
+    if (path !== "/") {
+      loginUrl.searchParams.set("redirectTo", path + request.nextUrl.search);
+    }
+    return NextResponse.redirect(loginUrl);
+  }
 
   return supabaseResponse;
 }

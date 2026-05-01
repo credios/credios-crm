@@ -38,13 +38,13 @@ Sistema interno de gestão de leads da **Credios** para o produto **CGI** (Créd
 
 4. **Banco de dados** (ver seção [Banco de dados](#banco-de-dados) para o passo-a-passo completo).
 
-5. **Dev server:**
+5. **Configurar Auth no Supabase Dashboard** (necessário antes do primeiro login — ver seção [Autenticação](#autenticação)).
+
+6. **Dev server:**
    ```bash
    npm run dev
    ```
-   Abrir <http://localhost:3000>.
-
-   Na fase 0 (esqueleto), só a página inicial existe. Rotas (`/login`, `/leads`, etc.) chegam na Fase 2 em diante.
+   Abrir <http://localhost:3000>. A raiz redireciona para `/login`. Após autenticar, a app monta sidebar + conteúdo.
 
 ## Scripts
 
@@ -107,6 +107,64 @@ Via SQL Editor do Supabase, simular um usuário (`SET LOCAL ROLE authenticated; 
 
 Comandos exatos no rodapé de [`db/policies.sql`](db/policies.sql).
 
+## Autenticação
+
+Implementação completa em [§6.1 do CLAUDE.md](./CLAUDE.md). Stack: Supabase Auth (Google OAuth + email/senha + MFA TOTP) + Next.js App Router + middleware (`src/proxy.ts`).
+
+### Configuração do Supabase Dashboard (uma vez por ambiente)
+
+1. **Authentication → URL Configuration**:
+   - **Site URL**: `http://localhost:3000` em dev, `https://crm.credios.com.br` em prod.
+   - **Redirect URLs** (adicionar todos):
+     - `http://localhost:3000/auth/callback`
+     - `http://localhost:3000/recuperar-senha/confirmar`
+     - `https://crm.credios.com.br/auth/callback`
+     - `https://crm.credios.com.br/recuperar-senha/confirmar`
+
+2. **Authentication → Providers → Google**: habilitar e colar `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`. Authorized redirect URI no Google Console: `https://djpzmyaemxifqxawenua.supabase.co/auth/v1/callback`.
+
+3. **Authentication → SMTP** (opcional mas recomendado para emails de recuperação): trocar SMTP padrão do Supabase pelo **Resend**:
+   - Host: `smtp.resend.com`
+   - Port: `587`
+   - User: `resend`
+   - Pass: `RESEND_API_KEY` (de `.env.local`)
+   - Sender name: `CRM Credios`
+   - Sender email: `crm@credios.com.br`
+
+   Sem essa config, recuperação de senha usa o SMTP nativo do Supabase, com rate limit de 4 emails/h em projetos novos.
+
+### Fluxos implementados
+
+- `/login` — Google OAuth (preferencial) + email/senha
+- `/recuperar-senha` → email com link → `/recuperar-senha/confirmar` para definir nova senha
+- `/primeiro-acesso` — coleta `nome` quando vazio; força enrollment de TOTP para admin sem MFA
+- `/auth/desafio-mfa` — step-up MFA (admin com sessão AAL1 precisa subir para AAL2)
+- `/perfil` — editar nome/whatsapp, definir senha (para login email/senha), ver/desativar 2FA (admin não pode desativar)
+- `/auth/logout` (POST) — encerra sessão + grava `audit_log`
+- `/auth/callback` (GET) — finaliza OAuth (PKCE) + grava `audit_log`
+
+### Gating
+
+- **`src/proxy.ts`** (Next 16 renomeou middleware → proxy): exige autenticação para tudo exceto `/login`, `/recuperar-senha`, `/auth/*`, `/api/webhooks/*`. Logado tentando acessar `/login` → redireciona para `/leads`.
+- **`src/app/(app)/layout.tsx`**: server-side gate adicional — checa `users.nome` (vazio → `/primeiro-acesso`), checa MFA enrolment para admin, checa AAL2 para admin com factor.
+- **`src/app/(app)/configuracoes/layout.tsx` e `audit/layout.tsx`**: bloqueiam não-admin → `/sem-permissao`.
+
+### Audit log
+
+Eventos gravados em `audit_log` (via Drizzle, bypassa RLS):
+- `login` — em `/auth/callback` e em `signInWithPassword`
+- `logout` — em `/auth/logout`
+- `perfil_editado`, `senha_atualizada`, `mfa_desativado` — server actions de `/perfil`
+
+Logs do middleware (proxy) são intencionalmente omitidos: roda no Edge runtime, sem suporte a TCP socket do `postgres-js`.
+
+### Estado dos usuários do seed
+
+- **Gabriel** (`gabriel@credios.com.br`, admin): `nome` preenchido, sem senha, sem MFA. Primeiro login via Google → forçado para `/primeiro-acesso` enrolar TOTP.
+- **Rodrigo** (`rodrigo@credios.com.br`, consultor): `nome` preenchido, sem senha, sem MFA. Login via Google → vai direto para `/leads`.
+
+Para usar email/senha, fazer "esqueci minha senha" para definir senha inicial (ou definir manualmente em `/perfil` após primeiro login Google).
+
 ## Estrutura de pastas
 
 Layout completo em `CLAUDE.md` §8. Diretórios criados na Fase 0 ficam vazios (com `.gitkeep`); arquivos chegam ao longo das fases.
@@ -131,7 +189,7 @@ credios-crm/
 │   │   ├── auth/ routing/ notifications/ validators/ formatters/
 │   │   └── db.ts utils.ts
 │   ├── types/
-│   └── middleware.ts
+│   └── proxy.ts                    # Next 16: era middleware.ts em <16
 ├── tests/
 ├── drizzle.config.ts
 └── components.json                 # shadcn

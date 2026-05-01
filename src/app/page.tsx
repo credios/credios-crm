@@ -1,13 +1,9 @@
-export default function Home() {
+// Esta página é alcançada apenas se o middleware permitir (raro, pois ele já
+// redireciona "/" para /leads ou /login). Mantemos um fallback minimalista.
+export default function HomePage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8">
-      <div className="max-w-md text-center space-y-4">
-        <h1 className="text-3xl font-semibold tracking-tight">CRM Credios</h1>
-        <p className="text-muted-foreground">
-          Esqueleto inicial. As páginas da aplicação serão implementadas na
-          Fase 1 conforme CLAUDE.md.
-        </p>
-      </div>
+    <main className="flex min-h-screen items-center justify-center p-8">
+      <p className="text-sm text-muted-foreground">Carregando...</p>
     </main>
   );
 }
