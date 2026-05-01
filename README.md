@@ -247,6 +247,43 @@ Eventos novos gravados:
 - `lead_atribuido` (metadata: `de`, `para`)
 - `interacao_criada` (metadata: `interacaoId`, `tipo`)
 
+### Engine de roteamento (Fase 4)
+
+Implementação em `src/lib/routing/`:
+- **`types.ts`** — `RoutingContext`, `RoutingRule`, `RoutingDeps`, `RuleCondicoes`
+- **`conditions.ts`** — `matchesConditions(ctx, conds)` (pura, AND lógico)
+- **`round-robin.ts`** — `pickNextRoundRobin(regraId, grupo, { dryRun? })` com `SELECT … FOR UPDATE` em transação Drizzle (protege contra race condition)
+- **`engine.ts`** — `aplicarRoteamento(ctx, deps, options?)` recebe deps via DI (mockáveis em tests). Avalia regras ativas em ordem de prioridade desc; primeira que bate executa ação e retorna; falha de execução cai para pool com warning.
+- **`db-deps.ts`** — `realRoutingDeps` (produção, lê regras do banco)
+- **`context.ts`** — `contextFromWebhook(payload)` e `contextFromCreateLead(input)` para normalizar inputs
+
+**Tipos de condição** (todas opcionais, AND lógico): `valor_credito_min/max`, `valor_imovel_min/max` (centavos), `estado_in[]`, `origem_in[]`, `tipo_imovel_in[]`, `horario_comercial: bool`.
+
+**Tipos de ação**:
+- `atribuir_usuario` → `parametros.usuario_id` (UUID)
+- `round_robin_grupo` → `parametros.grupo_usuarios[]` (UUIDs, ordem importa)
+- `pool_nao_atribuido` → sem parâmetros (lead fica sem `consultor_id`)
+
+**Integrações**:
+- Webhook (`POST /api/webhooks/lead`) → engine roda automático
+- Criação manual (`POST /api/leads`) → engine roda **se admin/gerente não escolheu consultor explicitamente**; consultor sempre vira dono do lead que cria
+
+**APIs do CRUD de regras** (admin only):
+- `GET/POST /api/configuracoes/roteamento`
+- `PATCH/DELETE /api/configuracoes/roteamento/[id]`
+- `POST /api/configuracoes/roteamento/reorder` (body: `{ ids: [...] }`, top = maior prioridade, espaçamento ×10)
+- `POST /api/configuracoes/roteamento/testar` (dry-run; retorna `{ regraAplicada, consultorId, consultorNome }`)
+
+**UI** em `/configuracoes/roteamento` (admin only):
+- **Testar engine** no topo (form simples + botão → mostra qual regra dispararia)
+- **Lista** de regras com drag-and-drop pra reordenar (dnd-kit/sortable), toggle ativa/inativa, editar, excluir (com confirmação)
+- **Dialog de criar/editar**: nome, ativa, ConditionsEditor dinâmico (Add/Remove condições com checkboxes pra UFs/origens/tipos), ActionEditor (radio + parâmetros conditional)
+
+**Tests** unitários (Vitest):
+- `tests/routing-engine.test.ts` — 22 casos cobrindo `matchesConditions` (todos os tipos), `computeNext` (round-robin pure function), `aplicarRoteamento` (sem regras, match, no-match, prioridade, ativa=false, round-robin, dry-run, fallback)
+- Engine recebe `deps` via DI → tests não tocam Postgres
+- Rodar: `npm test` (single run) ou `npm run test:watch`
+
 ### Tabela auxiliar `webhook_idempotency`
 
 - Schema: `id`, `payload_hash UNIQUE`, `lead_id` (FK leads), `created_at`

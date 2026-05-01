@@ -7,6 +7,9 @@ import { getAppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { contextFromCreateLead } from "@/lib/routing/context";
+import { realRoutingDeps } from "@/lib/routing/db-deps";
+import { aplicarRoteamento } from "@/lib/routing/engine";
 import { createLeadSchema, listLeadsQuerySchema } from "@/lib/validators/lead";
 import { normalizarCpf, normalizarWhatsapp } from "@/lib/validators/webhook";
 
@@ -108,8 +111,13 @@ export async function POST(request: NextRequest) {
   }
   const data = parsed.data;
 
-  // Consultor não pode atribuir lead a outro usuário; força a si mesmo se omitido.
+  // Atribuição:
+  // - consultor: força a si mesmo (não pode escolher outro)
+  // - admin/gerente: respeita escolha explícita; se omitida, roda engine
   let consultorId = data.consultorId ?? null;
+  let regraAplicada: string | null = null;
+  let regraId: string | null = null;
+
   if (user.perfil === "consultor") {
     if (consultorId && consultorId !== user.id) {
       return NextResponse.json(
@@ -118,6 +126,14 @@ export async function POST(request: NextRequest) {
       );
     }
     if (!consultorId) consultorId = user.id;
+  } else if (consultorId == null) {
+    const routing = await aplicarRoteamento(
+      contextFromCreateLead(data),
+      realRoutingDeps,
+    );
+    consultorId = routing.consultorId;
+    regraAplicada = routing.regraAplicada;
+    regraId = routing.regraId;
   }
 
   const cpfClean = normalizarCpf(data.cpf ?? null);
@@ -154,8 +170,13 @@ export async function POST(request: NextRequest) {
     leadId: newLead.id,
     autorId: user.id,
     tipo: "evento_sistema",
-    conteudo: `Lead criado manualmente por ${user.nome}`,
-    metadata: { origem: data.origem ?? "Manual", consultorId } as never,
+    conteudo: `Lead criado manualmente por ${user.nome}${regraAplicada ? ` (engine: ${regraAplicada})` : ""}`,
+    metadata: {
+      origem: data.origem ?? "Manual",
+      consultorId,
+      regraAplicada,
+      regraId,
+    } as never,
   });
 
   const meta = extractRequestMeta(request);
@@ -165,7 +186,7 @@ export async function POST(request: NextRequest) {
     "lead_criado_manual",
     "lead",
     newLead.id,
-    { origem: data.origem ?? "Manual", consultorId },
+    { origem: data.origem ?? "Manual", consultorId, regraAplicada, regraId },
     meta,
   );
 

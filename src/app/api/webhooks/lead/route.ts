@@ -14,7 +14,9 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { foraHorarioComercial } from "@/lib/horario-comercial";
 import { sendNewLeadAlert } from "@/lib/notifications/email";
-import { routeNewLead } from "@/lib/routing/engine";
+import { contextFromWebhook } from "@/lib/routing/context";
+import { realRoutingDeps } from "@/lib/routing/db-deps";
+import { aplicarRoteamento } from "@/lib/routing/engine";
 import {
   emptyToNull,
   normalizarCpf,
@@ -111,8 +113,10 @@ export async function POST(request: NextRequest) {
     if (exist) leadExistenteId = exist.id;
   }
 
-  // 7. Routing (placeholder MVP: pool não-atribuído).
-  const routing = await routeNewLead(payload);
+  // 7. Engine de roteamento (CLAUDE.md §6.4).
+  const routing = await aplicarRoteamento(contextFromWebhook(payload), realRoutingDeps);
+  const consultorAtribuidoPor = routing.consultorId ? null : null; // sistema, sem usuario
+  void consultorAtribuidoPor;
 
   // 8. Insere lead.
   const [newLead] = await db
@@ -175,7 +179,7 @@ export async function POST(request: NextRequest) {
     leadId: newLead.id,
     autorId: null,
     tipo: "evento_sistema",
-    conteudo: `Lead criado via webhook (${routing.appliedRule})${
+    conteudo: `Lead criado via webhook (${routing.regraAplicada})${
       leadExistenteId ? " — possível duplicidade por CPF" : ""
     }`,
     metadata: {
