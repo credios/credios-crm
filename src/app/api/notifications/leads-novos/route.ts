@@ -1,7 +1,7 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { leads as leadsTable } from "../../../../../db/schema";
+import { leads as leadsTable, users as usersTable } from "../../../../../db/schema";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { db } from "@/lib/db";
 
@@ -24,6 +24,16 @@ export async function GET() {
   if (user.perfil === "marketing") {
     return NextResponse.json({ data: [] });
   }
+
+  // Lê o último "marcar como lido" do user pra calcular badge de NÃO lidos.
+  // Total bruto (lista exibida no dropdown) ainda usa janela de 24h —
+  // queremos histórico visível mesmo que tudo já tenha sido lido.
+  const [me] = await db
+    .select({ seenAt: usersTable.notificationsSeenAt })
+    .from(usersTable)
+    .where(eq(usersTable.id, user.id))
+    .limit(1);
+  const seenAt = me?.seenAt ?? null;
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const conds = [
@@ -49,6 +59,16 @@ export async function GET() {
     .orderBy(desc(leadsTable.createdAt))
     .limit(50);
 
+  // Conta NÃO LIDOS (created_at > seen_at, ou tudo se nunca marcou)
+  // pra UI mostrar badge vermelho só quando tem coisa nova de verdade.
+  const unreadConds = [...conds];
+  if (seenAt) unreadConds.push(gt(leadsTable.createdAt, seenAt));
+  const [unreadRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(leadsTable)
+    .where(and(...unreadConds));
+  const unreadCount = unreadRow?.count ?? 0;
+
   return NextResponse.json({
     data: rows.map((r) => ({
       ...r,
@@ -57,8 +77,11 @@ export async function GET() {
       // Pra consultor, indica se é "atribuído a você" (vs pool — caso eventual).
       assignedToMe:
         user.perfil === "consultor" ? r.consultorId === user.id : false,
+      // Não-lido se created_at > seen_at, ou tudo se nunca marcou como lido.
+      unread: !seenAt || r.createdAt > seenAt,
     })),
     perfil: user.perfil,
+    unreadCount,
+    seenAt: seenAt?.toISOString() ?? null,
   });
-  void sql;
 }

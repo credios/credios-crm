@@ -109,6 +109,9 @@ export const users = pgTable("users", {
   perfil: perfilEnum("perfil").notNull(),
   ativo: boolean("ativo").notNull().default(true),
   whatsapp: text("whatsapp"),
+  // Última vez que o user marcou notificações como lido. NULL = nunca marcou
+  // (todos leads recentes contam). Updated por POST /api/notifications/seen.
+  notificationsSeenAt: timestamp("notifications_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
