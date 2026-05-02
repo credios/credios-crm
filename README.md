@@ -364,6 +364,38 @@ Mapping em `src/components/leads/status-badge.tsx`. Ajustes na Fase 6 se quiser 
 
 **Auditoria** novas: `template_criado/editado/excluido/reordenados`, `sla_alertas_disparados`.
 
+### Relatórios (Fase 7)
+
+**Páginas**:
+- [`/relatorios`](src/app/(app)/relatorios/page.tsx) — KPIs + 6 charts via Recharts
+- [`/relatorios/google-ads`](src/app/(app)/relatorios/google-ads/page.tsx) — auditoria Google Ads (defaults `origem=Google`, últimos 90d) com sub-tabs por status + CSV export
+
+**Filtros globais** ([`<ReportFilters>`](src/components/relatorios/report-filters.tsx)) via URL: `periodo` (presets `7d/30d/90d/mes_atual/trimestre/ano/custom`) + `dataDe/dataAte` (custom only) + `origem` + `consultorId`. Default = `30d`. Bookmarkáveis.
+
+**KPIs (4 cards)** — leads novos no período, pipeline ativo (count + R$), fechados no período (count + R$ liberado + R$ comissão), conversão Novo→Fechado rolling 90d.
+
+**Charts** ([`src/components/relatorios/charts/`](src/components/relatorios/charts/)):
+1. **Volume por dia** — área empilhada por origem (`<AreaChart>`, pivot client-side wide format)
+2. **Funil de conversão** — barras horizontais decrescentes
+3. **Tempo médio em cada status** — barras horizontais. SQL com window `LAG()` em `interacoes WHERE tipo='mudanca_status'`
+4. **Performance por consultor** — tabela: atribuídos, fechados, taxa, tempo médio até primeiro contato (LATERAL JOIN)
+5. **Pipeline ativo por status** — donut PieChart agrupado por status não-terminal
+6. **Receita realizada** (últimos 12m) — `<ComposedChart>` barras (valor liberado) + linha (comissão)
+
+**Mascaramento Marketing** (§5):
+- Esconde KPI de R$ liberado/comissão (mostra só count)
+- Esconde Performance por consultor (não pode ver nomes/números individuais)
+- Esconde Receita mensal (financeiro)
+- Mostra: volume, funil, tempo, pipeline donut sem valor R$
+
+**Performance**:
+- Queries agregadas server-side via Drizzle + raw SQL com window functions onde necessário
+- 9 queries paralelas via `Promise.all`
+- `revalidate = 60` no page export
+- Cap de 500 leads na Google Ads (defensivo)
+
+**CSV** ([`src/lib/csv.ts`](src/lib/csv.ts)) — helpers `escapeCsv`, `rowsToCsv<T>(rows, columns)`, `downloadCsv` extraídos pra reusar entre `lead-bulk-actions` e `google-ads-client`. UTF-8 BOM, RFC 4180.
+
 ### Tabela auxiliar `webhook_idempotency`
 
 - Schema: `id`, `payload_hash UNIQUE`, `lead_id` (FK leads), `created_at`
