@@ -16,7 +16,8 @@ import { newPasswordSchema, type NewPasswordInput } from "@/lib/validators/auth"
 
 export function ResetForm() {
   const router = useRouter();
-  const supabase = createClient();
+  // Lazy init: createClient() lê env vars que não existem em build estático.
+  const [supabase] = useState(() => createClient());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

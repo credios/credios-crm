@@ -20,7 +20,8 @@ type Props = {
 
 export function MfaChallengeForm({ redirectTo = "/leads" }: Props) {
   const router = useRouter();
-  const supabase = createClient();
+  // Lazy init: createClient() lê env vars que não existem em build estático.
+  const [supabase] = useState(() => createClient());
   const [factorId, setFactorId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);

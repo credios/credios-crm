@@ -33,7 +33,8 @@ export function LoginForm({ error: initialError, redirectTo }: Props) {
 
   const [googlePending, setGooglePending] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
-  const supabase = createClient();
+  // Lazy init: createClient() lê env vars que não existem em build estático.
+  const [supabase] = useState(() => createClient());
 
   async function handleGoogle() {
     setGoogleError(null);

@@ -17,7 +17,9 @@ import {
 } from "@/lib/validators/auth";
 
 export function RecoverForm() {
-  const supabase = createClient();
+  // Lazy init: createClient() lê env vars que não existem em build estático.
+  // useState com initializer só roda no primeiro render do client.
+  const [supabase] = useState(() => createClient());
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
 

@@ -29,7 +29,8 @@ type Props = {
 
 export function MfaEnrollForm({ redirectTo = "/leads" }: Props) {
   const router = useRouter();
-  const supabase = createClient();
+  // Lazy init: createClient() lê env vars que não existem em build estático.
+  const [supabase] = useState(() => createClient());
   const [enroll, setEnroll] = useState<EnrollData | null>(null);
   const [enrollError, setEnrollError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
