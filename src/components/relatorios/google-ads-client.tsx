@@ -161,7 +161,11 @@ export function GoogleAdsClient({ leads }: Props) {
                   return (
                     <tr key={l.id} className="border-t hover:bg-muted/30">
                       <td className="px-3 py-2 font-medium">
-                        <Link href={`/leads/${l.id}`} className="hover:underline">
+                        <Link
+                          href={`/leads/${l.id}`}
+                          prefetch={false}
+                          className="hover:underline"
+                        >
                           {l.nome}
                         </Link>
                       </td>

@@ -25,9 +25,13 @@ type LeadHit = {
   whatsapp: string | null;
 };
 
-export function CommandPalette() {
+type Props = {
+  defaultOpen?: boolean;
+};
+
+export function CommandPalette({ defaultOpen = false }: Props) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<LeadHit[]>([]);
   const [loading, setLoading] = useState(false);

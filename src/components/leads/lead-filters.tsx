@@ -31,30 +31,43 @@ export function LeadFilters({ consultores, origens }: Props) {
   const params = useSearchParams();
   const [, startTransition] = useTransition();
 
-  const [q, setQ] = useState(params.get("q") ?? "");
+  const currentQ = params.get("q") ?? "";
+  const [q, setQ] = useState(currentQ);
+  const [syncedQ, setSyncedQ] = useState(currentQ);
+
+  if (syncedQ !== currentQ) {
+    setSyncedQ(currentQ);
+    if (q !== currentQ) setQ(currentQ);
+  }
 
   // Debounce search → atualiza URL.
   useEffect(() => {
+    if (q === currentQ) return;
     const t = setTimeout(() => {
       setParam("q", q || null);
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
+  }, [q, currentQ]);
 
   function setParam(key: string, value: string | null) {
     const newParams = new URLSearchParams(params.toString());
     if (value && value !== "") newParams.set(key, value);
     else newParams.delete(key);
     if (key !== "page") newParams.delete("page");
+    const nextQs = newParams.toString();
+    if (nextQs === params.toString()) return;
     startTransition(() => {
-      router.replace(`${pathname}?${newParams.toString()}`);
+      router.replace(nextQs ? `${pathname}?${nextQs}` : pathname, {
+        scroll: false,
+      });
     });
   }
 
   function clearAll() {
     setQ("");
-    startTransition(() => router.replace(pathname));
+    if (!params.toString()) return;
+    startTransition(() => router.replace(pathname, { scroll: false }));
   }
 
   const origensList = origens && origens.length > 0 ? origens : ORIGENS;

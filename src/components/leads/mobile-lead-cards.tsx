@@ -49,6 +49,7 @@ export function MobileLeadCards({ rows, emptyAction }: Props) {
           <li key={lead.id}>
             <Link
               href={`/leads/${lead.id}`}
+              prefetch={false}
               className={cn(
                 "surface-solid block rounded-xl p-3 active:bg-foreground/3 transition-colors",
                 (cold || lead.slaAtrasado) &&

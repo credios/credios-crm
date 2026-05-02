@@ -71,6 +71,7 @@ function LeadKanbanCardImpl({
       <div className="flex items-start justify-between gap-2">
         <Link
           href={`/leads/${lead.id}`}
+          prefetch={false}
           className="text-sm font-semibold leading-tight tracking-[-0.005em] hover:underline line-clamp-2"
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}

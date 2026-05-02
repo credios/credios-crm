@@ -25,6 +25,14 @@ function isAuthOnlyPublicPath(pathname: string): boolean {
 }
 
 export async function updateSession(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // Webhooks/cron/callbacks têm seus próprios gates no handler. Evita uma ida
+  // ao Supabase Auth em rotas que não precisam saber se existe sessão.
+  if (isPublicPath(path) && !isAuthOnlyPublicPath(path)) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -48,17 +56,16 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // IMPORTANTE: getUser() é a única chamada entre createServerClient e o return.
+  // IMPORTANTE: getClaims() é a única chamada entre createServerClient e a
+  // decisão de roteamento. Ele valida o JWT localmente quando o projeto usa
+  // signing keys assimétricas; com chaves simétricas, cai para getUser().
   // Inserir lógica entre eles pode silenciosamente deslogar usuários (ver docs do
   // @supabase/ssr).
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const path = request.nextUrl.pathname;
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const isAuthenticated = Boolean(claimsData?.claims?.sub);
 
   // Logado e tentando acessar /login ou /recuperar-senha → manda para a app.
-  if (user && isAuthOnlyPublicPath(path)) {
+  if (isAuthenticated && isAuthOnlyPublicPath(path)) {
     return NextResponse.redirect(new URL("/leads", request.url));
   }
 
@@ -70,12 +77,12 @@ export async function updateSession(request: NextRequest) {
   // Raiz: redireciona conforme estado de auth.
   if (path === "/") {
     return NextResponse.redirect(
-      new URL(user ? "/leads" : "/login", request.url),
+      new URL(isAuthenticated ? "/leads" : "/login", request.url),
     );
   }
 
   // Demais rotas: exigem autenticação.
-  if (!user) {
+  if (!isAuthenticated) {
     const loginUrl = new URL("/login", request.url);
     if (path !== "/") {
       loginUrl.searchParams.set("redirectTo", path + request.nextUrl.search);
