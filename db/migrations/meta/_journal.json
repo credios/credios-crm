@@ -64,6 +64,13 @@
       "when": 1777750800000,
       "tag": "0008_perf_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777751400000,
+      "tag": "0009_security_advisor_fixes",
+      "breakpoints": true
     }
   ]
 }
