@@ -68,6 +68,16 @@ function mvFechadosConds(filters: ReportFilters) {
 // Helper pra gerar chaves de cache determinísticas a partir de
 // (filters, period). Evita explosões de cache por ordem de keys do filter
 // e por timestamps com microssegundos diferentes.
+//
+// CRÍTICO: presets como "30d", "7d", "90d" usam `to: now` em periodFromFilters,
+// que muda a cada millisegundo. Sem truncar, a chave de cache varia em toda
+// request → cache NUNCA HIT → toda request paga o custo total das queries.
+// Truncamos pra hora (slice(0, 13) = "YYYY-MM-DDTHH") — estável dentro de
+// cada hora, balanceando cache hits com freshness razoável.
+function bucketHour(d: Date): string {
+  return d.toISOString().slice(0, 13);
+}
+
 function cacheKeyFor(
   prefix: string,
   filters: ReportFilters,
@@ -83,7 +93,7 @@ function cacheKeyFor(
     String(f.valorMaxCentavos ?? ""),
   ];
   if (period) {
-    parts.push(period.from.toISOString(), period.to.toISOString());
+    parts.push(bucketHour(period.from), bucketHour(period.to));
   }
   return parts;
 }
@@ -1633,8 +1643,8 @@ export async function fetchTempoPercentis(
     () => fetchTempoPercentisUncached(period),
     [
       "reports:tempo-percentis",
-      period.from.toISOString(),
-      period.to.toISOString(),
+      bucketHour(period.from),
+      bucketHour(period.to),
     ],
     { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
   )();
@@ -1767,8 +1777,8 @@ export async function fetchTopOrigensDetalhadas(
     () => fetchTopOrigensDetalhadasUncached(period, limit),
     [
       "reports:top-origens",
-      period.from.toISOString(),
-      period.to.toISOString(),
+      bucketHour(period.from),
+      bucketHour(period.to),
       String(limit),
     ],
     { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
@@ -1841,8 +1851,8 @@ export async function fetchComparativoPeriodos(
     () => fetchComparativoPeriodosUncached(filters, curr, prev),
     [
       ...cacheKeyFor("reports:comparativo", filters, curr),
-      prev.from.toISOString(),
-      prev.to.toISOString(),
+      bucketHour(prev.from),
+      bucketHour(prev.to),
     ],
     { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
   )();
