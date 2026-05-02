@@ -64,6 +64,7 @@ export function HistoricoFechamentos({ rows, hideValor }: Props) {
                   <td className="px-2 py-2">
                     <Link
                       href={`/leads/${r.leadId}`}
+                      prefetch={false}
                       className="font-medium hover:underline"
                     >
                       {r.leadNome}

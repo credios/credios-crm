@@ -242,6 +242,7 @@ export function AuditPageClient({ consultores, initial }: Props) {
                         e.recursoTipo === "lead" && e.recursoId ? (
                           <Link
                             href={`/leads/${e.recursoId}`}
+                            prefetch={false}
                             className="text-primary hover:underline"
                           >
                             lead/{e.recursoId.slice(0, 8)}

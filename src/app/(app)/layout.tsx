@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { BottomNav } from "@/components/shared/bottom-nav";
-import { CommandPalette } from "@/components/shared/command-palette";
+import { CommandPaletteLoader } from "@/components/shared/command-palette-loader";
 import { CrediosLogo } from "@/components/shared/credios-logo";
 import { Header } from "@/components/shared/header";
 import { Sidebar } from "@/components/shared/sidebar";
@@ -64,7 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       {appUser.perfil !== "marketing" && (
         <>
-          <CommandPalette />
+          <CommandPaletteLoader />
           <BottomNav />
         </>
       )}

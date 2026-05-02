@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SORT_LEAD_KEYS, type SortLeadKey } from "@/lib/validators/lead";
+import { SORT_LEAD_KEYS, type SortLeadKey } from "@/lib/leads/sort-options";
 
 const LABEL: Record<SortLeadKey, string> = {
   criado_em: "Criação",
