@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { CommandPalette } from "@/components/shared/command-palette";
 import { Header } from "@/components/shared/header";
 import { Sidebar } from "@/components/shared/sidebar";
 import { getAppUser } from "@/lib/auth/get-app-user";
@@ -54,6 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>
+      {appUser.perfil !== "marketing" && <CommandPalette />}
     </div>
   );
 }

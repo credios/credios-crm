@@ -1,32 +1,28 @@
 import { and, desc, eq, gte, ilike, lte, sql } from "drizzle-orm";
-import { redirect } from "next/navigation";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { auditLog, users as usersTable } from "../../../../db/schema";
-import { AuditPageClient } from "@/components/audit/audit-page-client";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { listConsultoresAtivos } from "@/lib/leads/list-leads";
 import { auditQuerySchema } from "@/lib/validators/audit";
 
 export const dynamic = "force-dynamic";
 
-type Props = {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-};
-
-export default async function AuditPage({ searchParams }: Props) {
+export async function GET(request: NextRequest) {
   const user = await getAppUser();
-  if (!user) redirect("/login");
-  if (!isAdmin(user)) redirect("/sem-permissao");
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!isAdmin(user)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const raw = await searchParams;
-  const flat: Record<string, string> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (typeof v === "string") flat[k] = v;
-    else if (Array.isArray(v) && v.length > 0) flat[k] = v[0]!;
+  const params = Object.fromEntries(request.nextUrl.searchParams.entries());
+  const parsed = auditQuerySchema.safeParse(params);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "invalid query", details: parsed.error.issues },
+      { status: 400 },
+    );
   }
-  const q = auditQuerySchema.parse(flat);
+  const q = parsed.data;
 
   const conds = [];
   if (q.usuarioId) conds.push(eq(auditLog.usuarioId, q.usuarioId));
@@ -40,7 +36,7 @@ export default async function AuditPage({ searchParams }: Props) {
 
   const offset = (q.page - 1) * q.pageSize;
 
-  const [rows, totals, consultores] = await Promise.all([
+  const [rows, totals] = await Promise.all([
     db
       .select({
         id: auditLog.id,
@@ -65,32 +61,16 @@ export default async function AuditPage({ searchParams }: Props) {
       .select({ total: sql<number>`count(*)::int` })
       .from(auditLog)
       .where(where),
-    listConsultoresAtivos(),
   ]);
 
   const total = totals[0]?.total ?? 0;
-  const initial = {
-    data: rows.map((r) => ({
-      ...r,
-      criadoEm: r.criadoEm.toISOString(),
-    })),
+  return NextResponse.json({
+    data: rows,
     pagination: {
       page: q.page,
       pageSize: q.pageSize,
       total,
       totalPages: Math.max(1, Math.ceil(total / q.pageSize)),
     },
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Auditoria</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Trilha de eventos do sistema (LGPD). Restrito a administradores.
-        </p>
-      </div>
-      <AuditPageClient consultores={consultores} initial={initial} />
-    </div>
-  );
+  });
 }

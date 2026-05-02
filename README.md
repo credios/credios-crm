@@ -4,6 +4,8 @@ Sistema interno de gestão de leads da **Credios** para o produto **CGI** (Créd
 
 > Briefing técnico vinculante: ver [`CLAUDE.md`](./CLAUDE.md). Toda decisão fora do briefing deve ser perguntada antes de implementada.
 
+> **Para devs novos no projeto**: leia [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) (decisões técnicas) e [`docs/RUNBOOK.md`](./docs/RUNBOOK.md) (procedimentos operacionais).
+
 ## Stack
 
 - **Next.js** (App Router) + TypeScript strict + Tailwind CSS 4
