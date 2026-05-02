@@ -19,7 +19,7 @@ export default async function LoginPage({ searchParams }: Props) {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="space-y-3 text-center">
-        <CrediosLogo size="lg" className="justify-center" />
+        <CrediosLogo size="lg" className="mx-auto" />
         <div className="space-y-1">
           <CardTitle className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-700 dark:text-gold-400">
             CRM
