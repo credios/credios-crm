@@ -4,8 +4,15 @@ import { and, eq, inArray } from "drizzle-orm";
 import { Resend } from "resend";
 
 import { users as usersTable } from "../../../db/schema";
-import { formatBrlShort } from "@/lib/formatters/currency";
 import { db } from "@/lib/db";
+import { formatBrlShort } from "@/lib/formatters/currency";
+import {
+  appUrl,
+  escape,
+  kpiRow,
+  pill,
+  renderEmailLayout,
+} from "@/lib/notifications/email-layout";
 
 import {
   listTasksForUser,
@@ -18,31 +25,9 @@ const from = process.env.EMAIL_FROM ?? "crm@credios.com.br";
 const replyTo = process.env.EMAIL_REPLY_TO;
 const resend = apiKey ? new Resend(apiKey) : null;
 
-function appUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}${path}`;
-}
-
-function shell(title: string, body: string): string {
-  return `<!doctype html>
-  <html>
-    <body style="margin:0;background:#f6f7f9;font-family:Inter,Arial,sans-serif;color:#171717">
-      <div style="max-width:720px;margin:0 auto;padding:28px 18px">
-        <div style="background:#fff;border:1px solid #e7e7e7;border-radius:12px;overflow:hidden">
-          <div style="padding:22px 24px;border-bottom:1px solid #eee">
-            <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#9b7a20;font-weight:700">CRM Credios</div>
-            <h1 style="margin:6px 0 0;font-size:22px;line-height:1.25">${title}</h1>
-          </div>
-          <div style="padding:22px 24px">${body}</div>
-        </div>
-      </div>
-    </body>
-  </html>`;
-}
-
-function pill(text: string, color: string): string {
-  return `<span style="display:inline-block;border-radius:999px;padding:3px 8px;background:${color};font-size:12px;font-weight:700">${text}</span>`;
-}
+// ============================================================================
+// 1. Tarefas do dia (consultor) + 2. Resumo gerencial (admin)
+// ============================================================================
 
 export async function sendDailyTaskEmails(dataReferencia: string): Promise<{
   ok: boolean;
@@ -62,7 +47,12 @@ export async function sendDailyTaskEmails(dataReferencia: string): Promise<{
   const consultores = await db
     .select({ id: usersTable.id, nome: usersTable.nome, email: usersTable.email })
     .from(usersTable)
-    .where(and(eq(usersTable.ativo, true), inArray(usersTable.perfil, ["admin", "gerente", "consultor"])));
+    .where(
+      and(
+        eq(usersTable.ativo, true),
+        inArray(usersTable.perfil, ["admin", "gerente", "consultor"]),
+      ),
+    );
 
   const unmoved = await yesterdayNewUnmovedLeadsByConsultor();
   type UnmovedRow = (typeof unmoved)[number];
@@ -89,79 +79,37 @@ export async function sendDailyTaskEmails(dataReferencia: string): Promise<{
     if (tasks.length === 0 && atrasadas.length === 0) continue;
 
     const destaque = unmovedByConsultor.get(c.id) ?? [];
-    const taskItems = [...atrasadas, ...tasks]
-      .slice(0, 40)
-      .map(
-        (t) => `<li style="margin:0 0 12px">
-          <a href="${appUrl(`/leads/${t.leadId}`)}" style="font-weight:700;color:#1455d9;text-decoration:none">${t.leadNome}</a>
-          ${t.status === "atrasada" ? pill("Atrasada", "#fee2e2") : pill("Hoje", "#e0f2fe")}
-          <div style="font-size:13px;color:#555;margin-top:3px">${t.titulo} · ${formatBrlShort(t.valorCreditoCentavos)}</div>
-        </li>`,
-      )
-      .join("");
-
-    const destaqueHtml =
-      destaque.length > 0
-        ? `<div style="margin:0 0 18px;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px">
-            <b>Leads novos de ontem ainda em Novo</b>
-            <ul style="margin:10px 0 0;padding-left:18px">${destaque
-              .map(
-                (l) =>
-                  `<li><a href="${appUrl(`/leads/${l.lead_id}`)}" style="color:#1455d9">${l.lead_nome}</a> · ${formatBrlShort(Number(l.valor_credito_centavos ?? 0))}</li>`,
-              )
-              .join("")}</ul>
-          </div>`
-        : "";
-
-    const html = shell(
-      `Tarefas do dia · ${c.nome}`,
-      `${destaqueHtml}
-       <p style="margin-top:0;color:#444">Você tem <b>${tasks.length}</b> tarefas de hoje e <b>${atrasadas.length}</b> atrasadas.</p>
-       <ul style="padding-left:18px;margin:16px 0">${taskItems || "<li>Sem tarefas pendentes.</li>"}</ul>
-       <p style="margin:20px 0 0"><a href="${appUrl("/tarefas")}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;border-radius:8px;padding:10px 14px;font-weight:700">Abrir tarefas</a></p>`,
-    );
+    const html = renderDailyTasksEmail({
+      consultorNome: c.nome,
+      tasks,
+      atrasadas,
+      destaque,
+    });
 
     const result = await resend.emails.send({
       from,
       to: c.email,
       replyTo,
-      subject: `Suas tarefas no CRM Credios (${dataReferencia})`,
+      subject: `Suas tarefas no CRM Credios — ${dataReferencia}`,
       html,
     });
     if (!result.error) sentConsultores++;
   }
 
+  // Resumo gerencial pra admins
   const admins = await db
     .select({ email: usersTable.email })
     .from(usersTable)
     .where(and(eq(usersTable.ativo, true), eq(usersTable.perfil, "admin")));
   let sentAdmin = false;
-  const stats = await taskStatsByConsultor(dataReferencia);
   if (admins.length > 0) {
-    const rows = stats
-      .map(
-        (s) => `<tr>
-          <td style="padding:8px;border-bottom:1px solid #eee">${s.consultorNome}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">${s.total}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">${s.concluidas}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;color:#b42318;font-weight:700">${s.atrasadas}</td>
-        </tr>`,
-      )
-      .join("");
-    const html = shell(
-      "Resumo gerencial de tarefas",
-      `<p style="margin-top:0;color:#444">Resumo das tarefas de todos os consultores ativos em ${dataReferencia}.</p>
-       <table style="width:100%;border-collapse:collapse;font-size:14px">
-        <thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #ddd">Consultor</th><th style="text-align:right;padding:8px;border-bottom:1px solid #ddd">Total</th><th style="text-align:right;padding:8px;border-bottom:1px solid #ddd">Concluídas</th><th style="text-align:right;padding:8px;border-bottom:1px solid #ddd">Atrasadas</th></tr></thead>
-        <tbody>${rows || ""}</tbody>
-       </table>
-       <p style="margin:20px 0 0"><a href="${appUrl("/tarefas?status=todas")}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;border-radius:8px;padding:10px 14px;font-weight:700">Ver painel de tarefas</a></p>`,
-    );
+    const stats = await taskStatsByConsultor(dataReferencia);
+    const html = renderManagerSummaryEmail({ dataReferencia, stats });
     const result = await resend.emails.send({
       from,
       to: admins.map((a) => a.email),
       replyTo,
-      subject: `Resumo de tarefas da equipe (${dataReferencia})`,
+      subject: `Resumo de tarefas da equipe — ${dataReferencia}`,
       html,
     });
     sentAdmin = !result.error;
@@ -170,13 +118,23 @@ export async function sendDailyTaskEmails(dataReferencia: string): Promise<{
   return { ok: true, sentConsultores, sentAdmin };
 }
 
+// ============================================================================
+// 3. Tarefas atrasadas (admin)
+// ============================================================================
+
 export async function sendOverdueTaskEmail(): Promise<{
   ok: boolean;
   sent: boolean;
   overdue: number;
   reason?: string;
 }> {
-  if (!resend) return { ok: false, sent: false, overdue: 0, reason: "RESEND_API_KEY ausente" };
+  if (!resend)
+    return {
+      ok: false,
+      sent: false,
+      overdue: 0,
+      reason: "RESEND_API_KEY ausente",
+    };
 
   const overdue = await listTasksForUser({
     userId: "admin",
@@ -189,28 +147,220 @@ export async function sendOverdueTaskEmail(): Promise<{
     .select({ email: usersTable.email })
     .from(usersTable)
     .where(and(eq(usersTable.ativo, true), eq(usersTable.perfil, "admin")));
-  if (admins.length === 0) return { ok: false, sent: false, overdue: overdue.length, reason: "nenhum admin ativo" };
+  if (admins.length === 0)
+    return {
+      ok: false,
+      sent: false,
+      overdue: overdue.length,
+      reason: "nenhum admin ativo",
+    };
 
-  const items = overdue
-    .slice(0, 60)
-    .map(
-      (t) => `<li style="margin:0 0 10px">
-        <a href="${appUrl(`/leads/${t.leadId}`)}" style="color:#1455d9;font-weight:700">${t.leadNome}</a>
-        <div style="font-size:13px;color:#555">${t.consultorNome} · ${t.titulo}</div>
-      </li>`,
-    )
-    .join("");
-
+  const html = renderOverdueTasksEmail({ overdue });
   const result = await resend.emails.send({
     from,
     to: admins.map((a) => a.email),
     replyTo,
-    subject: `${overdue.length} tarefas atrasadas no CRM`,
-    html: shell(
-      "Tarefas atrasadas",
-      `<p style="margin-top:0;color:#444">Existem <b>${overdue.length}</b> tarefas atrasadas que precisam de gestão.</p><ul style="padding-left:18px">${items}</ul>`,
-    ),
+    subject: `${overdue.length} tarefa${overdue.length === 1 ? "" : "s"} atrasada${overdue.length === 1 ? "" : "s"} no CRM`,
+    html,
   });
 
-  return { ok: !result.error, sent: !result.error, overdue: overdue.length, reason: result.error?.message };
+  return {
+    ok: !result.error,
+    sent: !result.error,
+    overdue: overdue.length,
+    reason: result.error?.message,
+  };
+}
+
+// ============================================================================
+// Renderers (exportados pra reuso no endpoint de teste)
+// ============================================================================
+
+type TaskItem = Awaited<ReturnType<typeof listTasksForUser>>[number];
+type StatRow = Awaited<ReturnType<typeof taskStatsByConsultor>>[number];
+type UnmovedRow = Awaited<
+  ReturnType<typeof yesterdayNewUnmovedLeadsByConsultor>
+>[number];
+
+function taskListHtml(items: TaskItem[]): string {
+  if (items.length === 0) {
+    return `<p style="color:#6b6f7e;font-style:italic;font-family:Inter,Arial,sans-serif;font-size:14px;margin:12px 0">Nenhuma pendência. Bom trabalho.</p>`;
+  }
+  return items
+    .slice(0, 40)
+    .map((t) => {
+      const tag =
+        t.status === "atrasada"
+          ? pill("Atrasada", "danger")
+          : t.status === "concluida"
+            ? pill("Concluída", "success")
+            : pill("Hoje", "info");
+      return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 8px"><tr><td style="background:#fff;border:1px solid #e1ddcf;border-radius:10px;padding:12px 14px">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
+          <td style="vertical-align:top">
+            <a href="${appUrl(`/leads/${t.leadId}`)}" style="text-decoration:none;color:#141e30;font-weight:700;font-family:'Plus Jakarta Sans',Inter,Arial,sans-serif;font-size:14px">${escape(t.leadNome)}</a>
+            <div style="color:#6b6f7e;font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.4;margin-top:4px">${escape(t.titulo)} · ${escape(formatBrlShort(t.valorCreditoCentavos))}</div>
+          </td>
+          <td style="vertical-align:top;text-align:right;white-space:nowrap;padding-left:8px">${tag}</td>
+        </tr></table>
+      </td></tr></table>`;
+    })
+    .join("");
+}
+
+export function renderDailyTasksEmail(params: {
+  consultorNome: string;
+  tasks: TaskItem[];
+  atrasadas: TaskItem[];
+  destaque: UnmovedRow[];
+}): string {
+  const { consultorNome, tasks, atrasadas, destaque } = params;
+
+  const destaqueHtml =
+    destaque.length > 0
+      ? `<div style="margin:0 0 18px;padding:14px 16px;background:#fbf2dc;border:1px solid #d4a351;border-radius:10px;font-family:Inter,Arial,sans-serif">
+          <div style="font-weight:700;color:#92660d;font-size:14px;margin-bottom:8px">⚠ Leads novos de ontem ainda em "Novo"</div>
+          <ul style="margin:0;padding-left:18px;color:#141e30;font-size:14px;line-height:1.7">${destaque
+            .map(
+              (l) =>
+                `<li><a href="${appUrl(`/leads/${l.lead_id}`)}" style="color:#2c4fa8;text-decoration:none;font-weight:600">${escape(l.lead_nome)}</a> — ${escape(formatBrlShort(Number(l.valor_credito_centavos ?? 0)))}</li>`,
+            )
+            .join("")}</ul>
+        </div>`
+      : "";
+
+  const ordered = [...atrasadas, ...tasks];
+  const content = `${destaqueHtml}
+    ${kpiRow([
+      {
+        label: "Hoje",
+        value: String(tasks.length),
+        tone: "info",
+      },
+      {
+        label: "Atrasadas",
+        value: String(atrasadas.length),
+        tone: atrasadas.length > 0 ? "danger" : "secondary",
+      },
+    ])}
+    <h2 style="margin:24px 0 12px;font-size:16px;font-family:'Plus Jakarta Sans',Inter,Arial,sans-serif;color:#141e30">Suas pendências</h2>
+    ${taskListHtml(ordered)}`;
+
+  return renderEmailLayout({
+    preheader: `${tasks.length} tarefas de hoje + ${atrasadas.length} atrasadas`,
+    eyebrow: "Tarefas do dia",
+    title: `Bom dia, ${consultorNome.split(" ")[0]}`,
+    intro: `Aqui está o resumo das suas tarefas. Foque primeiro nas atrasadas — elas estão segurando o pipeline.`,
+    contentHtml: content,
+    ctas: [{ href: appUrl("/tarefas"), label: "Abrir tarefas" }],
+  });
+}
+
+export function renderManagerSummaryEmail(params: {
+  dataReferencia: string;
+  stats: StatRow[];
+}): string {
+  const { stats, dataReferencia } = params;
+  const totals = stats.reduce(
+    (acc, s) => {
+      acc.total += s.total;
+      acc.concluidas += s.concluidas;
+      acc.atrasadas += s.atrasadas;
+      return acc;
+    },
+    { total: 0, concluidas: 0, atrasadas: 0 },
+  );
+  const taxa =
+    totals.total > 0 ? Math.round((totals.concluidas / totals.total) * 100) : 0;
+
+  const tableRows = stats
+    .map((s) => {
+      const taxaConsultor =
+        s.total > 0 ? Math.round((s.concluidas / s.total) * 100) : 0;
+      return `<tr>
+        <td style="padding:12px 8px;border-bottom:1px solid #e1ddcf;font-family:Inter,Arial,sans-serif;font-size:14px;color:#141e30;font-weight:600">${escape(s.consultorNome)}</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #e1ddcf;font-family:Inter,Arial,sans-serif;font-size:14px;text-align:right;color:#141e30">${s.total}</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #e1ddcf;font-family:Inter,Arial,sans-serif;font-size:14px;text-align:right;color:#10b981;font-weight:700">${s.concluidas}</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #e1ddcf;font-family:Inter,Arial,sans-serif;font-size:14px;text-align:right;color:${s.atrasadas > 0 ? "#dc2626" : "#6b6f7e"};font-weight:${s.atrasadas > 0 ? 700 : 400}">${s.atrasadas}</td>
+        <td style="padding:12px 8px;border-bottom:1px solid #e1ddcf;font-family:Inter,Arial,sans-serif;font-size:13px;text-align:right;color:#6b6f7e">${taxaConsultor}%</td>
+      </tr>`;
+    })
+    .join("");
+
+  const tableHtml = stats.length === 0
+    ? `<p style="color:#6b6f7e;font-style:italic;font-family:Inter,Arial,sans-serif;font-size:14px">Nenhum consultor com tarefas hoje.</p>`
+    : `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background:#fff;border:1px solid #e1ddcf;border-radius:10px;overflow:hidden">
+        <thead>
+          <tr style="background:#f8f6f0">
+            <th style="text-align:left;padding:12px 8px;font-family:Inter,Arial,sans-serif;font-size:11px;color:#6b6f7e;text-transform:uppercase;letter-spacing:0.12em;font-weight:700">Consultor</th>
+            <th style="text-align:right;padding:12px 8px;font-family:Inter,Arial,sans-serif;font-size:11px;color:#6b6f7e;text-transform:uppercase;letter-spacing:0.12em;font-weight:700">Total</th>
+            <th style="text-align:right;padding:12px 8px;font-family:Inter,Arial,sans-serif;font-size:11px;color:#6b6f7e;text-transform:uppercase;letter-spacing:0.12em;font-weight:700">Concluídas</th>
+            <th style="text-align:right;padding:12px 8px;font-family:Inter,Arial,sans-serif;font-size:11px;color:#6b6f7e;text-transform:uppercase;letter-spacing:0.12em;font-weight:700">Atrasadas</th>
+            <th style="text-align:right;padding:12px 8px;font-family:Inter,Arial,sans-serif;font-size:11px;color:#6b6f7e;text-transform:uppercase;letter-spacing:0.12em;font-weight:700">Taxa</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>`;
+
+  const content = `${kpiRow([
+    { label: "Total", value: String(totals.total), tone: "info" },
+    {
+      label: "Concluídas",
+      value: String(totals.concluidas),
+      tone: "success",
+    },
+    {
+      label: "Atrasadas",
+      value: String(totals.atrasadas),
+      tone: totals.atrasadas > 0 ? "danger" : "secondary",
+    },
+    { label: "Taxa", value: `${taxa}%` },
+  ])}
+  <h2 style="margin:24px 0 12px;font-size:16px;font-family:'Plus Jakarta Sans',Inter,Arial,sans-serif;color:#141e30">Por consultor</h2>
+  ${tableHtml}`;
+
+  return renderEmailLayout({
+    preheader: `${totals.atrasadas} atrasadas · ${taxa}% de conclusão`,
+    eyebrow: "Resumo gerencial",
+    title: `Tarefas da equipe · ${dataReferencia}`,
+    intro: `Visão consolidada das tarefas dos consultores. ${totals.atrasadas > 0 ? "Há atrasadas a tratar." : "Tudo em dia."}`,
+    contentHtml: content,
+    ctas: [
+      { href: appUrl("/tarefas?status=todas"), label: "Ver painel" },
+      {
+        href: appUrl("/relatorios"),
+        label: "Relatórios",
+        tone: "secondary",
+      },
+    ],
+  });
+}
+
+export function renderOverdueTasksEmail(params: { overdue: TaskItem[] }): string {
+  const { overdue } = params;
+  const items = overdue
+    .slice(0, 60)
+    .map(
+      (t) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 8px"><tr><td style="background:#fff;border:1px solid #e1ddcf;border-radius:10px;padding:12px 14px">
+        <a href="${appUrl(`/leads/${t.leadId}`)}" style="text-decoration:none;color:#141e30;font-weight:700;font-family:'Plus Jakarta Sans',Inter,Arial,sans-serif;font-size:14px">${escape(t.leadNome)}</a>
+        <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#6b6f7e;line-height:1.4;margin-top:4px">${escape(t.consultorNome)} · ${escape(t.titulo)}</div>
+      </td></tr></table>`,
+    )
+    .join("");
+
+  return renderEmailLayout({
+    preheader: `${overdue.length} tarefa${overdue.length === 1 ? "" : "s"} atrasada${overdue.length === 1 ? "" : "s"} aguardando ação`,
+    eyebrow: "Alerta de atraso",
+    eyebrowTone: "danger",
+    title: `${overdue.length} tarefa${overdue.length === 1 ? "" : "s"} atrasada${overdue.length === 1 ? "" : "s"}`,
+    intro:
+      "Tarefas que passaram do prazo precisam de gestão direta — cobrança ao consultor ou redistribuição.",
+    contentHtml: items,
+    ctas: [
+      {
+        href: appUrl("/tarefas?status=atrasada"),
+        label: "Ver atrasadas",
+      },
+    ],
+  });
 }
