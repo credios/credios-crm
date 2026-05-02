@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { LeadList } from "@/components/leads/lead-list";
 import { getAppUser } from "@/lib/auth/get-app-user";
+import { isAdmin } from "@/lib/auth/permissions";
 import {
   listConsultoresAtivos,
   listLeads,
@@ -47,7 +48,12 @@ export default async function LeadsPage({ searchParams }: Props) {
               : "Acesso completo aos leads."}
         </p>
       </div>
-      <LeadList result={result} consultores={consultores} origens={origens} />
+      <LeadList
+        result={result}
+        consultores={consultores}
+        origens={origens}
+        isAdmin={isAdmin(user)}
+      />
     </div>
   );
 }

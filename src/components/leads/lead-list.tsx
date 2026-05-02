@@ -35,9 +35,11 @@ type Props = {
   result: ListLeadsResult;
   consultores: { id: string; nome: string }[];
   origens: string[];
+  /** Habilita ações destrutivas em massa (desqualificar/excluir). */
+  isAdmin: boolean;
 };
 
-export function LeadList({ result, consultores, origens }: Props) {
+export function LeadList({ result, consultores, origens, isAdmin }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -217,6 +219,7 @@ export function LeadList({ result, consultores, origens }: Props) {
         <LeadBulkActions
           selectedLeads={selectedLeads}
           consultores={consultores}
+          isAdmin={isAdmin}
           onDone={() => {
             setRowSelection({});
             startTransition(() => router.refresh());
