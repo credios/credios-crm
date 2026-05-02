@@ -193,7 +193,6 @@ export function NotificationsBell() {
               <li key={l.id}>
                 <Link
                   href={`/leads/${l.id}`}
-                  prefetch={false}
                   className={cn(
                     "block px-2 py-2 hover:bg-accent/50 rounded-md transition-colors",
                     // Ponto dourado discreto à esquerda quando não-lido

@@ -165,14 +165,5 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     ),
   );
 
-  return NextResponse.json(
-    {
-      data: {
-        ...created,
-        criadoEm: created.criadoEm.toISOString(),
-        autorNome: user.nome,
-      },
-    },
-    { status: 201 },
-  );
+  return NextResponse.json({ data: created }, { status: 201 });
 }

@@ -219,7 +219,6 @@ export function TarefasPageClient({
                   <div>
                     <Link
                       href={`/leads/${task.leadId}`}
-                      prefetch={false}
                       className="font-display text-lg font-semibold hover:underline"
                     >
                       {task.leadNome}
@@ -253,7 +252,7 @@ export function TarefasPageClient({
                     size="sm"
                     nativeButton={false}
                     render={
-                      <Link href={`/leads/${task.leadId}`} prefetch={false}>
+                      <Link href={`/leads/${task.leadId}`}>
                         <ExternalLink className="size-4" /> Lead
                       </Link>
                     }
@@ -475,7 +474,6 @@ function ConsultorAccordion({
                   <div className="flex items-center gap-2 flex-wrap">
                     <Link
                       href={`/leads/${t.leadId}`}
-                      prefetch={false}
                       className="font-medium hover:underline truncate"
                     >
                       {t.leadNome}
@@ -510,7 +508,7 @@ function ConsultorAccordion({
                   size="sm"
                   nativeButton={false}
                   render={
-                    <Link href={`/leads/${t.leadId}`} prefetch={false}>
+                    <Link href={`/leads/${t.leadId}`}>
                       <ExternalLink className="size-4" />
                     </Link>
                   }

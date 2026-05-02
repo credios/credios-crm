@@ -28,6 +28,7 @@ import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { formatRelative, isEsfriando } from "@/lib/formatters/date";
 import { formatPhoneBr, whatsappUrl } from "@/lib/formatters/phone";
 import type { LeadRow, ListLeadsResult } from "@/lib/leads/list-leads";
+import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -42,6 +43,8 @@ export function LeadList({ result, consultores, origens }: Props) {
   const params = useSearchParams();
   const [, startTransition] = useTransition();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  useLeadsRealtime();
 
   const data = result.data;
 
@@ -91,7 +94,6 @@ export function LeadList({ result, consultores, origens }: Props) {
               )}
               <Link
                 href={`/leads/${row.original.id}`}
-                prefetch={false}
                 className={cn(
                   "font-medium hover:underline",
                   cold && "text-destructive",

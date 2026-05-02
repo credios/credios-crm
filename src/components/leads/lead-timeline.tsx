@@ -133,7 +133,16 @@ export function LeadTimeline({
     return out;
   }, [initial, extras, older]);
 
-  const addInteraction = useCallback((novo: Interacao) => {
+  const onRealtimeNew = useCallback((row: Record<string, unknown>) => {
+    const novo: Interacao = {
+      id: String(row.id),
+      tipo: String(row.tipo),
+      conteudo: (row.conteudo as string | null) ?? null,
+      metadata: row.metadata,
+      criadoEm: String(row.criado_em ?? new Date().toISOString()),
+      autorId: (row.autor_id as string | null) ?? null,
+      autorNome: null, // realtime não traz JOIN — exibe placeholder; refresh popula
+    };
     setExtras((prev) => (prev.some((p) => p.id === novo.id) ? prev : [novo, ...prev]));
     // Marca pra animação. Limpa flag após 1.6s (animação dura 320ms; janela
     // generosa garante render mesmo em re-render).
@@ -150,24 +159,6 @@ export function LeadTimeline({
       });
     }, 1600);
   }, []);
-
-  const onRealtimeNew = useCallback(
-    (row: Record<string, unknown>) => {
-      const novo: Interacao = {
-        id: String(row.id),
-        tipo: String(row.tipo),
-        conteudo: (row.conteudo as string | null) ?? null,
-        metadata: row.metadata,
-        criadoEm: String(
-          row.criadoEm ?? row.criado_em ?? new Date().toISOString(),
-        ),
-        autorId: ((row.autorId ?? row.autor_id) as string | null) ?? null,
-        autorNome: ((row.autorNome ?? row.autor_nome) as string | null) ?? null,
-      };
-      addInteraction(novo);
-    },
-    [addInteraction],
-  );
 
   useInteracoesRealtime(leadId, onRealtimeNew);
 
@@ -190,12 +181,9 @@ export function LeadTimeline({
       });
       return;
     }
-    const json = (await res.json().catch(() => null)) as {
-      data?: Record<string, unknown>;
-    } | null;
-    if (json?.data) onRealtimeNew(json.data);
     toast.success("Interação registrada");
     setConteudo("");
+    // Realtime + refresh do server vão atualizar a lista.
   }
 
   async function loadMore() {

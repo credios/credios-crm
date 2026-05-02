@@ -1,7 +1,6 @@
 import "server-only";
 
 import { eq } from "drizzle-orm";
-import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 
 import { users as usersTable } from "../../../db/schema";
@@ -27,7 +26,7 @@ export type AppUser = {
  * Retorna null se não houver sessão. Lança se houver sessão mas sem row em
  * public.users (estado inconsistente — provisionamento do trigger ou seed faltou).
  */
-export const getAppUser = cache(async (): Promise<AppUser | null> => {
+export async function getAppUser(): Promise<AppUser | null> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -53,4 +52,4 @@ export const getAppUser = cache(async (): Promise<AppUser | null> => {
     whatsapp: row.whatsapp,
     authUser: user,
   };
-});
+}

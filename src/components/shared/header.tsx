@@ -1,7 +1,7 @@
 import { CommandPaletteTrigger } from "./command-palette-trigger";
 import { CrediosLogo } from "./credios-logo";
 import { MobileNav } from "./mobile-nav";
-import { NotificationsBellLazy } from "./notifications-bell-lazy";
+import { NotificationsBell } from "./notifications-bell";
 import { UserMenu } from "./user-menu";
 import type { Perfil } from "@/lib/auth/types";
 
@@ -31,7 +31,7 @@ export function Header({ user }: Props) {
           {showPalette && <CommandPaletteTrigger />}
         </div>
         <div className="md:hidden flex-1" />
-        {showPalette && <NotificationsBellLazy />}
+        {showPalette && <NotificationsBell />}
         <UserMenu user={user} />
       </div>
     </header>

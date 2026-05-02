@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { SORT_LEAD_KEYS, type SortLeadKey } from "@/lib/leads/sort-options";
-
 // Mantemos os 10 keys "sistema" (referenciadas direto no código pra modais
 // e permissões). Status custom criadas pelo admin entram via DB e batem o
 // validator de "qualquer string snake_case 1..50 chars".
@@ -164,7 +162,16 @@ export const createInteracaoSchema = z.object({
 });
 export type CreateInteracaoInput = z.infer<typeof createInteracaoSchema>;
 
-export { SORT_LEAD_KEYS, type SortLeadKey };
+export const SORT_LEAD_KEYS = [
+  "criado_em",
+  "atualizado_em",
+  "ultimo_contato",
+  "nome",
+  "valor_credito",
+  "status",
+  "origem",
+] as const;
+export type SortLeadKey = (typeof SORT_LEAD_KEYS)[number];
 
 export const listLeadsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),

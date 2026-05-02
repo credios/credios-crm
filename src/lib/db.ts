@@ -11,9 +11,9 @@ const isDev = process.env.NODE_ENV !== "production";
 //
 // max=1 em dev: única conexão por processo. Múltiplas tabs/refresh viram
 // queries serializadas (latência mínima local), mas ZERO chance de hit no
-// "remaining connection slots are reserved for SUPERUSER". Em prod, mesmo com
-// Supabase pooler, cada instância serverless pode abrir seu próprio mini-pool.
-// Mantemos o default conservador e ajustável por DATABASE_POOL_MAX.
+// "remaining connection slots are reserved for SUPERUSER". Em prod usamos
+// max=10 — Vercel cria uma instância de função por request, então o pool
+// não cresce indefinidamente.
 //
 // Supabase usa pgbouncer em modo transaction; prepared statements quebram
 // nesse modo. prepare:false é obrigatório.
@@ -22,22 +22,11 @@ const globalForDb = globalThis as unknown as {
   __credios_db__?: ReturnType<typeof drizzle<typeof schema>>;
 };
 
-const configuredPoolMax = Number.parseInt(
-  process.env.DATABASE_POOL_MAX ?? "",
-  10,
-);
-const poolMax =
-  Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
-    ? configuredPoolMax
-    : isDev
-      ? 1
-      : 3;
-
 const client =
   globalForDb.__credios_pg__ ??
   postgres(connectionString, {
     prepare: false,
-    max: poolMax,
+    max: isDev ? 1 : 10,
     idle_timeout: isDev ? 5 : 30,
     connect_timeout: 10,
     max_lifetime: isDev ? 60 : 60 * 30,

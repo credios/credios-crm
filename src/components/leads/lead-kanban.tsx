@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-// Sync state local com props (server) quando a rota entregar dados novos:
+// Sync state local com props (server) quando router.refresh() trouxer dados novos:
 // é um padrão de "controlled-from-server" mas o lint não distingue do anti-pattern.
 "use client";
 
@@ -19,7 +19,8 @@ import {
 } from "@dnd-kit/core";
 import { Lock } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { LeadFilters } from "./lead-filters";
@@ -43,6 +44,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatBrlShort } from "@/lib/formatters/currency";
 import type { LeadRow } from "@/lib/leads/list-leads";
+import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
 import { cn } from "@/lib/utils";
 
 import { statusBadgeColor } from "./status-badge";
@@ -100,6 +102,8 @@ export function LeadKanban({
   canCloseOrReopen,
   statuses,
 }: Props) {
+  const router = useRouter();
+
   const statusKeys = useMemo(() => statuses.map((s) => s.key), [statuses]);
   const statusKeysJoined = statusKeys.join("|");
   // statusSet rebuilds when keys change — statusKeys ref is stable per render,
@@ -113,7 +117,7 @@ export function LeadKanban({
   }, [statuses]);
 
   // Estado local pra otimismo: muda na hora, server confirma depois.
-  // Ressincroniza quando props chegarem novas.
+  // Ressincroniza quando props chegarem novas (router.refresh / realtime).
   const [cols, setCols] = useState<Cols>(() => groupByStatus(leads, statusKeys));
   const leadsKey = useMemo(
     () => leads.map((l) => `${l.id}:${l.status}`).join("|"),
@@ -124,7 +128,6 @@ export function LeadKanban({
   }, [leadsKey, leads, statusKeysJoined, statusKeys]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const dragSnapshot = useRef<Cols | null>(null);
   const dndId = useId();
 
   const [pendingTerminal, setPendingTerminal] = useState<{
@@ -140,6 +143,8 @@ export function LeadKanban({
     status: "documentacao_enviada" | "em_negociacao";
     snapshot: Cols;
   } | null>(null);
+
+  useLeadsRealtime();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -202,15 +207,10 @@ export function LeadKanban({
   }
 
   function handleDragStart(e: DragStartEvent) {
-    dragSnapshot.current = cols;
     setActiveId(String(e.active.id));
   }
 
   function handleDragCancel() {
-    if (dragSnapshot.current) {
-      setCols(dragSnapshot.current);
-      dragSnapshot.current = null;
-    }
     setActiveId(null);
   }
 
@@ -257,13 +257,12 @@ export function LeadKanban({
   }
 
   function handleDragEnd(e: DragEndEvent) {
+    const draggedId = activeId;
     setActiveId(null);
-    const snapshot = dragSnapshot.current ?? groupByStatus(leads, statusKeys);
-    dragSnapshot.current = null;
     const { active, over } = e;
     if (!over) {
       // Drop fora: reverte
-      setCols(snapshot);
+      setCols(groupByStatus(leads, statusKeys));
       return;
     }
     const leadId = String(active.id);
@@ -285,17 +284,11 @@ export function LeadKanban({
       }
     }
 
-    if (!targetStatus) {
-      setCols(snapshot);
-      return;
-    }
+    if (!targetStatus) return;
 
-    // Calcula status original usando snapshot local pré-drag.
-    const original = flattenCols(snapshot, statusKeys).find((l) => l.id === leadId);
-    if (!original) {
-      setCols(snapshot);
-      return;
-    }
+    // Calcula original status (pré-drag) usando props
+    const original = leads.find((l) => l.id === leadId);
+    if (!original) return;
     const originalStatus = original.status;
 
     // Permissão: tocar status 'fechado' (entrar OU sair) é admin only.
@@ -316,6 +309,7 @@ export function LeadKanban({
       targetStatus === "perdido"
     ) {
       // Snapshot pra restaurar caso cancele
+      const snap = groupByStatus(leads, statusKeys);
       // Mantém visualmente no destino enquanto modal está aberto
       setCols((prev) =>
         moveLead(prev, leadId, targetStatus!, targetIndex),
@@ -324,7 +318,7 @@ export function LeadKanban({
         leadId,
         leadNome: original.nome,
         status: targetStatus,
-        snapshot,
+        snapshot: snap,
       });
       return;
     }
@@ -333,12 +327,13 @@ export function LeadKanban({
     if (originalStatus === targetStatus) return;
 
     if (targetStatus === "documentacao_enviada" || targetStatus === "em_negociacao") {
+      const snap = groupByStatus(leads, statusKeys);
       setCols((prev) => moveLead(prev, leadId, targetStatus!, targetIndex));
       setPendingBancos({
         leadId,
         leadNome: original.nome,
         status: targetStatus,
-        snapshot,
+        snapshot: snap,
       });
       return;
     }
@@ -361,15 +356,18 @@ export function LeadKanban({
               typeof json.error === "string" ? json.error : undefined,
           });
           // Reverte
-          setCols(snapshot);
+          setCols(groupByStatus(leads, statusKeys));
         } else {
           toast.success(`→ ${statusLabelMap[targetStatus!] ?? targetStatus!}`);
+          router.refresh();
         }
       })
       .catch(() => {
         toast.error("Erro de rede ao mover");
-        setCols(snapshot);
+        setCols(groupByStatus(leads, statusKeys));
       });
+
+    void draggedId;
   }
 
   return (
@@ -454,6 +452,7 @@ export function LeadKanban({
           leadNome={pendingTerminal.leadNome}
           onSuccess={() => {
             setPendingTerminal(null);
+            router.refresh();
           }}
           onCancel={() => {
             setCols(pendingTerminal.snapshot);
@@ -477,6 +476,7 @@ export function LeadKanban({
             status={pendingTerminal.status}
             onSuccess={() => {
               setPendingTerminal(null);
+              router.refresh();
             }}
             onCancel={() => {
               setCols(pendingTerminal.snapshot);
@@ -498,6 +498,7 @@ export function LeadKanban({
           }}
           onSuccess={() => {
             setPendingBancos(null);
+            router.refresh();
           }}
           onCancel={() => {
             setCols(pendingBancos.snapshot);
