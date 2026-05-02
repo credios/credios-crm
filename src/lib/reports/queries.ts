@@ -1,4 +1,6 @@
 import { and, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
+import { cache } from "react";
 
 import { leads, users as usersTable } from "../../../db/schema";
 import { db } from "@/lib/db";
@@ -50,7 +52,14 @@ export type Kpis = {
   conversaoRolling90d: { criados: number; fechados: number; taxa: number };
 };
 
-export async function fetchKpis(filters: ReportFilters, period: PeriodRange): Promise<Kpis> {
+// React.cache() deduplica por request: se duas Server Components chamam
+// fetchKpis(mesmosArgs) no mesmo render, só executa 1 vez. Usado por
+// KpisSection (Suspense dos 4 cards) e SaudeOperacionalSection (precisa
+// só da taxa de conversão rolling 90d).
+export const fetchKpis = cache(async function fetchKpis(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<Kpis> {
   const cb = baseConds(filters);
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
   const fromDate = period.from.toISOString().slice(0, 10);
@@ -138,7 +147,7 @@ export async function fetchKpis(filters: ReportFilters, period: PeriodRange): Pr
       taxa,
     },
   };
-}
+});
 
 // ============================================================================
 // Volume por dia (linha + área empilhada por origem)
@@ -455,28 +464,39 @@ export async function fetchReceitaMensal(
 // Lookups: consultores e origens (pra alimentar filtros)
 // ============================================================================
 
-export async function fetchConsultoresAtivos() {
-  return await db
-    .select({ id: usersTable.id, nome: usersTable.nome })
-    .from(usersTable)
-    .where(
-      and(
-        eq(usersTable.ativo, true),
-        sql`${usersTable.perfil} IN ('admin','gerente','consultor')`,
-      ),
-    )
-    .orderBy(usersTable.nome);
-}
+// Listas pra dropdowns dos filtros: lookups quase estáticos. Cacheados por
+// 5 min globalmente (unstable_cache) — economizam SELECT DISTINCT em leads
+// inteira em cada page load. Invalidação implícita por TTL.
+export const fetchConsultoresAtivos = unstable_cache(
+  async () => {
+    return await db
+      .select({ id: usersTable.id, nome: usersTable.nome })
+      .from(usersTable)
+      .where(
+        and(
+          eq(usersTable.ativo, true),
+          sql`${usersTable.perfil} IN ('admin','gerente','consultor')`,
+        ),
+      )
+      .orderBy(usersTable.nome);
+  },
+  ["reports:consultores-ativos"],
+  { revalidate: 300, tags: ["reports:lookups"] },
+);
 
-export async function fetchOrigensDistintas() {
-  const rows = await db
-    .selectDistinct({ origem: leads.origem })
-    .from(leads);
-  return rows
-    .map((r) => r.origem)
-    .filter((o): o is string => Boolean(o))
-    .sort();
-}
+export const fetchOrigensDistintas = unstable_cache(
+  async () => {
+    const rows = await db
+      .selectDistinct({ origem: leads.origem })
+      .from(leads);
+    return rows
+      .map((r) => r.origem)
+      .filter((o): o is string => Boolean(o))
+      .sort();
+  },
+  ["reports:origens-distintas"],
+  { revalidate: 300, tags: ["reports:lookups"] },
+);
 
 // ============================================================================
 // Sales metrics (avg deal size, avg sales cycle, sales velocity, win rate)
@@ -1038,15 +1058,19 @@ export async function fetchPerformancePorUf(
 // UFs distintas (pra autocomplete de filtros)
 // ============================================================================
 
-export async function fetchUfsDistintas(): Promise<string[]> {
-  const rows = await db
-    .selectDistinct({ uf: leads.estado })
-    .from(leads);
-  return rows
-    .map((r) => r.uf)
-    .filter((u): u is string => Boolean(u))
-    .sort();
-}
+export const fetchUfsDistintas = unstable_cache(
+  async (): Promise<string[]> => {
+    const rows = await db
+      .selectDistinct({ uf: leads.estado })
+      .from(leads);
+    return rows
+      .map((r) => r.uf)
+      .filter((u): u is string => Boolean(u))
+      .sort();
+  },
+  ["reports:ufs-distintas"],
+  { revalidate: 300, tags: ["reports:lookups"] },
+);
 
 // ============================================================================
 // PAINEL EXECUTIVO — queries estratégicas (admin only no caller)

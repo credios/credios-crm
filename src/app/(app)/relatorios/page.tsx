@@ -67,31 +67,6 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type ReportKpis = Awaited<ReturnType<typeof fetchKpis>>;
-
-const EMPTY_KPIS: ReportKpis = {
-  leadsNovosCount: 0,
-  pipelineCount: 0,
-  pipelineValorCentavos: 0,
-  fechadosCount: 0,
-  fechadosValorLiberadoCentavos: 0,
-  fechadosComissaoCentavos: 0,
-  conversaoRolling90d: { criados: 0, fechados: 0, taxa: 0 },
-};
-
-async function safeQuery<T>(
-  label: string,
-  promise: Promise<T>,
-  fallback: T,
-): Promise<T> {
-  try {
-    return await promise;
-  } catch (error) {
-    console.error(`[/relatorios:${label}]`, error);
-    return fallback;
-  }
-}
-
 export default async function RelatoriosPage({ searchParams }: Props) {
   const user = await getAppUser();
   if (!user) redirect("/login");
@@ -117,25 +92,10 @@ export default async function RelatoriosPage({ searchParams }: Props) {
   const hideFinancial = !canSeeFinancial;
   const isAdminGerente = isAdminOrGerente(user);
 
-  // === Tier 1 (síncrono, render imediato) =====================================
-  // Auth + KPIs essenciais + dados pros filtros. Tudo o que precisa estar
-  // visível antes do streaming kickar. Mantido ENXUTO de propósito — qualquer
-  // query nova pesada vai pra um Suspense abaixo.
-  const [kpisCurr, kpisPrev, consultores, origens, ufs] = await Promise.all([
-    safeQuery("kpis-current", fetchKpis(filters, period), EMPTY_KPIS),
-    compPeriod
-      ? safeQuery<ReportKpis | null>(
-          "kpis-previous",
-          fetchKpis(filters, compPeriod),
-          null,
-        )
-      : Promise.resolve(null),
-    safeQuery("consultores", fetchConsultoresAtivos(), []),
-    safeQuery("origens", fetchOrigensDistintas(), []),
-    safeQuery("ufs", fetchUfsDistintas(), []),
-  ]);
-
-  const conversaoPct = (kpisCurr.conversaoRolling90d.taxa * 100).toFixed(1);
+  // Tier 1 vazio: só auth + parse de filtros (rápidos). Todo dado de banco
+  // sobe em Suspense abaixo, inclusive os KPIs do topo e os filtros — antes,
+  // se UMA das 5 queries de Tier 1 travasse, a página inteira ficava esperando
+  // o maxDuration (60s) e voltava 504. Agora o layout aparece imediatamente.
 
   // Audit não-crítico (page view): após response (after de next/server).
   after(() =>
@@ -164,55 +124,18 @@ export default async function RelatoriosPage({ searchParams }: Props) {
         </Badge>
       </div>
 
-      <ReportFilters
-        consultores={consultores}
-        origens={origens}
-        ufs={ufs}
-        hideFaixaValor={isMarketing}
-      />
+      <Suspense fallback={<FiltersSkeleton />}>
+        <FiltersSection isMarketing={isMarketing} />
+      </Suspense>
 
-      {/* KPIs operacionais — 4 cards limpos */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 stagger [&>*]:animate-fade-up">
-        <KpiCard
-          icon={Users}
-          label="Leads novos"
-          value={String(kpisCurr.leadsNovosCount)}
-          hint="entradas no período"
-          deltaPct={
-            kpisPrev
-              ? pctDelta(kpisCurr.leadsNovosCount, kpisPrev.leadsNovosCount)
-              : null
-          }
+      <Suspense fallback={<KpisSkeleton />}>
+        <KpisSection
+          filters={filters}
+          period={period}
+          compPeriod={compPeriod}
+          canSeeFinancial={canSeeFinancial}
         />
-        <KpiCard
-          icon={ArrowDownUp}
-          label="Pipeline ativo"
-          value={String(kpisCurr.pipelineCount)}
-          hint={`${formatBrlShort(kpisCurr.pipelineValorCentavos)} buscado`}
-        />
-        <KpiCard
-          icon={CheckCircle2}
-          tone={canSeeFinancial ? "premium" : "default"}
-          label="Fechamentos"
-          value={String(kpisCurr.fechadosCount)}
-          hint={
-            canSeeFinancial
-              ? `${formatBrlShort(kpisCurr.fechadosValorLiberadoCentavos)} liberado`
-              : "no período"
-          }
-          deltaPct={
-            kpisPrev
-              ? pctDelta(kpisCurr.fechadosCount, kpisPrev.fechadosCount)
-              : null
-          }
-        />
-        <KpiCard
-          icon={Target}
-          label="Taxa de conversão"
-          value={`${conversaoPct}%`}
-          hint="rolling 90d · novos → fechados"
-        />
-      </div>
+      </Suspense>
 
       {/* === Tier 2 (streaming) — cada Suspense renderiza independente. ===
           Uma query lenta/falha numa seção não derruba a página inteira;
@@ -254,12 +177,7 @@ export default async function RelatoriosPage({ searchParams }: Props) {
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton h={400} />}>
-        <SaudeOperacionalSection
-          filters={filters}
-          period={period}
-          conversaoTaxa={kpisCurr.conversaoRolling90d.taxa}
-          conversaoPct={conversaoPct}
-        />
+        <SaudeOperacionalSection filters={filters} period={period} />
       </Suspense>
 
       {isAdminGerente && (
@@ -339,6 +257,108 @@ function SectionError({ title }: { title: string }) {
       </div>
     </div>
   );
+}
+
+function FiltersSkeleton() {
+  return (
+    <div className="surface-solid rounded-xl animate-pulse h-24" aria-hidden />
+  );
+}
+
+async function FiltersSection({ isMarketing }: { isMarketing: boolean }) {
+  return renderSection("Filtros", async () => {
+    // 3 listas pequenas em paralelo (cacheadas via unstable_cache nas queries).
+    const [consultores, origens, ufs] = await Promise.all([
+      fetchConsultoresAtivos(),
+      fetchOrigensDistintas(),
+      fetchUfsDistintas(),
+    ]);
+    return (
+      <ReportFilters
+        consultores={consultores}
+        origens={origens}
+        ufs={ufs}
+        hideFaixaValor={isMarketing}
+      />
+    );
+  });
+}
+
+function KpisSkeleton() {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          key={i}
+          className="surface-solid rounded-xl animate-pulse h-28"
+          aria-hidden
+        />
+      ))}
+    </div>
+  );
+}
+
+async function KpisSection({
+  filters,
+  period,
+  compPeriod,
+  canSeeFinancial,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+  compPeriod: PeriodRange | null;
+  canSeeFinancial: boolean;
+}) {
+  return renderSection("KPIs principais", async () => {
+    const [kpisCurr, kpisPrev] = await Promise.all([
+      fetchKpis(filters, period),
+      compPeriod ? fetchKpis(filters, compPeriod) : Promise.resolve(null),
+    ]);
+    const conversaoPct = (kpisCurr.conversaoRolling90d.taxa * 100).toFixed(1);
+    return (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 stagger [&>*]:animate-fade-up">
+        <KpiCard
+          icon={Users}
+          label="Leads novos"
+          value={String(kpisCurr.leadsNovosCount)}
+          hint="entradas no período"
+          deltaPct={
+            kpisPrev
+              ? pctDelta(kpisCurr.leadsNovosCount, kpisPrev.leadsNovosCount)
+              : null
+          }
+        />
+        <KpiCard
+          icon={ArrowDownUp}
+          label="Pipeline ativo"
+          value={String(kpisCurr.pipelineCount)}
+          hint={`${formatBrlShort(kpisCurr.pipelineValorCentavos)} buscado`}
+        />
+        <KpiCard
+          icon={CheckCircle2}
+          tone={canSeeFinancial ? "premium" : "default"}
+          label="Fechamentos"
+          value={String(kpisCurr.fechadosCount)}
+          hint={
+            canSeeFinancial
+              ? `${formatBrlShort(kpisCurr.fechadosValorLiberadoCentavos)} liberado`
+              : "no período"
+          }
+          deltaPct={
+            kpisPrev
+              ? pctDelta(kpisCurr.fechadosCount, kpisPrev.fechadosCount)
+              : null
+          }
+        />
+        <KpiCard
+          icon={Target}
+          label="Taxa de conversão"
+          value={`${conversaoPct}%`}
+          hint="rolling 90d · novos → fechados"
+        />
+      </div>
+    );
+  });
 }
 
 async function FunilSection({
@@ -445,20 +465,21 @@ async function UfLossSection({
 async function SaudeOperacionalSection({
   filters,
   period,
-  conversaoTaxa,
-  conversaoPct,
 }: {
   filters: RFilters;
   period: PeriodRange;
-  conversaoTaxa: number;
-  conversaoPct: string;
 }) {
   return renderSection("Saúde operacional", async () => {
-    const [slaComp, esfriandoGlobal, tempoMedio] = await Promise.all([
+    // fetchKpis aqui é o MESMO chamado por KpisSection — React.cache
+    // (em queries.ts) deduplica dentro do mesmo render request.
+    const [slaComp, esfriandoGlobal, tempoMedio, kpis] = await Promise.all([
       fetchSlaCompliance(filters, period),
       fetchEsfriandoGlobal(),
       fetchTempoMedioPorStatus(filters, period),
+      fetchKpis(filters, period),
     ]);
+    const conversaoTaxa = kpis.conversaoRolling90d.taxa;
+    const conversaoPct = (conversaoTaxa * 100).toFixed(1);
 
     return (
       <section className="space-y-3">
