@@ -1,6 +1,7 @@
 import "server-only";
 
 import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
 
 import {
   interacoes,
@@ -305,6 +306,17 @@ export async function completeTask(
 }
 
 export async function taskStatsByConsultor(dataReferencia?: string) {
+  // Cacheado: chamada do dashboard /relatorios pelo perfil admin/gerente.
+  // Lê tarefas + JOIN users + 4 aggregates filter — pesado em pico se chamado
+  // junto com outras 8+ Suspenses. TTL 120s.
+  return unstable_cache(
+    () => taskStatsByConsultorUncached(dataReferencia),
+    ["tasks:stats-by-consultor", dataReferencia ?? "all"],
+    { revalidate: 120, tags: ["tasks:dashboards"] },
+  )();
+}
+
+async function taskStatsByConsultorUncached(dataReferencia?: string) {
   const cond = dataReferencia ? eq(tarefas.dataReferencia, dataReferencia) : undefined;
   return await db
     .select({

@@ -11,6 +11,34 @@ import {
 
 import type { PeriodRange } from "./period";
 
+// Helper pra gerar chaves de cache determinísticas a partir de
+// (filters, period). Evita explosões de cache por ordem de keys do filter
+// e por timestamps com microssegundos diferentes.
+function cacheKeyFor(
+  prefix: string,
+  filters: ReportFilters,
+  period?: PeriodRange,
+): string[] {
+  const f = normalizeFilters(filters);
+  const parts = [
+    prefix,
+    f.consultorIds.slice().sort().join(","),
+    f.origens.slice().sort().join(","),
+    f.ufs.slice().sort().join(","),
+    String(f.valorMinCentavos ?? ""),
+    String(f.valorMaxCentavos ?? ""),
+  ];
+  if (period) {
+    parts.push(period.from.toISOString(), period.to.toISOString());
+  }
+  return parts;
+}
+
+// TTL padrão pra queries pesadas dos dashboards: 2 min. Equilibra freshness
+// (relatórios não precisam ser real-time) com performance (primeira request
+// paga o custo, demais nesse minuto vêm do Data Cache).
+const REPORT_CACHE_TTL = 120;
+
 function baseConds(rawFilters: ReportFilters) {
   const filters = normalizeFilters(rawFilters);
   const c = [];
@@ -233,6 +261,17 @@ export async function fetchFunil(
 export type TempoMedioRow = { status: string; horasMedias: number; transicoes: number };
 
 export async function fetchTempoMedioPorStatus(
+  rawFilters: ReportFilters,
+  period: PeriodRange,
+): Promise<TempoMedioRow[]> {
+  return unstable_cache(
+    () => fetchTempoMedioPorStatusUncached(rawFilters, period),
+    cacheKeyFor("reports:tempo-medio-status", rawFilters, period),
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchTempoMedioPorStatusUncached(
   rawFilters: ReportFilters,
   period: PeriodRange,
 ): Promise<TempoMedioRow[]> {
@@ -1216,6 +1255,22 @@ export type PercentilRow = {
 export async function fetchTempoPercentis(
   period: PeriodRange,
 ): Promise<PercentilRow[]> {
+  // Cacheado: 3 queries com percentile_cont. Pesado quando há muitos
+  // fechados; resultado muda pouco em janelas de minutos.
+  return unstable_cache(
+    () => fetchTempoPercentisUncached(period),
+    [
+      "reports:tempo-percentis",
+      period.from.toISOString(),
+      period.to.toISOString(),
+    ],
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchTempoPercentisUncached(
+  period: PeriodRange,
+): Promise<PercentilRow[]> {
   const fromIso = period.from.toISOString();
   const toIso = period.to.toISOString();
 
@@ -1336,6 +1391,22 @@ export async function fetchTopOrigensDetalhadas(
   period: PeriodRange,
   limit: number = 10,
 ): Promise<TopOrigemRow[]> {
+  return unstable_cache(
+    () => fetchTopOrigensDetalhadasUncached(period, limit),
+    [
+      "reports:top-origens",
+      period.from.toISOString(),
+      period.to.toISOString(),
+      String(limit),
+    ],
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchTopOrigensDetalhadasUncached(
+  period: PeriodRange,
+  limit: number = 10,
+): Promise<TopOrigemRow[]> {
   const rows = await db.execute<{
     origem: string;
     utm_source: string;
@@ -1390,6 +1461,22 @@ export type ComparativoRow = {
 };
 
 export async function fetchComparativoPeriodos(
+  filters: ReportFilters,
+  curr: PeriodRange,
+  prev: PeriodRange,
+): Promise<ComparativoRow[]> {
+  return unstable_cache(
+    () => fetchComparativoPeriodosUncached(filters, curr, prev),
+    [
+      ...cacheKeyFor("reports:comparativo", filters, curr),
+      prev.from.toISOString(),
+      prev.to.toISOString(),
+    ],
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchComparativoPeriodosUncached(
   filters: ReportFilters,
   curr: PeriodRange,
   prev: PeriodRange,
@@ -1520,6 +1607,17 @@ export type Distribuicoes = {
  * separadas. Performance: ~1 plano de query agregando tudo.
  */
 export async function fetchDistribuicoes(
+  rawFilters: ReportFilters,
+  period: PeriodRange,
+): Promise<Distribuicoes> {
+  return unstable_cache(
+    () => fetchDistribuicoesUncached(rawFilters, period),
+    cacheKeyFor("reports:distribuicoes", rawFilters, period),
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchDistribuicoesUncached(
   rawFilters: ReportFilters,
   period: PeriodRange,
 ): Promise<Distribuicoes> {

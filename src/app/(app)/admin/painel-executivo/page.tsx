@@ -53,7 +53,8 @@ import {
 
 // `force-dynamic` removido: dynamic naturalmente via cookies + searchParams.
 export const revalidate = 60;
-export const maxDuration = 60;
+// 90s — ver comentário equivalente em /relatorios.
+export const maxDuration = 90;
 
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

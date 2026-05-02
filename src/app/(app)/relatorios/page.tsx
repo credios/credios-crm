@@ -61,7 +61,9 @@ import {
 // e searchParams. Sem ele, o Next aplica o `revalidate = 60` ao Data Cache
 // dos fetches/queries cacheados (ver unstable_cache em queries.ts).
 export const revalidate = 60;
-export const maxDuration = 60;
+// 90s — dá folga pras seções pesadas (Distribuições, Comparativo) terminarem
+// quando o cache estiver frio. Suspenses individuais cortam em 25s próprio.
+export const maxDuration = 90;
 
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

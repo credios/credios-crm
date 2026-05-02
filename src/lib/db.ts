@@ -12,8 +12,10 @@ const isDev = process.env.NODE_ENV !== "production";
 // max=1 em dev: única conexão por processo. Múltiplas tabs/refresh viram
 // queries serializadas (latência mínima local), mas ZERO chance de hit no
 // "remaining connection slots are reserved for SUPERUSER". Em prod usamos
-// max=10 — Vercel cria uma instância de função por request, então o pool
-// não cresce indefinidamente.
+// max=15 — páginas de relatório/painel-executivo disparam ~20-30 queries
+// paralelas via Suspenses; com pool muito pequeno, conexões saturam e
+// Suspenses ficam "carregando eternamente". Pgbouncer Supabase Pro aceita
+// ~200 conexões totais → cabe ~10 instâncias warm da função simultaneamente.
 //
 // Supabase usa pgbouncer em modo transaction; prepared statements quebram
 // nesse modo. prepare:false é obrigatório.
@@ -26,7 +28,7 @@ const client =
   globalForDb.__credios_pg__ ??
   postgres(connectionString, {
     prepare: false,
-    max: isDev ? 1 : 10,
+    max: isDev ? 1 : 15,
     idle_timeout: isDev ? 5 : 30,
     connect_timeout: 10,
     max_lifetime: isDev ? 60 : 60 * 30,
