@@ -59,17 +59,24 @@
   --color-ivory-muted: #f0ede5;
   --color-ivory-subtle: #e8e4d9;
 
-  /* === Status colors === */
-  --color-status-novo: #4b7be5;
-  --color-status-conversa: #91b0f6;
-  --color-status-aguardando-resp: #d4a351;
-  --color-status-aguardando-doc: #b8893a;
-  --color-status-doc-enviada: #6366f1;
-  --color-status-em-negociacao: #8b5cf6;
-  --color-status-fechado: #10b981;
-  --color-status-perdido: #f43f5e;
-  --color-status-sem-resposta: #6e7891;
-  --color-status-desqualificado: #dc2626;
+  /* === Status colors ===
+   * Progressão visual do funil: frio → quente → verde (won) ou vermelho (lost).
+   *   novo (blue) → conversa_inicial (sky) → aguardando_resposta (yellow)
+   *   → aguardando_documentacao (orange) → documentacao_enviada (indigo)
+   *   → em_negociacao (violet) → fechado (emerald)
+   * Fora do fluxo ativo: sem_resposta (slate neutro), perdido (rose),
+   * desqualificado (red).
+   */
+  --color-status-novo: #4b7be5;            /* blue-500   — entrada, frio */
+  --color-status-conversa: #38bdf8;        /* sky-400    — esquentando */
+  --color-status-aguardando-resp: #eab308; /* yellow-500 — atenção */
+  --color-status-aguardando-doc: #f97316;  /* orange-500 — urgente */
+  --color-status-doc-enviada: #6366f1;     /* indigo-500 — andamento */
+  --color-status-em-negociacao: #8b5cf6;   /* violet-500 — fechando */
+  --color-status-fechado: #10b981;         /* emerald-500 — sucesso */
+  --color-status-perdido: #f43f5e;         /* rose-500   — perda ativa */
+  --color-status-sem-resposta: #94a3b8;    /* slate-400  — passivo */
+  --color-status-desqualificado: #dc2626;  /* red-600    — bloqueado */
 
   /* === Fonts (5 fontes Credios via next/font) === */
   --font-sans: var(--font-plus-jakarta-sans), "Outfit", system-ui, sans-serif;

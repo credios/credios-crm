@@ -31,16 +31,64 @@ export function LeadFilters({ consultores, origens }: Props) {
   const params = useSearchParams();
   const [, startTransition] = useTransition();
 
-  const [q, setQ] = useState(params.get("q") ?? "");
+  const currentQ = params.get("q") ?? "";
+  const [q, setQ] = useState(currentQ);
+  const [syncedQ, setSyncedQ] = useState(currentQ);
+
+  // Estado local pros campos de data — sem isso, cada keystroke disparava
+  // setParam, mudava URL, re-renderizava input com data parcial inválida
+  // (ex: ano "0002" enquanto user digita "2026") e o cursor "resetava".
+  // Agora o input mantém o que o user digitou; só aplica na URL após
+  // debounce E quando a data é válida (ano com 4 dígitos entre 1900-2100).
+  const currentDataDe = params.get("dataDe") ?? "";
+  const currentDataAte = params.get("dataAte") ?? "";
+  const [dataDe, setDataDe] = useState(currentDataDe);
+  const [dataAte, setDataAte] = useState(currentDataAte);
+  const [syncedDataDe, setSyncedDataDe] = useState(currentDataDe);
+  const [syncedDataAte, setSyncedDataAte] = useState(currentDataAte);
+
+  // Sync render-time: se URL mudou externamente (clearAll, navegação),
+  // re-sincroniza estado local. Padrão "controlled-from-URL".
+  if (syncedQ !== currentQ) {
+    setSyncedQ(currentQ);
+    if (q !== currentQ) setQ(currentQ);
+  }
+  if (syncedDataDe !== currentDataDe) {
+    setSyncedDataDe(currentDataDe);
+    if (dataDe !== currentDataDe) setDataDe(currentDataDe);
+  }
+  if (syncedDataAte !== currentDataAte) {
+    setSyncedDataAte(currentDataAte);
+    if (dataAte !== currentDataAte) setDataAte(currentDataAte);
+  }
 
   // Debounce search → atualiza URL.
   useEffect(() => {
+    if (q === currentQ) return;
     const t = setTimeout(() => {
       setParam("q", q || null);
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
+  }, [q, currentQ]);
+
+  // Debounce data → só aplica se válida. Evita resetar input enquanto user
+  // digita "2026" (parsing parcial criaria ano "0002" e travava o cursor).
+  useEffect(() => {
+    if (dataDe === currentDataDe) return;
+    if (!isValidDateOrEmpty(dataDe)) return;
+    const t = setTimeout(() => setParam("dataDe", dataDe || null), 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataDe, currentDataDe]);
+
+  useEffect(() => {
+    if (dataAte === currentDataAte) return;
+    if (!isValidDateOrEmpty(dataAte)) return;
+    const t = setTimeout(() => setParam("dataAte", dataAte || null), 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataAte, currentDataAte]);
 
   function setParam(key: string, value: string | null) {
     const newParams = new URLSearchParams(params.toString());
@@ -54,6 +102,8 @@ export function LeadFilters({ consultores, origens }: Props) {
 
   function clearAll() {
     setQ("");
+    setDataDe("");
+    setDataAte("");
     startTransition(() => router.replace(pathname));
   }
 
@@ -129,13 +179,17 @@ export function LeadFilters({ consultores, origens }: Props) {
           <div className="flex gap-1">
             <Input
               type="date"
-              value={params.get("dataDe") ?? ""}
-              onChange={(e) => setParam("dataDe", e.currentTarget.value || null)}
+              value={dataDe}
+              onChange={(e) => setDataDe(e.currentTarget.value)}
+              min="1900-01-01"
+              max="2100-12-31"
             />
             <Input
               type="date"
-              value={params.get("dataAte") ?? ""}
-              onChange={(e) => setParam("dataAte", e.currentTarget.value || null)}
+              value={dataAte}
+              onChange={(e) => setDataAte(e.currentTarget.value)}
+              min="1900-01-01"
+              max="2100-12-31"
             />
           </div>
         </div>
@@ -204,6 +258,17 @@ function FilterSelect({
       </Select>
     </div>
   );
+}
+
+// Aceita string vazia ou data ISO completa (YYYY-MM-DD) com ano plausível.
+// Bloqueia ano <1900 (=> setParam não dispara enquanto user digita "2026" e
+// passa por "0002", "0020", etc), e ano >2100 (proteção upper bound).
+function isValidDateOrEmpty(v: string): boolean {
+  if (v === "") return true;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const year = Number(m[1]);
+  return year >= 1900 && year <= 2100;
 }
 
 function centsToReaisStr(cents: string | null): string {

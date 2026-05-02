@@ -14,17 +14,19 @@ export const CHART_COLORS = [
   "#2c4fa8", // blue-700
 ] as const;
 
+// Sincronizado com --color-status-* em globals.css. Progressão do funil:
+// frio (azul) → quente (amarelo/laranja) → verde (won) ou vermelho (lost).
 export const STATUS_COLOR: Record<string, string> = {
-  novo: "#4b7be5",
-  conversa_inicial: "#91b0f6",
-  aguardando_resposta: "#d4a351",
-  aguardando_documentacao: "#b8893a",
-  documentacao_enviada: "#6366f1",
-  em_negociacao: "#8b5cf6",
-  fechado: "#10b981",
-  perdido: "#f43f5e",
-  sem_resposta: "#6e7891",
-  desqualificado: "#dc2626",
+  novo: "#4b7be5",                  // blue-500   — entrada
+  conversa_inicial: "#38bdf8",      // sky-400    — esquentando
+  aguardando_resposta: "#eab308",   // yellow-500 — atenção
+  aguardando_documentacao: "#f97316", // orange-500 — urgente
+  documentacao_enviada: "#6366f1",  // indigo-500 — andamento
+  em_negociacao: "#8b5cf6",         // violet-500 — fechando
+  fechado: "#10b981",               // emerald-500 — sucesso
+  perdido: "#f43f5e",               // rose-500
+  sem_resposta: "#94a3b8",          // slate-400
+  desqualificado: "#dc2626",        // red-600
 };
 
 export const TOOLTIP_STYLE: React.CSSProperties = {

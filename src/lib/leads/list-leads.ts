@@ -65,9 +65,17 @@ function orderingClause(filters: ListLeadsQuery) {
         tiebreaker,
       ];
     case "status":
-      // Ordenação por status segue ordem natural do enum (novo → conversa →
-      // ... → desqualificado), tiebreaker por created_at.
-      return [dir(leadsTable.status), tiebreaker];
+      // Ordenação pela ORDEM do funil (status_lead_config.ordem) — mesma
+      // sequência do Kanban (novo → conversa_inicial → ... → fechado).
+      // Subquery escalar; status_lead_config tem 10-20 rows e fica em
+      // cache de plano, custo desprezível. NULLS LAST cobre status que
+      // não existem mais em status_lead_config (raro mas defensivo).
+      return [
+        sql`(SELECT ordem FROM public.status_lead_config WHERE key = ${leadsTable.status}) ${
+          filters.sortDir === "asc" ? sql`asc nulls last` : sql`desc nulls last`
+        }`,
+        tiebreaker,
+      ];
     case "origem":
       return [
         sql`${leadsTable.origem} ${
