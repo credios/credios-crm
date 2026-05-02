@@ -80,11 +80,23 @@ export type Kpis = {
   conversaoRolling90d: { criados: number; fechados: number; taxa: number };
 };
 
-// React.cache() deduplica por request: se duas Server Components chamam
-// fetchKpis(mesmosArgs) no mesmo render, só executa 1 vez. Usado por
-// KpisSection (Suspense dos 4 cards) e SaudeOperacionalSection (precisa
-// só da taxa de conversão rolling 90d).
+// 2 camadas de cache:
+//   - React.cache() deduplica por REQUEST (KpisSection + SaudeOperacionalSection
+//     chamam com mesmos args dentro do mesmo render → 1 execução só).
+//   - unstable_cache() persiste por TTL=120s entre requests diferentes.
+// Resultado: primeira request paga, demais nesse minuto vêm em ms.
 export const fetchKpis = cache(async function fetchKpis(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<Kpis> {
+  return unstable_cache(
+    () => fetchKpisUncached(filters, period),
+    cacheKeyFor("reports:kpis", filters, period),
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+});
+
+async function fetchKpisUncached(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<Kpis> {
@@ -175,7 +187,7 @@ export const fetchKpis = cache(async function fetchKpis(
       taxa,
     },
   };
-});
+}
 
 // ============================================================================
 // Volume por dia (linha + área empilhada por origem)
@@ -473,6 +485,16 @@ export type ReceitaMensalRow = {
 export async function fetchReceitaMensal(
   filters: ReportFilters,
 ): Promise<ReceitaMensalRow[]> {
+  return unstable_cache(
+    () => fetchReceitaMensalUncached(filters),
+    cacheKeyFor("reports:receita-mensal", filters),
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchReceitaMensalUncached(
+  filters: ReportFilters,
+): Promise<ReceitaMensalRow[]> {
   const cb = baseConds(filters);
   const rows = await db
     .select({
@@ -550,6 +572,17 @@ export type SalesMetrics = {
 };
 
 export async function fetchSalesMetrics(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<SalesMetrics> {
+  return unstable_cache(
+    () => fetchSalesMetricsUncached(filters, period),
+    cacheKeyFor("reports:sales-metrics", filters, period),
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchSalesMetricsUncached(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<SalesMetrics> {
@@ -1549,6 +1582,19 @@ export type SparklinePoint = { mes: string; valor: number };
 export async function fetchSparkRevenue(
   meses: number = 6,
 ): Promise<{
+  comissao: SparklinePoint[];
+  liberado: SparklinePoint[];
+  ticketMedio: SparklinePoint[];
+  cicloMedio: SparklinePoint[];
+}> {
+  return unstable_cache(
+    () => fetchSparkRevenueUncached(meses),
+    ["reports:spark-revenue", String(meses)],
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchSparkRevenueUncached(meses: number): Promise<{
   comissao: SparklinePoint[];
   liberado: SparklinePoint[];
   ticketMedio: SparklinePoint[];
