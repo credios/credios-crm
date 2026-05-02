@@ -284,6 +284,46 @@ Implementação em `src/lib/routing/`:
 - Engine recebe `deps` via DI → tests não tocam Postgres
 - Rodar: `npm test` (single run) ou `npm run test:watch`
 
+### Visualizações (Fase 5)
+
+#### Lista (`/leads`)
+- TanStack Table com colunas: nome (link pro detalhe), `<StatusBadge>`, valor buscado, WhatsApp (link `wa.me/`), origem, consultor, último contato (relativo + ❄️ se esfriando), criado em
+- Filtros via URL params: `status`, `consultorId`, `origem`, `estado`, `dispositivo`, `valorMin`/`valorMax` (em centavos), `dataDe`/`dataAte` (YYYY-MM-DD), `q` (busca em nome/email/cpf/whatsapp)
+- Busca debounced 300ms; filtros sincronizados na URL → bookmarkáveis e compartilháveis
+- Paginação server-side, 50 por página, navegação anterior/próxima
+- Seleção múltipla (checkbox no header + por linha) com toolbar de ações em lote: **Reatribuir**, **Mudar status** (não-terminais; pra fechar/desqualificar tem que ser individual), **Exportar CSV** (gera `text/csv;charset=utf-8` com BOM, escape RFC 4180, nome `leads-YYYY-MM-DD.csv`)
+- Toggle Lista/Kanban no topo preserva todos os filtros via query string
+
+#### Kanban (`/leads/kanban`)
+- 10 colunas (uma por status), header da coluna com cor (mesmo mapping do `<StatusBadge>`), label, contador, somatório do valor buscado em formato curto
+- Cards com nome, valor (`R$ 350K` formato curto), badges de origem + UF, último contato relativo, avatar com iniciais do consultor (ou "pool"), ❄️ se esfriando
+- Drag-and-drop entre colunas via `@dnd-kit/core` com `useDraggable` no card e `useDroppable` na coluna; activation distance 6px (não roubam clicks no link do nome)
+- Drop em status terminal (`fechado`/`desqualificado`/`perdido`) abre modal pedindo dados extras antes de aplicar — drop não-terminal aplica direto via `PATCH /api/leads/[id]/status`
+- Cap defensivo de 500 leads por carga; aviso quando atinge limite (refinar via filtros)
+- Mesmos filtros da Lista; estado preservado via URL
+
+#### Detalhe (`/leads/[id]`)
+- **Header** com nome (h1), `<StatusBadge>`, valor buscado e botões: **Mudar status** (DropdownMenu separando não-terminais e terminais — terminais abrem modal), **Reatribuir** (Dialog com Select de consultor), **WhatsApp** (link `wa.me/`), **Copiar email** (clipboard + toast), **Marcar último contato** (cria interação `anotacao` com texto fixo). Lead `fechado` só aceita mudança de status por admin.
+- **Coluna esquerda (60%)** com 4 cards usando `<LeadEditableCard>` (genérico):
+  - Informações pessoais (nome, CPF, estado civil, ocupação, renda)
+  - Contato (WhatsApp, email, cidade, UF)
+  - Imóvel e crédito (objetivo, tipo imóvel, situação, tipo pessoa, valores; mostra dados de fechamento se status=fechado)
+  - Origem (somente leitura, expande origem/utm/gclid/dispositivo/etc.)
+  - Mensagens sugeridas: cards filtrados por `status_aplicavel @> ARRAY[<status>]`, com Preview (modal) e Copiar (substitui `{{nome}}`/`{{primeiro_nome}}`/`{{valor_credito}}`/`{{valor_imovel}}`/`{{cidade}}`/`{{estado}}`)
+- **Coluna direita (40%)** com `<LeadTimeline>`: lista cronológica reversa de interações; ícone diferente por tipo; eventos de sistema em cinza; input no topo com Select de tipo + textarea + botão Registrar
+
+#### Realtime
+
+Hooks em `src/lib/realtime/`:
+- `useLeadsRealtime()` — usado em `/leads` e `/leads/kanban`. Subscribe a `postgres_changes` em `leads` + `interacoes`; debounce 400ms → `router.refresh()`. RLS aplica via JWT do user (consultor recebe só events dos seus leads).
+- `useInteracoesRealtime(leadId, onNew)` — usado em `/leads/[id]/timeline`. Filter `lead_id=eq.<id>`; novo event aparece instantâneo na timeline (com placeholder no `autorNome` até o próximo refresh popular via JOIN).
+
+**Pré-requisito**: Replication habilitada para `public.leads` e `public.interacoes` (já configurada via `ALTER PUBLICATION supabase_realtime ADD TABLE …` na Fase 5; pra outras tabelas, repetir no SQL Editor ou no Dashboard → Database → Replication).
+
+#### Cores de status
+
+Mapping em `src/components/leads/status-badge.tsx`. Ajustes na Fase 6 se quiser bater 100% com Notion atual.
+
 ### Tabela auxiliar `webhook_idempotency`
 
 - Schema: `id`, `payload_hash UNIQUE`, `lead_id` (FK leads), `created_at`

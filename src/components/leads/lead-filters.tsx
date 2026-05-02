@@ -1,0 +1,196 @@
+"use client";
+
+import { Search, X } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ORIGENS, STATUS_LEAD_LABEL, UFS } from "@/lib/constants";
+
+const STATUS_VALUES = Object.keys(STATUS_LEAD_LABEL);
+const DISPOSITIVOS = ["Mobile", "Desktop", "Tablet"];
+
+type Props = {
+  consultores: { id: string; nome: string }[];
+  origens?: string[];
+};
+
+export function LeadFilters({ consultores, origens }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [, startTransition] = useTransition();
+
+  const [q, setQ] = useState(params.get("q") ?? "");
+
+  // Debounce search → atualiza URL.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setParam("q", q || null);
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  function setParam(key: string, value: string | null) {
+    const newParams = new URLSearchParams(params.toString());
+    if (value && value !== "") newParams.set(key, value);
+    else newParams.delete(key);
+    if (key !== "page") newParams.delete("page");
+    startTransition(() => {
+      router.replace(`${pathname}?${newParams.toString()}`);
+    });
+  }
+
+  function clearAll() {
+    setQ("");
+    startTransition(() => router.replace(pathname));
+  }
+
+  const origensList = origens && origens.length > 0 ? origens : ORIGENS;
+  const hasFilters = Array.from(params.keys()).some(
+    (k) => !["page", "pageSize"].includes(k),
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.currentTarget.value)}
+          placeholder="Buscar por nome, email, CPF ou telefone…"
+          className="pl-9"
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        <FilterSelect
+          label="Status"
+          value={params.get("status")}
+          onChange={(v) => setParam("status", v)}
+          options={STATUS_VALUES.map((s) => ({ value: s, label: STATUS_LEAD_LABEL[s] }))}
+        />
+        <FilterSelect
+          label="Consultor"
+          value={params.get("consultorId")}
+          onChange={(v) => setParam("consultorId", v)}
+          options={consultores.map((c) => ({ value: c.id, label: c.nome }))}
+        />
+        <FilterSelect
+          label="Origem"
+          value={params.get("origem")}
+          onChange={(v) => setParam("origem", v)}
+          options={origensList.map((o) => ({ value: o, label: o }))}
+        />
+        <FilterSelect
+          label="UF"
+          value={params.get("estado")}
+          onChange={(v) => setParam("estado", v)}
+          options={UFS.map((u) => ({ value: u, label: u }))}
+        />
+        <FilterSelect
+          label="Dispositivo"
+          value={params.get("dispositivo")}
+          onChange={(v) => setParam("dispositivo", v)}
+          options={DISPOSITIVOS.map((d) => ({ value: d, label: d }))}
+        />
+        <div className="space-y-1.5">
+          <Label className="text-xs">Valor (R$)</Label>
+          <div className="flex gap-1">
+            <Input
+              type="number"
+              min="0"
+              placeholder="min"
+              value={centsToReaisStr(params.get("valorMin"))}
+              onChange={(e) => setParam("valorMin", reaisStrToCents(e.currentTarget.value))}
+            />
+            <Input
+              type="number"
+              min="0"
+              placeholder="max"
+              value={centsToReaisStr(params.get("valorMax"))}
+              onChange={(e) => setParam("valorMax", reaisStrToCents(e.currentTarget.value))}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5 lg:col-span-2">
+          <Label className="text-xs">Período (criado em)</Label>
+          <div className="flex gap-1">
+            <Input
+              type="date"
+              value={params.get("dataDe") ?? ""}
+              onChange={(e) => setParam("dataDe", e.currentTarget.value || null)}
+            />
+            <Input
+              type="date"
+              value={params.get("dataAte") ?? ""}
+              onChange={(e) => setParam("dataAte", e.currentTarget.value || null)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {hasFilters && (
+        <Button variant="ghost" size="sm" onClick={clearAll}>
+          <X className="size-3.5" /> Limpar filtros
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (v: string | null) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <Select
+        value={value ?? "__all__"}
+        onValueChange={(v) => onChange(v === "__all__" ? null : (v ?? null))}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Todos" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__all__">Todos</SelectItem>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function centsToReaisStr(cents: string | null): string {
+  if (!cents) return "";
+  const n = Number(cents);
+  return Number.isFinite(n) ? String(n / 100) : "";
+}
+
+function reaisStrToCents(reais: string): string | null {
+  const n = Number(reais);
+  if (!reais || !Number.isFinite(n) || n < 0) return null;
+  return String(Math.round(n * 100));
+}

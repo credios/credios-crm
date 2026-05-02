@@ -111,6 +111,8 @@ export const listLeadsQuerySchema = z.object({
   status: statusLeadEnum.optional(),
   consultorId: z.string().optional(),
   origem: z.string().optional(),
+  estado: z.string().optional(),
+  dispositivo: z.string().optional(),
   q: z.string().optional(),
   valorMin: z.coerce.number().int().nonnegative().optional(),
   valorMax: z.coerce.number().int().nonnegative().optional(),
