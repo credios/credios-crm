@@ -215,6 +215,17 @@ export const leads = pgTable(
     index("idx_leads_cpf")
       .on(table.cpf)
       .where(sql`${table.cpf} IS NOT NULL`),
+    // Cobre fetchKpis (fechados no período), fetchReceitaMensal,
+    // fetchTempoPercentis (cycle time). Filtra apenas leads fechados, que
+    // é a fração pequena da tabela — index muito menor que full.
+    index("idx_leads_fechado_data_fech")
+      .on(sql`${table.dataFechamento} DESC`)
+      .where(sql`status = 'fechado'`),
+    // Cobre fetchPerformanceConsultores, fetchSlaCompliance e
+    // fetchTempoPercentis — todos filtram por janela de atribuido_em.
+    index("idx_leads_atribuido_em")
+      .on(sql`${table.atribuidoEm} DESC`)
+      .where(sql`${table.atribuidoEm} IS NOT NULL`),
   ],
 );
 
@@ -241,6 +252,21 @@ export const interacoes = pgTable(
   },
   (table) => [
     index("idx_interacoes_lead").on(table.leadId, sql`${table.criadoEm} DESC`),
+    // Subqueries de "última interação MANUAL" estão em todo dashboard
+    // (esfriando, SLA 1º contato, performance consultor, percentis de tempo).
+    // Index parcial só com tipos manuais derruba o custo dessas subqueries
+    // correlatas em ~10x — restringe ainda mais o conjunto que o
+    // idx_interacoes_lead já filtrava.
+    index("idx_interacoes_manuais_lead")
+      .on(table.leadId, sql`${table.criadoEm} DESC`)
+      .where(
+        sql`tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')`,
+      ),
+    // Index dedicado pra fetchTempoMedioPorStatus (janela LAG sobre eventos
+    // de mudança de status).
+    index("idx_interacoes_mudanca_status_lead")
+      .on(table.leadId, table.criadoEm)
+      .where(sql`tipo = 'mudanca_status'`),
   ],
 );
 

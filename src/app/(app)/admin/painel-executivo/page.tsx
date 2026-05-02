@@ -1,6 +1,7 @@
 import { Banknote, Crown, DollarSign, Gauge, TrendingUp } from "lucide-react";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { Suspense } from "react";
 
 import { ReceitaMensalExec } from "@/components/relatorios/charts/receita-mensal-exec";
 import { ComparativoPeriodos } from "@/components/relatorios/comparativo-periodos";
@@ -22,7 +23,7 @@ import {
   pctDelta,
   pointsDelta,
 } from "@/lib/reports/comparativos";
-import { periodFromFilters } from "@/lib/reports/period";
+import { periodFromFilters, type PeriodRange } from "@/lib/reports/period";
 import {
   fetchComparativoPeriodos,
   fetchDistribuicoes,
@@ -39,10 +40,12 @@ import {
   COMPARACAO_LABEL,
   reportFiltersSchema,
   type ComparacaoMode,
+  type ReportFilters as RFilters,
 } from "@/lib/validators/report";
 
-export const dynamic = "force-dynamic";
+// `force-dynamic` removido: dynamic naturalmente via cookies + searchParams.
 export const revalidate = 60;
+export const maxDuration = 60;
 
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -67,34 +70,15 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
   const compMode: ComparacaoMode = filters.comparar;
   const compPeriod = comparisonPeriod(period, compMode);
 
-  const [
-    kpisCurr,
-    kpisPrev,
-    salesCurr,
-    salesPrev,
-    receita12m,
-    proj,
-    pipelineR$,
-    percentis,
-    topOrigens,
-    comparativo,
-    spark,
-    distrib,
-  ] = await Promise.all([
+  // === Tier 1 (síncrono) — só o que aparece nos 4 KPIs do topo. ===
+  // KPIs + sales metrics + sparklines: tudo necessário pra renderizar os 4
+  // cards executive. Demais seções sobem em Suspense abaixo.
+  const [kpisCurr, kpisPrev, salesCurr, salesPrev, spark] = await Promise.all([
     fetchKpis(filters, period),
     compPeriod ? fetchKpis(filters, compPeriod) : Promise.resolve(null),
     fetchSalesMetrics(filters, period),
     compPeriod ? fetchSalesMetrics(filters, compPeriod) : Promise.resolve(null),
-    fetchReceitaMensal(filters),
-    fetchProjecaoMes(),
-    fetchPipelineEmReais(),
-    fetchTempoPercentis(period),
-    fetchTopOrigensDetalhadas(period, 10),
-    compPeriod
-      ? fetchComparativoPeriodos(filters, period, compPeriod)
-      : Promise.resolve([]),
     fetchSparkRevenue(6),
-    fetchDistribuicoes(filters, period),
   ]);
 
   after(() =>
@@ -208,31 +192,113 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
         />
       </div>
 
-      {/* Receita 12 meses (escala corrigida) */}
-      <ReceitaMensalExec rows={receita12m} />
+      {/* === Tier 2 (streaming) — cada seção pesada em Suspense isolado. === */}
 
-      {/* Pipeline R$ + Projeção */}
-      <div className="grid gap-4 lg:grid-cols-2 stagger [&>*]:animate-fade-up">
-        <PipelineEmReais rows={pipelineR$} />
-        <ProjecaoMesCard proj={proj} />
-      </div>
+      <Suspense fallback={<SectionSkeleton h={360} />}>
+        <ReceitaMensalSection filters={filters} />
+      </Suspense>
 
-      {/* Distribuição de tempo (percentis) */}
-      <PercentisTempo rows={percentis} />
+      <Suspense fallback={<SectionSkeleton h={400} />}>
+        <PipelineProjecaoSection />
+      </Suspense>
 
-      {/* Comparativo de períodos */}
-      {compMode !== "sem" && comparativo.length > 0 && (
-        <ComparativoPeriodos
-          rows={comparativo}
-          comparisonLabel={COMPARACAO_LABEL[compMode]}
-        />
+      <Suspense fallback={<SectionSkeleton h={300} />}>
+        <PercentisSection period={period} />
+      </Suspense>
+
+      {compMode !== "sem" && compPeriod && (
+        <Suspense fallback={<SectionSkeleton h={280} />}>
+          <ComparativoSection
+            filters={filters}
+            period={period}
+            compPeriod={compPeriod}
+            compMode={compMode}
+          />
+        </Suspense>
       )}
 
-      {/* Perfil dos leads — quem está entrando */}
-      <DistribuicaoCards data={distrib} />
+      <Suspense fallback={<SectionSkeleton h={300} />}>
+        <DistribuicoesSection filters={filters} period={period} />
+      </Suspense>
 
-      {/* Top origens detalhadas */}
-      <TopOrigens rows={topOrigens} />
+      <Suspense fallback={<SectionSkeleton h={300} />}>
+        <TopOrigensSection period={period} />
+      </Suspense>
     </div>
   );
+}
+
+// ============================================================================
+// Server Components de seção — cada um faz seu próprio fetch.
+// Falhas isoladas via Suspense; a página nunca derruba inteira.
+// ============================================================================
+
+function SectionSkeleton({ h }: { h: number }) {
+  return (
+    <div
+      className="surface-solid rounded-xl animate-pulse"
+      style={{ height: h }}
+      aria-hidden
+    />
+  );
+}
+
+async function ReceitaMensalSection({ filters }: { filters: RFilters }) {
+  const rows = await fetchReceitaMensal(filters);
+  return <ReceitaMensalExec rows={rows} />;
+}
+
+async function PipelineProjecaoSection() {
+  const [pipelineR$, proj] = await Promise.all([
+    fetchPipelineEmReais(),
+    fetchProjecaoMes(),
+  ]);
+  return (
+    <div className="grid gap-4 lg:grid-cols-2 stagger [&>*]:animate-fade-up">
+      <PipelineEmReais rows={pipelineR$} />
+      <ProjecaoMesCard proj={proj} />
+    </div>
+  );
+}
+
+async function PercentisSection({ period }: { period: PeriodRange }) {
+  const rows = await fetchTempoPercentis(period);
+  return <PercentisTempo rows={rows} />;
+}
+
+async function ComparativoSection({
+  filters,
+  period,
+  compPeriod,
+  compMode,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+  compPeriod: PeriodRange;
+  compMode: ComparacaoMode;
+}) {
+  const rows = await fetchComparativoPeriodos(filters, period, compPeriod);
+  if (rows.length === 0) return null;
+  return (
+    <ComparativoPeriodos
+      rows={rows}
+      comparisonLabel={COMPARACAO_LABEL[compMode]}
+    />
+  );
+}
+
+async function DistribuicoesSection({
+  filters,
+  period,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+}) {
+  const distrib = await fetchDistribuicoes(filters, period);
+  return <DistribuicaoCards data={distrib} />;
+}
+
+async function TopOrigensSection({ period }: { period: PeriodRange }) {
+  const rows = await fetchTopOrigensDetalhadas(period, 10);
+  return <TopOrigens rows={rows} />;
 }

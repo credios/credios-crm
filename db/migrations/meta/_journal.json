@@ -57,6 +57,13 @@
       "when": 1777750200000,
       "tag": "0007_notion_id_constraint",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777750800000,
+      "tag": "0008_perf_indexes",
+      "breakpoints": true
     }
   ]
 }

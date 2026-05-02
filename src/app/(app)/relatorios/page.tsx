@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { Suspense } from "react";
 
 import { ConversionFunnel } from "@/components/relatorios/charts/conversion-funnel";
 import { LossReasonsChart } from "@/components/relatorios/charts/loss-reasons";
@@ -30,7 +31,7 @@ import {
   pctDelta,
   pointsDelta,
 } from "@/lib/reports/comparativos";
-import { periodFromFilters } from "@/lib/reports/period";
+import { periodFromFilters, type PeriodRange } from "@/lib/reports/period";
 import {
   fetchConsultoresAtivos,
   fetchConversionRates,
@@ -49,10 +50,16 @@ import {
   fetchVolumePorDia,
 } from "@/lib/reports/queries";
 import { taskStatsByConsultor } from "@/lib/tasks/service";
-import { reportFiltersSchema } from "@/lib/validators/report";
+import {
+  reportFiltersSchema,
+  type ReportFilters as RFilters,
+} from "@/lib/validators/report";
 
-export const dynamic = "force-dynamic";
+// `force-dynamic` removido: a página já é dinâmica por usar cookies (auth)
+// e searchParams. Sem ele, o Next aplica o `revalidate = 60` ao Data Cache
+// dos fetches/queries cacheados (ver unstable_cache em queries.ts).
 export const revalidate = 60;
+export const maxDuration = 60;
 
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -83,44 +90,16 @@ export default async function RelatoriosPage({ searchParams }: Props) {
   const hideFinancial = !canSeeFinancial;
   const isAdminGerente = isAdminOrGerente(user);
 
-  const [
-    kpisCurr,
-    kpisPrev,
-    conversionRates,
-    volume,
-    origemRoi,
-    perfUf,
-    perfConsultores,
-    pipeline,
-    lossReasons,
-    slaComp,
-    tempoMedio,
-    consultores,
-    origens,
-    ufs,
-    distrib,
-    esfriandoGlobal,
-    tarefasStats,
-  ] = await Promise.all([
+  // === Tier 1 (síncrono, render imediato) =====================================
+  // Auth + KPIs essenciais + dados pros filtros. Tudo o que precisa estar
+  // visível antes do streaming kickar. Mantido ENXUTO de propósito — qualquer
+  // query nova pesada vai pra um Suspense abaixo.
+  const [kpisCurr, kpisPrev, consultores, origens, ufs] = await Promise.all([
     fetchKpis(filters, period),
     compPeriod ? fetchKpis(filters, compPeriod) : Promise.resolve(null),
-    fetchConversionRates(filters, period),
-    fetchVolumePorDia(filters, period),
-    fetchOrigemROI(filters, period),
-    fetchPerformancePorUf(filters, period),
-    isAdminGerente
-      ? fetchPerformanceConsultores(filters, period)
-      : Promise.resolve([]),
-    fetchPipelineAtivoPorStatus(filters),
-    fetchLossReasons(filters, period),
-    fetchSlaCompliance(filters, period),
-    fetchTempoMedioPorStatus(filters, period),
     fetchConsultoresAtivos(),
     fetchOrigensDistintas(),
     fetchUfsDistintas(),
-    fetchDistribuicoes(filters, period),
-    fetchEsfriandoGlobal(),
-    isAdminGerente ? taskStatsByConsultor() : Promise.resolve([]),
   ]);
 
   const conversaoPct = (kpisCurr.conversaoRolling90d.taxa * 100).toFixed(1);
@@ -202,127 +181,283 @@ export default async function RelatoriosPage({ searchParams }: Props) {
         />
       </div>
 
-      {/* Funil global */}
-      <ConversionFunnel stages={conversionRates} />
+      {/* === Tier 2 (streaming) — cada Suspense renderiza independente. ===
+          Uma query lenta/falha numa seção não derruba a página inteira;
+          enquanto resolve, o usuário vê o skeleton da seção e o resto da
+          página já interativa. */}
 
-      {/* Volume por dia (área empilhada por origem) */}
-      <VolumePorDiaChart rows={volume} />
+      <Suspense fallback={<SectionSkeleton h={320} />}>
+        <FunilSection filters={filters} period={period} />
+      </Suspense>
 
-      {/* Mix de origens — donut + tabela */}
-      <div className="grid gap-4 lg:grid-cols-3 stagger [&>*]:animate-fade-up">
-        <PipelineStatusChart rows={pipeline} hideValue={hideFinancial} />
-        <div className="lg:col-span-2">
-          <OrigemROITable rows={origemRoi} hideValor={hideFinancial} />
-        </div>
-      </div>
+      <Suspense fallback={<SectionSkeleton h={320} />}>
+        <VolumeSection filters={filters} period={period} />
+      </Suspense>
 
-      {/* Perfil dos leads — distribuições agregadas */}
-      <DistribuicaoCards data={distrib} />
+      <Suspense fallback={<SectionSkeleton h={400} />}>
+        <PipelineOrigemSection
+          filters={filters}
+          period={period}
+          hideFinancial={hideFinancial}
+        />
+      </Suspense>
 
-      {/* Performance por consultor — admin/gerente only */}
-      {isAdminGerente && perfConsultores.length > 0 && (
-        <PerformanceConsultoresTable rows={perfConsultores} />
+      <Suspense fallback={<SectionSkeleton h={300} />}>
+        <DistribuicoesSection filters={filters} period={period} />
+      </Suspense>
+
+      {isAdminGerente && (
+        <Suspense fallback={<SectionSkeleton h={280} />}>
+          <PerformanceConsultoresSection filters={filters} period={period} />
+        </Suspense>
       )}
 
-      {/* Performance por estado + motivos de perda */}
-      <div className="grid gap-4 lg:grid-cols-2 stagger [&>*]:animate-fade-up">
-        <PerformanceUfTable rows={perfUf} hideValor={hideFinancial} />
-        <LossReasonsChart rows={lossReasons} />
-      </div>
+      <Suspense fallback={<SectionSkeleton h={300} />}>
+        <UfLossSection
+          filters={filters}
+          period={period}
+          hideFinancial={hideFinancial}
+        />
+      </Suspense>
 
-      {/* === Saúde Operacional (seção dedicada) === */}
-      <section className="space-y-3">
-        <div>
-          <h2 className="font-display text-lg font-semibold tracking-tight">
-            Saúde operacional
-          </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Sinais de atenção do dia-a-dia da operação.
-          </p>
-        </div>
+      <Suspense fallback={<SectionSkeleton h={400} />}>
+        <SaudeOperacionalSection
+          filters={filters}
+          period={period}
+          conversaoTaxa={kpisCurr.conversaoRolling90d.taxa}
+          conversaoPct={conversaoPct}
+        />
+      </Suspense>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard
-            icon={Clock}
-            label="SLA 1º contato"
-            value={`${(slaComp.rate * 100).toFixed(0)}%`}
-            hint={
-              slaComp.totalAtribuidos > 0
-                ? `${slaComp.dentroSla}/${slaComp.totalAtribuidos} dentro 30min · média ${slaComp.avgPrimeiroContatoMin?.toFixed(0) ?? "—"}min`
-                : "sem leads atribuídos"
-            }
-            deltaPct={
-              slaComp.totalAtribuidos > 0
-                ? pointsDelta(slaComp.rate * 100, 80) // alvo 80%
-                : null
-            }
-          />
-          <KpiCard
-            icon={Snowflake}
-            label="Pipeline esfriando"
-            value={String(esfriandoGlobal.count)}
-            hint="leads ativos sem interação manual há 3+ dias"
-          />
-          <KpiCard
-            icon={Target}
-            label="Funil saudável?"
-            value={
-              kpisCurr.conversaoRolling90d.taxa >= 0.15
-                ? "Sim"
-                : kpisCurr.conversaoRolling90d.taxa >= 0.05
-                  ? "Atenção"
-                  : "Crítico"
-            }
-            hint={`taxa ${conversaoPct}% · meta ≥ 15%`}
-          />
-        </div>
-
-        <TempoMedioChart rows={tempoMedio} />
-      </section>
-
-      {isAdminGerente && tarefasStats.length > 0 && (
-        <section className="space-y-3">
-          <div>
-            <h2 className="font-display text-lg font-semibold tracking-tight">
-              Gestão de tarefas
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Conclusão e atrasos operacionais por consultor.
-            </p>
-          </div>
-          <div className="surface-solid rounded-xl overflow-hidden p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-bg-subtle">
-                  <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                    <th className="px-3 py-2">Consultor</th>
-                    <th className="px-3 py-2 text-right">Total</th>
-                    <th className="px-3 py-2 text-right">Abertas</th>
-                    <th className="px-3 py-2 text-right">Atrasadas</th>
-                    <th className="px-3 py-2 text-right">Concluídas</th>
-                    <th className="px-3 py-2 text-right">Taxa conclusão</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tarefasStats.map((s) => {
-                    const taxa = s.total > 0 ? (s.concluidas / s.total) * 100 : 0;
-                    return (
-                      <tr key={s.consultorId} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-medium">{s.consultorNome}</td>
-                        <td className="px-3 py-2 text-right">{s.total}</td>
-                        <td className="px-3 py-2 text-right">{s.abertas}</td>
-                        <td className="px-3 py-2 text-right text-destructive">{s.atrasadas}</td>
-                        <td className="px-3 py-2 text-right">{s.concluidas}</td>
-                        <td className="px-3 py-2 text-right">{taxa.toFixed(0)}%</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
+      {isAdminGerente && (
+        <Suspense fallback={<SectionSkeleton h={250} />}>
+          <TarefasSection />
+        </Suspense>
       )}
     </div>
+  );
+}
+
+// ============================================================================
+// Server Components de seção — cada um faz seu próprio fetch e renderiza.
+// Mantidos no mesmo arquivo pra coesão (são pequenos e específicos da page).
+// ============================================================================
+
+function SectionSkeleton({ h }: { h: number }) {
+  return (
+    <div
+      className="surface-solid rounded-xl animate-pulse"
+      style={{ height: h }}
+      aria-hidden
+    />
+  );
+}
+
+async function FunilSection({
+  filters,
+  period,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+}) {
+  const stages = await fetchConversionRates(filters, period);
+  return <ConversionFunnel stages={stages} />;
+}
+
+async function VolumeSection({
+  filters,
+  period,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+}) {
+  const rows = await fetchVolumePorDia(filters, period);
+  return <VolumePorDiaChart rows={rows} />;
+}
+
+async function PipelineOrigemSection({
+  filters,
+  period,
+  hideFinancial,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+  hideFinancial: boolean;
+}) {
+  const [pipeline, origemRoi] = await Promise.all([
+    fetchPipelineAtivoPorStatus(filters),
+    fetchOrigemROI(filters, period),
+  ]);
+  return (
+    <div className="grid gap-4 lg:grid-cols-3 stagger [&>*]:animate-fade-up">
+      <PipelineStatusChart rows={pipeline} hideValue={hideFinancial} />
+      <div className="lg:col-span-2">
+        <OrigemROITable rows={origemRoi} hideValor={hideFinancial} />
+      </div>
+    </div>
+  );
+}
+
+async function DistribuicoesSection({
+  filters,
+  period,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+}) {
+  const distrib = await fetchDistribuicoes(filters, period);
+  return <DistribuicaoCards data={distrib} />;
+}
+
+async function PerformanceConsultoresSection({
+  filters,
+  period,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+}) {
+  const rows = await fetchPerformanceConsultores(filters, period);
+  if (rows.length === 0) return null;
+  return <PerformanceConsultoresTable rows={rows} />;
+}
+
+async function UfLossSection({
+  filters,
+  period,
+  hideFinancial,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+  hideFinancial: boolean;
+}) {
+  const [perfUf, lossReasons] = await Promise.all([
+    fetchPerformancePorUf(filters, period),
+    fetchLossReasons(filters, period),
+  ]);
+  return (
+    <div className="grid gap-4 lg:grid-cols-2 stagger [&>*]:animate-fade-up">
+      <PerformanceUfTable rows={perfUf} hideValor={hideFinancial} />
+      <LossReasonsChart rows={lossReasons} />
+    </div>
+  );
+}
+
+async function SaudeOperacionalSection({
+  filters,
+  period,
+  conversaoTaxa,
+  conversaoPct,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+  conversaoTaxa: number;
+  conversaoPct: string;
+}) {
+  const [slaComp, esfriandoGlobal, tempoMedio] = await Promise.all([
+    fetchSlaCompliance(filters, period),
+    fetchEsfriandoGlobal(),
+    fetchTempoMedioPorStatus(filters, period),
+  ]);
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="font-display text-lg font-semibold tracking-tight">
+          Saúde operacional
+        </h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Sinais de atenção do dia-a-dia da operação.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiCard
+          icon={Clock}
+          label="SLA 1º contato"
+          value={`${(slaComp.rate * 100).toFixed(0)}%`}
+          hint={
+            slaComp.totalAtribuidos > 0
+              ? `${slaComp.dentroSla}/${slaComp.totalAtribuidos} dentro 30min · média ${slaComp.avgPrimeiroContatoMin?.toFixed(0) ?? "—"}min`
+              : "sem leads atribuídos"
+          }
+          deltaPct={
+            slaComp.totalAtribuidos > 0
+              ? pointsDelta(slaComp.rate * 100, 80)
+              : null
+          }
+        />
+        <KpiCard
+          icon={Snowflake}
+          label="Pipeline esfriando"
+          value={String(esfriandoGlobal.count)}
+          hint="leads ativos sem interação manual há 3+ dias"
+        />
+        <KpiCard
+          icon={Target}
+          label="Funil saudável?"
+          value={
+            conversaoTaxa >= 0.15
+              ? "Sim"
+              : conversaoTaxa >= 0.05
+                ? "Atenção"
+                : "Crítico"
+          }
+          hint={`taxa ${conversaoPct}% · meta ≥ 15%`}
+        />
+      </div>
+
+      <TempoMedioChart rows={tempoMedio} />
+    </section>
+  );
+}
+
+async function TarefasSection() {
+  const tarefasStats = await taskStatsByConsultor();
+  if (tarefasStats.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="font-display text-lg font-semibold tracking-tight">
+          Gestão de tarefas
+        </h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Conclusão e atrasos operacionais por consultor.
+        </p>
+      </div>
+      <div className="surface-solid rounded-xl overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-bg-subtle">
+              <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-3 py-2">Consultor</th>
+                <th className="px-3 py-2 text-right">Total</th>
+                <th className="px-3 py-2 text-right">Abertas</th>
+                <th className="px-3 py-2 text-right">Atrasadas</th>
+                <th className="px-3 py-2 text-right">Concluídas</th>
+                <th className="px-3 py-2 text-right">Taxa conclusão</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tarefasStats.map((s) => {
+                const taxa = s.total > 0 ? (s.concluidas / s.total) * 100 : 0;
+                return (
+                  <tr key={s.consultorId} className="border-b last:border-0">
+                    <td className="px-3 py-2 font-medium">{s.consultorNome}</td>
+                    <td className="px-3 py-2 text-right">{s.total}</td>
+                    <td className="px-3 py-2 text-right">{s.abertas}</td>
+                    <td className="px-3 py-2 text-right text-destructive">
+                      {s.atrasadas}
+                    </td>
+                    <td className="px-3 py-2 text-right">{s.concluidas}</td>
+                    <td className="px-3 py-2 text-right">{taxa.toFixed(0)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   );
 }

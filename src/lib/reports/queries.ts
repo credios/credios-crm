@@ -326,11 +326,16 @@ export async function fetchPerformanceConsultores(
       AND l.atribuido_em <= '${period.to.toISOString()}'
       ${extra}
     LEFT JOIN LATERAL (
-      SELECT EXTRACT(EPOCH FROM (MIN(i.criado_em) - l.atribuido_em)) / 60.0 AS minutos
+      -- ORDER BY + LIMIT 1 ao invés de MIN() aggregate: com o índice parcial
+      -- idx_interacoes_manuais_lead (lead_id, criado_em DESC), Postgres faz
+      -- 1 index seek por lead em vez de scanear todas as interações.
+      SELECT EXTRACT(EPOCH FROM (i.criado_em - l.atribuido_em)) / 60.0 AS minutos
       FROM public.interacoes i
       WHERE i.lead_id = l.id
         AND i.criado_em >= l.atribuido_em
         AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
+      ORDER BY i.criado_em ASC
+      LIMIT 1
     ) pc ON true
     WHERE u.perfil IN ('admin', 'gerente', 'consultor')
       AND u.ativo = true
@@ -766,11 +771,15 @@ export async function fetchSlaCompliance(
       AVG(pc.minutos)::text AS avg_min
     FROM public.leads l
     LEFT JOIN LATERAL (
-      SELECT EXTRACT(EPOCH FROM (MIN(i.criado_em) - l.atribuido_em)) / 60.0 AS minutos
+      -- Mesmo otimização do fetchPerformanceConsultores: LIMIT 1 com índice
+      -- parcial idx_interacoes_manuais_lead.
+      SELECT EXTRACT(EPOCH FROM (i.criado_em - l.atribuido_em)) / 60.0 AS minutos
       FROM public.interacoes i
       WHERE i.lead_id = l.id
         AND i.criado_em >= l.atribuido_em
         AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
+      ORDER BY i.criado_em ASC
+      LIMIT 1
     ) pc ON true
     WHERE l.consultor_id IS NOT NULL
       AND l.atribuido_em >= '${fromIso}'
@@ -1583,22 +1592,27 @@ async function distribOf(
  * Usado pelo card "Pipeline esfriando" em /relatorios.
  */
 export async function fetchEsfriandoGlobal(): Promise<{ count: number }> {
+  // Reescrita: antes usava subquery correlata em interacoes por linha de
+  // leads — O(N) seeks. Agora: LEFT JOIN LATERAL com LIMIT 1 contra o índice
+  // parcial idx_interacoes_manuais_lead (criado em 0008). Postgres consegue
+  // pular pra primeira linha do índice por (lead_id, criado_em DESC) sem
+  // varrer interacoes inteira.
   const result = await db.execute<{ count: string }>(sql.raw(`
-    WITH base AS (
-      SELECT l.id, l.atribuido_em,
-        (
-          SELECT MAX(i.criado_em) FROM public.interacoes i
-          WHERE i.lead_id = l.id
-            AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
-        ) AS ultima_interacao_manual
-      FROM public.leads l
-      WHERE l.status NOT IN ('fechado', 'perdido', 'desqualificado', 'sem_resposta')
-    )
     SELECT COUNT(*)::text AS count
-    FROM base
-    WHERE
-      (ultima_interacao_manual IS NULL AND atribuido_em < NOW() - INTERVAL '5 days')
-      OR (ultima_interacao_manual < NOW() - INTERVAL '5 days')
+    FROM public.leads l
+    LEFT JOIN LATERAL (
+      SELECT i.criado_em
+      FROM public.interacoes i
+      WHERE i.lead_id = l.id
+        AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
+      ORDER BY i.criado_em DESC
+      LIMIT 1
+    ) ult ON true
+    WHERE l.status NOT IN ('fechado', 'perdido', 'desqualificado', 'sem_resposta')
+      AND (
+        (ult.criado_em IS NULL AND l.atribuido_em < NOW() - INTERVAL '5 days')
+        OR ult.criado_em < NOW() - INTERVAL '5 days'
+      )
   `));
   return { count: Number(result[0]?.count ?? 0) };
 }
