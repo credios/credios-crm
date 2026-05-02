@@ -1,5 +1,5 @@
 import { asc, eq } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import {
   interacoes,
@@ -34,35 +34,44 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const timeline = await db
-    .select({
-      id: interacoes.id,
-      leadId: interacoes.leadId,
-      autorId: interacoes.autorId,
-      tipo: interacoes.tipo,
-      conteudo: interacoes.conteudo,
-      metadata: interacoes.metadata,
-      criadoEm: interacoes.criadoEm,
-      autorNome: usersTable.nome,
-    })
-    .from(interacoes)
-    .leftJoin(usersTable, eq(usersTable.id, interacoes.autorId))
-    .where(eq(interacoes.leadId, id))
-    .orderBy(asc(interacoes.criadoEm));
+  // Marketing NÃO recebe timeline (texto livre pode conter PII).
+  // Bloqueio app-layer porque Drizzle bypassa RLS.
+  const isMarketing = user.perfil === "marketing";
+  const timeline = isMarketing
+    ? []
+    : await db
+        .select({
+          id: interacoes.id,
+          leadId: interacoes.leadId,
+          autorId: interacoes.autorId,
+          tipo: interacoes.tipo,
+          conteudo: interacoes.conteudo,
+          metadata: interacoes.metadata,
+          criadoEm: interacoes.criadoEm,
+          autorNome: usersTable.nome,
+        })
+        .from(interacoes)
+        .leftJoin(usersTable, eq(usersTable.id, interacoes.autorId))
+        .where(eq(interacoes.leadId, id))
+        .orderBy(asc(interacoes.criadoEm));
 
-  void logAction(
-    null,
-    user.id,
-    "lead_visualizado",
-    "lead",
-    id,
-    null,
-    extractRequestMeta(request),
+  // Não-crítico (alta frequência): após resposta.
+  after(() =>
+    logAction(
+      null,
+      user.id,
+      "lead_visualizado",
+      "lead",
+      id,
+      null,
+      extractRequestMeta(request),
+    ),
   );
 
   return NextResponse.json({
     data: maskLeadForPerfil(lead, user.perfil),
     interacoes: timeline,
+    timelineRedacted: isMarketing,
   });
 }
 
@@ -136,15 +145,76 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     .where(eq(leadsTable.id, id))
     .returning();
 
-  void logAction(
-    null,
-    user.id,
-    "lead_editado",
-    "lead",
-    id,
-    { fields: Object.keys(updates) },
-    extractRequestMeta(request),
+  // Não-crítico: edit comum vai pra after().
+  after(() =>
+    logAction(
+      null,
+      user.id,
+      "lead_editado",
+      "lead",
+      id,
+      { fields: Object.keys(updates) },
+      extractRequestMeta(request),
+    ),
   );
 
   return NextResponse.json({ data: updated });
+}
+
+/**
+ * DELETE — exclusão hard de lead. Admin only.
+ *
+ * Operação destrutiva: remove o lead e via ON DELETE CASCADE também:
+ *  - interações (timeline)
+ *  - tarefas
+ *  - duplicidades_pendentes (ambas as pontas)
+ *  - sla_alertas
+ *  - lead_bancos
+ *
+ * webhook_idempotency.lead_id vira NULL (mantém o registro pra dedupe).
+ *
+ * Audit log é GRAVADO ANTES do delete (await, não after()) — depois do delete
+ * o ID some, e a auditoria precisa do registro mesmo se o request crashar
+ * entre o delete e o logAction async.
+ */
+export async function DELETE(request: NextRequest, { params }: Ctx) {
+  const user = await getAppUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  if (!checkPermission(user, "lead.delete")) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const [existing] = await db
+    .select({
+      id: leadsTable.id,
+      nome: leadsTable.nome,
+      status: leadsTable.status,
+      consultorId: leadsTable.consultorId,
+    })
+    .from(leadsTable)
+    .where(eq(leadsTable.id, id))
+    .limit(1);
+  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  // Audit antes do delete: precisamos do snapshot e o ID precisa existir
+  // pra outras queries de auditoria conseguirem reconstruir o que aconteceu.
+  await logAction(
+    null,
+    user.id,
+    "lead_excluido",
+    "lead",
+    id,
+    {
+      nome: existing.nome,
+      status: existing.status,
+      consultorId: existing.consultorId,
+    },
+    extractRequestMeta(request),
+  );
+
+  await db.delete(leadsTable).where(eq(leadsTable.id, id));
+
+  return NextResponse.json({ ok: true });
 }

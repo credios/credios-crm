@@ -84,3 +84,43 @@ export const MOTIVOS_DESQUALIFICACAO = [
   "Documentação irregular",
   "Outro",
 ] as const;
+
+export const BANCOS_PARCEIROS = [
+  "Bradesco",
+  "Itaú",
+  "Santander",
+  "C6",
+  "Banco Inter",
+  "Galleria",
+  "Cashme",
+  "Creditas",
+  "Banco Bari",
+  "Daycoval",
+] as const;
+
+export const STATUS_PROPOSTA_BANCO_LABEL: Record<string, string> = {
+  enviado: "Enviado",
+  em_analise: "Em análise",
+  aprovado: "Aprovado",
+  recusado: "Recusado",
+  pendencia: "Pendência",
+  proposta_emitida: "Proposta emitida",
+};
+
+export const ACAO_TAREFA_LABEL: Record<string, string> = {
+  liguei: "Liguei para o lead",
+  enviei_whatsapp: "Enviei WhatsApp",
+  recebi_resposta: "Recebi resposta do lead",
+  cobrei_documentacao: "Cobrei documentação",
+  atualizei_retorno_banco: "Atualizei o lead sobre retorno do banco",
+  atualizei_banco_parceiro: "Atualizei banco/parceiro da proposta",
+  cliente_pediu_retorno: "Cliente pediu retorno futuro",
+  nao_consegui_contato: "Não consegui contato",
+  outro: "Outro",
+};
+
+export const STATUS_TAREFA_LABEL: Record<string, string> = {
+  aberta: "Aberta",
+  concluida: "Concluída",
+  atrasada: "Atrasada",
+};

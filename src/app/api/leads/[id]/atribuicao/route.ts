@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import {
   interacoes,
@@ -80,14 +80,16 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     metadata: { de: existing.consultorId, para: consultorId } as never,
   });
 
-  void logAction(
-    null,
-    user.id,
-    "lead_atribuido",
-    "lead",
-    id,
-    { de: existing.consultorId, para: consultorId },
-    extractRequestMeta(request),
+  after(() =>
+    logAction(
+      null,
+      user.id,
+      "lead_atribuido",
+      "lead",
+      id,
+      { de: existing.consultorId, para: consultorId },
+      extractRequestMeta(request),
+    ),
   );
 
   return NextResponse.json({ data: updated });

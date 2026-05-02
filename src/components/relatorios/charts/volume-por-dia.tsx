@@ -3,11 +3,10 @@
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Legend,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -22,21 +21,33 @@ import {
 } from "@/components/ui/card";
 import type { VolumePorDiaRow } from "@/lib/reports/queries";
 
-const COLORS = [
-  "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
-  "#ec4899", "#06b6d4", "#f97316", "#84cc16", "#6366f1",
-];
+import { ChartFrame } from "./chart-frame";
+import {
+  AXIS_TICK,
+  CHART_COLORS,
+  GRID_STROKE,
+  TOOLTIP_ITEM_STYLE,
+  TOOLTIP_LABEL_STYLE,
+  TOOLTIP_STYLE,
+} from "./theme";
 
 type Props = { rows: VolumePorDiaRow[] };
 
 export function VolumePorDiaChart({ rows }: Props) {
   const { data, origens } = pivot(rows);
+  const totalNoPeriodo = data.reduce((acc, d) => {
+    let s = 0;
+    for (const o of origens) s += Number(d[o] ?? 0);
+    return acc + s;
+  }, 0);
 
   return (
     <Card className="lg:col-span-2">
       <CardHeader>
-        <CardTitle className="text-base">Volume de leads por dia</CardTitle>
-        <CardDescription>Segmentado por origem (área empilhada).</CardDescription>
+        <CardTitle className="text-base">Leads por dia</CardTitle>
+        <CardDescription>
+          {totalNoPeriodo} leads no período · barras empilhadas por origem
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -44,44 +55,76 @@ export function VolumePorDiaChart({ rows }: Props) {
             Sem dados no período.
           </p>
         ) : (
-          <div className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+          <ChartFrame height={280}>
+            {({ width, height }) => (
+              <BarChart
+                data={data}
+                barCategoryGap="20%"
+                width={width}
+                height={height}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke={GRID_STROKE}
+                />
                 <XAxis
                   dataKey="dia"
-                  tickFormatter={(v: string) => format(parseISO(v), "dd/MM", { locale: ptBR })}
-                  className="text-xs"
+                  tickFormatter={(v: string) =>
+                    format(parseISO(v), "dd/MM", { locale: ptBR })
+                  }
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={24}
                 />
-                <YAxis allowDecimals={false} className="text-xs" />
+                <YAxis
+                  allowDecimals={false}
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                  width={28}
+                />
                 <Tooltip
                   labelFormatter={(v) =>
                     typeof v === "string"
-                      ? format(parseISO(v), "dd 'de' MMM, yyyy", { locale: ptBR })
+                      ? format(parseISO(v), "dd 'de' MMM, yyyy", {
+                          locale: ptBR,
+                        })
                       : String(v)
                   }
-                  contentStyle={{
-                    backgroundColor: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    fontSize: "12px",
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
+                  cursor={{
+                    fill: "color-mix(in oklch, var(--foreground) 5%, transparent)",
                   }}
+                  // Suprime entradas com valor 0 (legenda vazia poluía)
+                  filterNull
                 />
-                <Legend wrapperStyle={{ fontSize: "12px" }} />
+                <Legend
+                  wrapperStyle={{
+                    fontSize: 11,
+                    fontFamily: "var(--font-sans)",
+                    paddingTop: 8,
+                  }}
+                  iconType="circle"
+                  iconSize={8}
+                />
                 {origens.map((o, i) => (
-                  <Area
+                  <Bar
                     key={o}
-                    type="monotone"
                     dataKey={o}
-                    stackId="1"
-                    stroke={COLORS[i % COLORS.length]}
-                    fill={COLORS[i % COLORS.length]}
-                    fillOpacity={0.6}
+                    stackId="vol"
+                    fill={CHART_COLORS[i % CHART_COLORS.length]}
+                    // Radius só na última stack (visual unificado)
+                    radius={i === origens.length - 1 ? [4, 4, 0, 0] : 0}
                   />
                 ))}
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+              </BarChart>
+            )}
+          </ChartFrame>
         )}
       </CardContent>
     </Card>
@@ -89,7 +132,7 @@ export function VolumePorDiaChart({ rows }: Props) {
 }
 
 function pivot(rows: VolumePorDiaRow[]): {
-  data: Record<string, string | number>[];
+  data: Array<Record<string, string | number>>;
   origens: string[];
 } {
   const days = new Map<string, Record<string, string | number>>();
@@ -100,7 +143,6 @@ function pivot(rows: VolumePorDiaRow[]): {
     row[r.origem] = ((row[r.origem] as number) ?? 0) + r.count;
     origens.add(r.origem);
   }
-  // Ensure each day has 0 for missing origens (for stacked area)
   for (const row of days.values()) {
     for (const o of origens) {
       if (row[o] === undefined) row[o] = 0;

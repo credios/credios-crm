@@ -26,10 +26,13 @@ export default async function LeadsPage({ searchParams }: Props) {
   }
   const filters = listLeadsQuerySchema.parse(flat);
 
+  // listLeads é crítico — sem ele a página não tem o que mostrar.
+  // consultores/origens são pra dropdowns de filtro: se falharem, não
+  // vale derrubar a página inteira. Isolamos com .catch().
   const [result, consultores, origens] = await Promise.all([
     listLeads(filters, user),
-    listConsultoresAtivos(),
-    listOrigensDistintas(),
+    listConsultoresAtivos().catch(() => []),
+    listOrigensDistintas().catch(() => []),
   ]);
 
   return (

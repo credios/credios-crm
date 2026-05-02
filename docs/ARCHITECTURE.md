@@ -40,7 +40,7 @@ src/
 │   ├── supabase/               # client/server/middleware
 │   ├── auth/                   # get-app-user, permissions, mascaramento, types
 │   ├── routing/                # engine + DI (testável)
-│   ├── reports/                # queries agregadas
+│   ├── reports/                # queries agregadas + comparativos.ts + period.ts
 │   ├── sla/                    # check + notify
 │   ├── leads/                  # listLeads compartilhado
 │   ├── formatters/             # currency, date, phone
@@ -70,7 +70,7 @@ Stack: Supabase Auth (Google OAuth + email/senha) + MFA TOTP + RLS Postgres.
    - `!ativo` → `/sem-permissao`
    - `!nome` → `/primeiro-acesso`
    - admin sem MFA verificado → `/primeiro-acesso` (enrolment forçado)
-   - admin com MFA mas sessão AAL1 → `/auth/desafio-mfa`
+   - admin com MFA mas sessão AAL1 → `/desafio-mfa`
 
 ### Trigger `on_auth_user_created`
 
@@ -118,6 +118,49 @@ UI admin em `/configuracoes/roteamento`: list com dnd-kit, editor de condições
 - Em prod: valida `Authorization: Bearer ${CRON_SECRET}`. Em dev: aceita sem auth pra curl
 - Auto-resolve em `POST /api/leads/[id]/interacoes` quando interação é manual
 - Sino `<NotificationsBell>` no header com Realtime + toast no novo
+
+## Relatórios — 3 páginas com escopos distintos
+
+Após a refatoração, relatórios são divididos em três rotas com permissões específicas:
+
+| Rota | Acesso | Foco |
+|---|---|---|
+| `/meu-desempenho` | Todos logados (consultor sempre vê o próprio; admin/gerente trocam via `<ConsultorPicker>`) | Visão pessoal: KPIs com comparativo, saúde do pipeline pessoal (esfriando, SLA, aguardando ação), funil pessoal, performance por origem, histórico de fechamentos |
+| `/relatorios` | admin, gerente, marketing | Visão consolidada operacional: KPIs com delta, funil global, volume por dia, mix de origens, performance por consultor (não p/ marketing) e por UF, motivos de perda, saúde operacional |
+| `/admin/painel-executivo` | admin only (`isAdmin(user)` + redirect) | Visão estratégica em R$: KPIs hero com sparklines, receita 12m com dual-axis, projeção do mês, pipeline em R$, percentis P25/P50/P75/P90, comparativo de períodos, top 10 origens detalhadas |
+
+**Filtros** (`reportFiltersSchema` em `src/lib/validators/report.ts`):
+- Multi-select (CSV em URL): `consultorIds`, `origens`, `ufs`
+- Range numérico: `valorMinCentavos / valorMaxCentavos`
+- Presets: `hoje | 7d | 30d | 90d | mes_atual | mes_anterior | trimestre | ano | ultimos_12m | custom`
+- Modo de comparação (página executiva): `anterior_equivalente | ano_passado | sem`
+- Backward-compat: aceita `consultorId` e `origem` single, mescla via `normalizeFilters()`
+
+**Período de comparação** (`src/lib/reports/comparativos.ts`):
+- `previousPeriod(p)` — anterior equivalente; se `mes_atual` retorna mês anterior, se `30d` retorna 30d anteriores
+- `samePeriodLastYear(p)` — mesma janela 1 ano atrás
+- `pctDelta(curr, prev)` e `pointsDelta` — null-safe (prev=0 retorna null, exceto ambos zero)
+
+**Mascaramento financeiro**: `shouldMaskFinancial(perfil) === perfil !== "admin"` em `src/lib/auth/mascaramento.ts`. Aplicado server-side em `OrigemROITable`, `PerformanceUfTable`, `HistoricoFechamentos` via prop `hideValor`. Páginas /relatorios e /meu-desempenho NÃO mostram banco/valor liberado/comissão pra gerente, consultor ou marketing.
+
+**Auditoria**: cada page server component chama `logAction(null, user.id, "relatorio_acessado", "relatorio", null, { tipo, ... })`. Tipos: `meu_desempenho | gerencial | executivo`.
+
+**Componentes em `src/components/relatorios/`**:
+- `kpi-card.tsx` — KPI padrão (deltaPct opcional)
+- `kpi-executive.tsx` — KPI hero com sparkline (painel exec)
+- `sparkline.tsx` — SVG inline puro (sem dep), usado em KPIs exec
+- `consultor-picker.tsx` — admin/gerente troca consultor visualizado em /meu-desempenho
+- `desempenho-filters.tsx` — filtros enxutos (período + origem multi)
+- `report-filters.tsx` — filtros completos (período + multi consultor/origem/UF + range valor)
+- `exec-filters.tsx` — só período + modo comparação
+- `saude-cards.tsx` — 3 cards Esfriando/SLA/AguardandoAção com cor por threshold
+- `historico-fechamentos.tsx` — tabela detalhada do período (admin only via hideValor)
+- `comparativo-periodos.tsx` — 8 métricas × atual/anterior/Δ% com seta
+- `pipeline-em-reais.tsx` — barras horizontais por status × R$ buscado
+- `projecao-mes.tsx` — comissão fechada + (em_negociacao × win_rate × comissão média)
+- `percentis-tempo.tsx` — tabela P25/P50/P75/P90 entre milestones
+- `top-origens.tsx` — top 10 (origem + utm_source + utm_campaign)
+- `charts/` — Recharts wrappers (`receita-mensal-exec` usa dual-axis)
 
 ## Realtime
 

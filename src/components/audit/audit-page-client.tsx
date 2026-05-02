@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
+import { EmptyState } from "@/components/shared/empty-state";
+import { EmptyAudit } from "@/components/shared/illustrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -204,8 +206,16 @@ export function AuditPageClient({ consultores, initial }: Props) {
             <tbody>
               {data.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                    Nenhum evento encontrado com os filtros atuais.
+                  <td colSpan={6}>
+                    <EmptyState
+                      illustration={<EmptyAudit />}
+                      title="Nenhum evento encontrado"
+                      description={
+                        hasFilters
+                          ? "Os filtros atuais não retornaram nada — tente alargar o período ou limpar."
+                          : "A trilha de auditoria está silenciosa por enquanto. Eventos aparecem aqui em tempo real."
+                      }
+                    />
                   </td>
                 </tr>
               ) : (

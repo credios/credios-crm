@@ -31,15 +31,22 @@ export type Action =
   | "lead.read"
   | "lead.create"
   | "lead.update"
+  | "lead.delete"
   | "lead.assign"
   | "lead.change_status"
+  | "lead.close_or_reopen"
+  | "lead.read_financial"
   | "interacao.create"
+  | "task.list"
+  | "task.complete"
+  | "lead_bank.manage"
   | "user.manage"
   | "config.manage"
   | "audit.read";
 
 export type Resource =
   | { type: "lead"; consultorId?: string | null }
+  | { type: "task"; consultorId?: string | null }
   | { type: "user"; targetUserId?: string }
   | { type: "config" }
   | { type: "audit" };
@@ -89,10 +96,46 @@ export function checkPermission(
       return false;
     }
 
+    // Fechamento de lead OU reabertura (transição que entra/sai do status
+    // 'fechado'): admin only — só admin conhece valores de comissão por banco.
+    case "lead.close_or_reopen":
+      return perfil === "admin";
+
+    // Exclusão hard de lead: admin only. Operação destrutiva e irreversível —
+    // ON DELETE CASCADE remove interações, tarefas, alertas e duplicidades.
+    case "lead.delete":
+      return perfil === "admin";
+
+    // Acesso a dados financeiros do fechamento (banco, valor liberado,
+    // comissão recebida): admin only — receita da empresa.
+    case "lead.read_financial":
+      return perfil === "admin";
+
     case "lead.assign":
       return perfil === "admin" || perfil === "gerente";
 
     case "interacao.create": {
+      if (perfil === "admin" || perfil === "gerente") return true;
+      if (perfil === "consultor") {
+        if (resource?.type !== "lead") return false;
+        return resource.consultorId === user.id;
+      }
+      return false;
+    }
+
+    case "task.list":
+      return perfil === "admin" || perfil === "gerente" || perfil === "consultor";
+
+    case "task.complete": {
+      if (perfil === "admin" || perfil === "gerente") return true;
+      if (perfil === "consultor") {
+        if (resource?.type !== "task") return false;
+        return resource.consultorId === user.id;
+      }
+      return false;
+    }
+
+    case "lead_bank.manage": {
       if (perfil === "admin" || perfil === "gerente") return true;
       if (perfil === "consultor") {
         if (resource?.type !== "lead") return false;

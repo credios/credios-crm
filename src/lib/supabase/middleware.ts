@@ -1,14 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Rotas que NÃO exigem autenticação.
+// Rotas que NÃO exigem autenticação Supabase. CADA uma deve ter seu próprio
+// gate (secret header, IP allowlist, etc) dentro do handler.
 const PUBLIC_PATH_PREFIXES = [
   "/login",
   "/recuperar-senha",
   "/auth/callback",
   "/auth/logout",
-  "/auth/desafio-mfa",
-  "/api/webhooks",
+  "/desafio-mfa",
+  "/api/webhooks", // gate: x-webhook-secret
+  "/api/cron", // gate: Authorization: Bearer ${CRON_SECRET} (Vercel Cron)
 ];
 
 // Rotas que, se acessadas por usuário já autenticado, devem ser redirecionadas para a app.

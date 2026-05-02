@@ -25,10 +25,21 @@ export function formatLong(value: Date | string): string {
   return format(asDate(value), "dd 'de' MMMM, HH:mm", { locale: ptBR });
 }
 
-/** Lead "esfriando": ultimo_contato null OU > 3 dias atrás (CLAUDE.md §6.8). */
+/**
+ * Lead "esfriando": > 5 dias sem contato. Aplica borda vermelha + ícone de
+ * alerta pra forçar consultor a tomar ação ou mover pra status terminal.
+ *
+ * Antes era 3 dias com badge azul (snowflake) + 5 dias com borda vermelha.
+ * Unificado em 5d em 2026-05 — uma única ação, um único nível de alerta.
+ *
+ * `isCriticallyCold` mantido como alias deprecado pra não quebrar imports.
+ */
 export function isEsfriando(ultimoContato: Date | string | null | undefined): boolean {
   if (!ultimoContato) return false;
   const d = asDate(ultimoContato).getTime();
-  const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
-  return d < threeDaysAgo;
+  const fiveDaysAgo = Date.now() - 5 * 24 * 60 * 60 * 1000;
+  return d < fiveDaysAgo;
 }
+
+/** @deprecated alias de `isEsfriando` — mantido pra não quebrar imports. */
+export const isCriticallyCold = isEsfriando;

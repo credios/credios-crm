@@ -97,22 +97,41 @@ type Props = {
   leadId: string;
   initial: Interacao[];
   canCreate: boolean;
+  /** Quando true, renderiza botão "Carregar mais" (initial.length === pageSize). */
+  mayHaveMore?: boolean;
+  pageSize?: number;
 };
 
-export function LeadTimeline({ leadId, initial, canCreate }: Props) {
+export function LeadTimeline({
+  leadId,
+  initial,
+  canCreate,
+  mayHaveMore = false,
+  pageSize = 30,
+}: Props) {
   // `extras` acumula interações chegadas via realtime (não-server-fetched).
-  // Ao próximo router.refresh(), `initial` traz tudo já com autorNome via JOIN
-  // e o merge filtra extras duplicadas.
+  // `older` acumula páginas mais antigas carregadas via "Carregar mais".
+  // `flashIds` rastreia IDs novos pra aplicar animação de destaque uma vez só.
   const [extras, setExtras] = useState<Interacao[]>([]);
+  const [older, setOlder] = useState<Interacao[]>([]);
+  const [hasMore, setHasMore] = useState(mayHaveMore);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [tipo, setTipo] = useState<string>("anotacao");
   const [conteudo, setConteudo] = useState("");
   const [pending, setPending] = useState(false);
+  const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
 
   const interacoes = useMemo(() => {
-    const initialIds = new Set(initial.map((i) => i.id));
-    const novos = extras.filter((e) => !initialIds.has(e.id));
-    return [...initial, ...novos];
-  }, [initial, extras]);
+    const seen = new Set<string>();
+    const out: Interacao[] = [];
+    // Ordem: extras (mais novos) -> initial (primeira página) -> older (paginação)
+    for (const i of [...extras, ...initial, ...older]) {
+      if (seen.has(i.id)) continue;
+      seen.add(i.id);
+      out.push(i);
+    }
+    return out;
+  }, [initial, extras, older]);
 
   const onRealtimeNew = useCallback((row: Record<string, unknown>) => {
     const novo: Interacao = {
@@ -124,7 +143,21 @@ export function LeadTimeline({ leadId, initial, canCreate }: Props) {
       autorId: (row.autor_id as string | null) ?? null,
       autorNome: null, // realtime não traz JOIN — exibe placeholder; refresh popula
     };
-    setExtras((prev) => (prev.some((p) => p.id === novo.id) ? prev : [...prev, novo]));
+    setExtras((prev) => (prev.some((p) => p.id === novo.id) ? prev : [novo, ...prev]));
+    // Marca pra animação. Limpa flag após 1.6s (animação dura 320ms; janela
+    // generosa garante render mesmo em re-render).
+    setFlashIds((prev) => {
+      const next = new Set(prev);
+      next.add(novo.id);
+      return next;
+    });
+    setTimeout(() => {
+      setFlashIds((prev) => {
+        const next = new Set(prev);
+        next.delete(novo.id);
+        return next;
+      });
+    }, 1600);
   }, []);
 
   useInteracoesRealtime(leadId, onRealtimeNew);
@@ -151,6 +184,40 @@ export function LeadTimeline({ leadId, initial, canCreate }: Props) {
     toast.success("Interação registrada");
     setConteudo("");
     // Realtime + refresh do server vão atualizar a lista.
+  }
+
+  async function loadMore() {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    // Cursor: a interação mais antiga atualmente carregada.
+    const ordered = [...interacoes].sort(
+      (a, b) => new Date(a.criadoEm).getTime() - new Date(b.criadoEm).getTime(),
+    );
+    const oldest = ordered[0];
+    const cursor = oldest?.criadoEm;
+    const url = new URL(
+      `/api/leads/${leadId}/interacoes`,
+      window.location.origin,
+    );
+    if (cursor) url.searchParams.set("before", String(cursor));
+    url.searchParams.set("limit", String(pageSize));
+    try {
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        toast.error("Não foi possível carregar mais");
+        return;
+      }
+      const json = (await res.json()) as {
+        data: Interacao[];
+        hasMore: boolean;
+      };
+      setOlder((prev) => [...prev, ...json.data]);
+      setHasMore(json.hasMore);
+    } catch {
+      toast.error("Erro de rede ao carregar mais");
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   // Reverso cronológico (mais recente primeiro).
@@ -198,52 +265,110 @@ export function LeadTimeline({ leadId, initial, canCreate }: Props) {
         )}
 
         {ordered.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">Sem interações ainda.</p>
+          <div className="rounded-lg border border-dashed border-foreground/15 px-4 py-8 text-center space-y-1.5">
+            <p className="font-display text-sm font-semibold">
+              Nada registrado ainda
+            </p>
+            <p className="font-serif italic text-xs text-muted-foreground">
+              Use o formulário acima pra registrar a primeira ligação,
+              mensagem ou anotação deste lead.
+            </p>
+          </div>
         ) : (
-          <ul className="space-y-3">
-            {ordered.map((i) => (
-              <TimelineItem key={i.id} interacao={i} />
-            ))}
-          </ul>
+          <>
+            <ul className="relative space-y-4 before:absolute before:left-[13px] before:top-2 before:bottom-2 before:w-px before:bg-foreground/10">
+              {ordered.map((i) => (
+                <TimelineItem
+                  key={i.id}
+                  interacao={i}
+                  flash={flashIds.has(i.id)}
+                />
+              ))}
+            </ul>
+            {hasMore && (
+              <div className="pt-2 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore && <Loader2 className="size-3.5 animate-spin" />}
+                  Carregar mais antigas
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
   );
 }
 
-function TimelineItem({ interacao }: { interacao: Interacao }) {
+function TimelineItem({
+  interacao,
+  flash,
+}: {
+  interacao: Interacao;
+  flash?: boolean;
+}) {
   const Icon = TIPO_ICON[interacao.tipo] ?? StickyNote;
   const sistema = SISTEMA_TIPOS.has(interacao.tipo);
   const label = TIPO_LABEL[interacao.tipo] ?? interacao.tipo;
   return (
-    <li className="flex gap-3">
+    <li
+      className={cn(
+        "relative flex gap-3 pl-0 rounded-md transition-colors",
+        // Highlight discreto pra interação recém-criada (via realtime).
+        // Anim suporta `prefers-reduced-motion` via :global no globals.css.
+        flash && "animate-timeline-flash",
+      )}
+    >
       <div
         className={cn(
-          "size-7 rounded-full flex items-center justify-center shrink-0",
-          sistema ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
+          "relative z-10 size-7 rounded-full flex items-center justify-center shrink-0 ring-2 ring-background transition-transform",
+          sistema
+            ? "bg-bg-muted text-muted-foreground"
+            : "bg-blue-50 text-primary dark:bg-blue-950/40",
+          flash && "scale-110",
         )}
       >
-        <Icon className="size-3.5" />
+        <Icon className="size-3.5" strokeWidth={1.75} />
       </div>
-      <div className="flex-1 min-w-0 space-y-1">
+      <div className="flex-1 min-w-0 space-y-1 pt-0.5">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className={cn("text-sm font-medium", sistema && "text-muted-foreground")}>
+          <span
+            className={cn(
+              "text-sm font-medium",
+              sistema && "text-muted-foreground",
+            )}
+          >
             {label}
           </span>
-          <span className="text-xs text-muted-foreground" title={formatLong(interacao.criadoEm)}>
+          <span
+            className="font-mono text-[11px] text-muted-foreground"
+            title={formatLong(interacao.criadoEm)}
+          >
             {formatRelative(interacao.criadoEm)}
           </span>
           {interacao.autorNome && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Avatar className="size-4">
-                <AvatarFallback className="text-[9px]">{initials(interacao.autorNome)}</AvatarFallback>
+              <Avatar className="size-4 ring-1 ring-foreground/10">
+                <AvatarFallback className="text-[9px] font-medium">
+                  {initials(interacao.autorNome)}
+                </AvatarFallback>
               </Avatar>
               {interacao.autorNome}
             </span>
           )}
         </div>
         {interacao.conteudo && (
-          <p className={cn("text-sm whitespace-pre-wrap", sistema && "text-muted-foreground")}>
+          <p
+            className={cn(
+              "text-sm whitespace-pre-wrap leading-relaxed",
+              sistema && "text-muted-foreground",
+            )}
+          >
             {interacao.conteudo}
           </p>
         )}

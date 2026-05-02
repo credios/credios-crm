@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-const STATUS_LEAD_VALUES = [
+// Mantemos os 10 keys "sistema" (referenciadas direto no código pra modais
+// e permissões). Status custom criadas pelo admin entram via DB e batem o
+// validator de "qualquer string snake_case 1..50 chars".
+export const SYSTEM_STATUS_LEAD_KEYS = [
   "novo",
   "conversa_inicial",
   "aguardando_resposta",
@@ -23,14 +26,25 @@ const TIPO_INTERACAO_VALUES = [
   "documento_recebido",
 ] as const;
 
-export const statusLeadEnum = z.enum(STATUS_LEAD_VALUES);
+// Aceita qualquer key de status — incluindo custom. Validação contra o que
+// existe no banco fica no endpoint (precisa hit em DB).
+const statusKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50)
+  .regex(/^[a-z][a-z0-9_]*$/, "Use snake_case (a-z, 0-9, _, começando com letra)");
+
+export const statusLeadEnum = statusKeySchema;
 export const tipoInteracaoEnum = z.enum(TIPO_INTERACAO_VALUES);
 
 const cents = z.coerce.number().int().nonnegative();
+// Aceita string, null OU undefined (form serializa campos vazios como null —
+// optional() sozinho não cobre null, daí o nullish() + transform de "" → null).
 const optionalString = z
   .string()
   .trim()
-  .optional()
+  .nullish()
   .transform((v) => (v == null || v === "" ? null : v));
 
 /** Schema canônico de criação manual de lead (UI / POST /api/leads). */
@@ -64,33 +78,76 @@ export const updateLeadSchema = createLeadSchema.partial().omit({ produto: true 
 export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
 
 /**
- * Schema discriminado para mudanças de status. Estados terminais (fechado/
- * desqualificado/perdido) exigem campos extras conforme CLAUDE.md §6.5.
+ * Mudança de status. Estados terminais sistema (fechado/desqualificado/
+ * perdido) exigem campos extras conforme CLAUDE.md §6.5; documentacao_enviada
+ * e em_negociacao pedem bancos. Custom status (não-sistema) só precisa do key.
+ *
+ * Discriminated union não cobre statuses dinâmicos — usamos schema flat com
+ * superRefine pra exigir campos condicionalmente.
  */
-export const updateStatusSchema = z.discriminatedUnion("status", [
-  z.object({
-    status: z.literal("fechado"),
-    bancoAprovador: z.string().trim().min(1, "Banco aprovador obrigatório"),
-    valorLiberadoCentavos: cents,
-    comissaoCentavos: cents,
-    dataFechamento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use formato YYYY-MM-DD"),
-  }),
-  z.object({
-    status: z.enum(["desqualificado", "perdido"]),
-    motivoDesqualificacao: z.string().trim().min(1, "Motivo obrigatório"),
-  }),
-  z.object({
-    status: z.enum([
-      "novo",
-      "conversa_inicial",
-      "aguardando_resposta",
-      "aguardando_documentacao",
-      "documentacao_enviada",
-      "em_negociacao",
-      "sem_resposta",
-    ]),
-  }),
-]);
+export const updateStatusSchema = z
+  .object({
+    status: statusKeySchema,
+    bancoAprovador: z.string().trim().min(1).optional(),
+    valorLiberadoCentavos: cents.optional(),
+    comissaoCentavos: cents.optional(),
+    dataFechamento: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Use formato YYYY-MM-DD")
+      .optional(),
+    motivoDesqualificacao: z.string().trim().min(1).optional(),
+    bancos: z.array(z.string().trim().min(1).max(80)).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === "fechado") {
+      if (!data.bancoAprovador) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["bancoAprovador"],
+          message: "Banco aprovador obrigatório",
+        });
+      }
+      if (data.valorLiberadoCentavos == null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["valorLiberadoCentavos"],
+          message: "Valor liberado obrigatório",
+        });
+      }
+      if (data.comissaoCentavos == null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["comissaoCentavos"],
+          message: "Comissão obrigatória",
+        });
+      }
+      if (!data.dataFechamento) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["dataFechamento"],
+          message: "Data de fechamento obrigatória",
+        });
+      }
+    }
+    if (data.status === "desqualificado" || data.status === "perdido") {
+      if (!data.motivoDesqualificacao) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["motivoDesqualificacao"],
+          message: "Motivo obrigatório",
+        });
+      }
+    }
+    if (data.status === "documentacao_enviada" || data.status === "em_negociacao") {
+      if (data.bancos != null && data.bancos.length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["bancos"],
+          message: "Informe ao menos um banco para este status",
+        });
+      }
+    }
+  });
 export type UpdateStatusInput = z.infer<typeof updateStatusSchema>;
 
 export const reassignSchema = z.object({
@@ -105,6 +162,17 @@ export const createInteracaoSchema = z.object({
 });
 export type CreateInteracaoInput = z.infer<typeof createInteracaoSchema>;
 
+export const SORT_LEAD_KEYS = [
+  "criado_em",
+  "atualizado_em",
+  "ultimo_contato",
+  "nome",
+  "valor_credito",
+  "status",
+  "origem",
+] as const;
+export type SortLeadKey = (typeof SORT_LEAD_KEYS)[number];
+
 export const listLeadsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(50),
@@ -118,8 +186,23 @@ export const listLeadsQuerySchema = z.object({
   valorMax: z.coerce.number().int().nonnegative().optional(),
   dataDe: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dataAte: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+
+  /** Ordenação. Default: criado_em desc (lead mais novo primeiro). */
+  sortBy: z.enum(SORT_LEAD_KEYS).default("criado_em"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
+
+  /**
+   * Por default leads em status terminal "perdido" e "desqualificado" ficam
+   * ocultos pra não distrair o consultor (igual o CRM antigo no Notion). Pra
+   * vê-los, passar `incluirEncerrados=1`. Se o user filtrou explicitamente
+   * por um desses status, o filtro vence (mostra mesmo se incluirEncerrados=0).
+   */
+  incluirEncerrados: z
+    .union([z.literal("1"), z.literal("0"), z.boolean()])
+    .transform((v) => v === true || v === "1")
+    .default(false),
 });
 export type ListLeadsQuery = z.infer<typeof listLeadsQuerySchema>;
 
-export type StatusLead = z.infer<typeof statusLeadEnum>;
+export type StatusLead = string;
 export type TipoInteracao = z.infer<typeof tipoInteracaoEnum>;

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { AparenciaCard } from "@/components/auth/aparencia-card";
 import { MfaDisableButton } from "@/components/auth/mfa-disable-button";
 import { MfaEnrollForm } from "@/components/auth/mfa-enroll-form";
 import { ProfileForm } from "@/components/auth/profile-form";
@@ -31,9 +32,11 @@ export default async function PerfilPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Meu perfil</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Atualize suas informações pessoais e configurações de segurança.
+        <h1 className="font-display text-3xl font-semibold tracking-[-0.02em]">
+          Meu perfil
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          Atualize suas informações pessoais, segurança e aparência do CRM.
         </p>
       </div>
 
@@ -100,6 +103,8 @@ export default async function PerfilPage() {
             )}
           </CardContent>
         </Card>
+
+        <AparenciaCard />
       </div>
     </div>
   );

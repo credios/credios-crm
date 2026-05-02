@@ -5,7 +5,6 @@ import {
   Legend,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
 } from "recharts";
 
@@ -20,14 +19,13 @@ import { STATUS_LEAD_LABEL } from "@/lib/constants";
 import { formatBrlShort } from "@/lib/formatters/currency";
 import type { PipelineRow } from "@/lib/reports/queries";
 
-const STATUS_COLOR: Record<string, string> = {
-  novo: "#3b82f6",
-  conversa_inicial: "#06b6d4",
-  aguardando_resposta: "#f59e0b",
-  aguardando_documentacao: "#fb923c",
-  documentacao_enviada: "#6366f1",
-  em_negociacao: "#8b5cf6",
-};
+import { ChartFrame } from "./chart-frame";
+import {
+  STATUS_COLOR,
+  TOOLTIP_ITEM_STYLE,
+  TOOLTIP_LABEL_STYLE,
+  TOOLTIP_STYLE,
+} from "./theme";
 
 type Props = {
   rows: PipelineRow[];
@@ -59,9 +57,9 @@ export function PipelineStatusChart({ rows, hideValue }: Props) {
             Sem leads no pipeline ativo.
           </p>
         ) : (
-          <div className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+          <ChartFrame height={280}>
+            {({ width, height }) => (
+              <PieChart width={width} height={height}>
                 <Pie
                   data={data}
                   dataKey="value"
@@ -71,7 +69,12 @@ export function PipelineStatusChart({ rows, hideValue }: Props) {
                   paddingAngle={2}
                 >
                   {data.map((d) => (
-                    <Cell key={d.key} fill={STATUS_COLOR[d.key] ?? "#71717a"} />
+                    <Cell
+                      key={d.key}
+                      fill={STATUS_COLOR[d.key] ?? "#6e7891"}
+                      stroke="var(--card)"
+                      strokeWidth={2}
+                    />
                   ))}
                 </Pie>
                 <Tooltip
@@ -80,21 +83,28 @@ export function PipelineStatusChart({ rows, hideValue }: Props) {
                     const payload = (item as { payload?: { valorCentavos?: number } } | undefined)?.payload;
                     const valorCent = payload?.valorCentavos ?? 0;
                     return [
-                      hideValue ? `${v} leads` : `${v} leads · ${formatBrlShort(valorCent)}`,
+                      hideValue
+                        ? `${v} leads`
+                        : `${v} leads · ${formatBrlShort(valorCent)}`,
                       String(name),
                     ];
                   }}
-                  contentStyle={{
-                    backgroundColor: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    fontSize: "12px",
-                  }}
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
                 />
-                <Legend wrapperStyle={{ fontSize: "12px" }} />
+                <Legend
+                  wrapperStyle={{
+                    fontSize: 11,
+                    fontFamily: "var(--font-sans)",
+                    paddingTop: 8,
+                  }}
+                  iconType="circle"
+                  iconSize={8}
+                />
               </PieChart>
-            </ResponsiveContainer>
-          </div>
+            )}
+          </ChartFrame>
         )}
       </CardContent>
     </Card>

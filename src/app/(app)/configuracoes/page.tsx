@@ -1,8 +1,8 @@
+import { ArrowRight, ListChecks, MessageSquare, Route, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -12,17 +12,37 @@ const SECTIONS = [
   {
     href: "/configuracoes/usuarios",
     title: "Usuários",
-    description: "Convidar, gerenciar perfis e desativar usuários",
+    description:
+      "Convidar novos consultores, mudar perfis, desativar ou excluir contas.",
+    icon: Users,
   },
   {
     href: "/configuracoes/roteamento",
     title: "Regras de roteamento",
-    description: "Definir quem recebe leads conforme condições",
+    description:
+      "Distribuir leads automaticamente conforme valor, origem, UF e outras condições.",
+    icon: Route,
   },
   {
     href: "/configuracoes/mensagens",
     title: "Templates de mensagens",
-    description: "Editar o playbook de mensagens por status",
+    description:
+      "Editar o playbook que aparece dentro de cada lead, com variáveis e ordem.",
+    icon: MessageSquare,
+  },
+  {
+    href: "/configuracoes/status",
+    title: "Status do funil",
+    description:
+      "Criar, renomear, reordenar ou desativar status. Lead em status removido cai no anterior.",
+    icon: Workflow,
+  },
+  {
+    href: "/configuracoes/tarefas",
+    title: "Tarefas por status",
+    description:
+      "Definir título, descrição e frequência das tarefas geradas para cada status do funil.",
+    icon: ListChecks,
   },
 ];
 
@@ -30,25 +50,38 @@ export default function ConfiguracoesIndexPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="font-display text-3xl font-semibold tracking-[-0.02em]">
+          Configurações
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">
           Restrito a administradores.
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {SECTIONS.map((s) => (
-          <Link key={s.href} href={s.href}>
-            <Card className="h-full transition hover:border-foreground/30">
-              <CardHeader>
-                <CardTitle className="text-base">{s.title}</CardTitle>
-                <CardDescription>{s.description}</CardDescription>
-              </CardHeader>
-              <CardContent className="text-xs text-muted-foreground">
-                Em construção (Fase 4)
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+        {SECTIONS.map((s) => {
+          const Icon = s.icon;
+          return (
+            <Link key={s.href} href={s.href} className="group/setting block">
+              <Card className="h-full transition-all duration-base hover:shadow-elev-md hover:ring-foreground/15">
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex size-9 items-center justify-center rounded-lg bg-blue-50 text-primary dark:bg-blue-950/40">
+                      <Icon className="size-4" strokeWidth={1.75} />
+                    </div>
+                    <ArrowRight
+                      className="size-4 text-muted-foreground transition-all duration-fast group-hover/setting:translate-x-0.5 group-hover/setting:text-primary"
+                      strokeWidth={1.75}
+                    />
+                  </div>
+                  <CardTitle className="text-base">{s.title}</CardTitle>
+                  <CardDescription className="leading-relaxed">
+                    {s.description}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

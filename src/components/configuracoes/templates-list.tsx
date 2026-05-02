@@ -20,6 +20,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { EmptyState } from "@/components/shared/empty-state";
+import { EmptyTemplates } from "@/components/shared/illustrations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -59,8 +61,12 @@ export function TemplatesList({
 
   if (templates.length === 0) {
     return (
-      <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Nenhum template criado. Adicione um pra começar.
+      <div className="rounded-xl border border-dashed">
+        <EmptyState
+          illustration={<EmptyTemplates />}
+          title="Nenhum template criado"
+          description="Crie templates de mensagem para acelerar o follow-up dos consultores no WhatsApp."
+        />
       </div>
     );
   }

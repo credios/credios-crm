@@ -38,12 +38,25 @@ import {
   TIPOS_PESSOA,
   UFS,
 } from "@/lib/constants";
+import {
+  detectKind,
+  digitsOnly,
+  isValidCpfOrCnpj,
+  maskCpfCnpj,
+} from "@/lib/formatters/cpf-cnpj";
 
 // Schema simplificado: todos os campos como string opcional. Coerção numérica
 // e mapeamento snake/camel acontecem no submit.
 const formSchema = z.object({
   nome: z.string().trim().min(2, "Mínimo 2 caracteres"),
-  cpf: z.string().optional(),
+  // CPF/CNPJ é OPCIONAL. Se preenchido, valida pelo algoritmo da Receita.
+  cpf: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || v.trim() === "" || isValidCpfOrCnpj(v),
+      "CPF ou CNPJ inválido",
+    ),
   estadoCivil: z.string().optional(),
   ocupacao: z.string().optional(),
   rendaMensalReais: z.string().optional(),
@@ -102,7 +115,8 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
 
     const payload = {
       nome: values.nome,
-      cpf: values.cpf?.trim() || null,
+      // Server espera só dígitos. Form mostra com máscara, salva dígitos puros.
+      cpf: values.cpf?.trim() ? digitsOnly(values.cpf) : null,
       estadoCivil: values.estadoCivil || null,
       ocupacao: values.ocupacao || null,
       rendaMensalCentavos: reaisToCents(values.rendaMensalReais),
@@ -166,8 +180,27 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
             {errors.nome && <p className="text-xs text-destructive">{errors.nome.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cpf">CPF</Label>
-            <Input id="cpf" inputMode="numeric" placeholder="000.000.000-00" disabled={pending} {...register("cpf")} />
+            <Label htmlFor="cpf">
+              CPF / CNPJ
+              <span className="ml-1 font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
+                opcional
+              </span>
+            </Label>
+            <Input
+              id="cpf"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="000.000.000-00 ou 00.000.000/0000-00"
+              disabled={pending}
+              {...register("cpf", {
+                onChange: (e) => {
+                  // Máscara dinâmica: até 11 dígitos formata como CPF, depois CNPJ.
+                  const masked = maskCpfCnpj(e.currentTarget.value);
+                  setValue("cpf", masked, { shouldValidate: true });
+                },
+              })}
+            />
+            <CpfCnpjHint value={watch("cpf") ?? ""} error={errors.cpf?.message} />
           </div>
           <div className="space-y-1.5">
             <Label>Estado civil</Label>
@@ -323,5 +356,50 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Hint contextual abaixo do input de CPF/CNPJ:
+ *  - Vazio: nenhum aviso
+ *  - Dígitos < 11: mostra "11 dígitos pra CPF, 14 pra CNPJ"
+ *  - 11 ou 14 dígitos com erro: mensagem de invalidez
+ *  - 11 ou 14 dígitos válido: confirma "CPF válido" / "CNPJ válido"
+ */
+function CpfCnpjHint({
+  value,
+  error,
+}: {
+  value: string;
+  error?: string;
+}) {
+  const d = digitsOnly(value);
+  const kind = detectKind(value);
+
+  if (!d) {
+    return (
+      <p className="text-[11px] text-fg-subtle">
+        Opcional. Aceita CPF (11 dígitos) ou CNPJ (14).
+      </p>
+    );
+  }
+
+  if (error) {
+    return <p className="text-xs text-destructive">{error}</p>;
+  }
+
+  if (kind === "unknown") {
+    return (
+      <p className="text-[11px] text-fg-subtle">
+        Continue digitando · {d.length}/{d.length < 11 ? "11 (CPF)" : "14 (CNPJ)"}
+      </p>
+    );
+  }
+
+  // 11 ou 14 dígitos sem erro = válido
+  return (
+    <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+      ✓ {kind === "cpf" ? "CPF" : "CNPJ"} válido
+    </p>
   );
 }

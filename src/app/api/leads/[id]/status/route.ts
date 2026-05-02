@@ -1,11 +1,16 @@
 import { eq } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
-import { interacoes, leads as leadsTable } from "../../../../../../db/schema";
+import {
+  interacoes,
+  leadBancos,
+  leads as leadsTable,
+} from "../../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/tasks/service";
 import { updateStatusSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -31,14 +36,6 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  // Reabertura de lead fechado: somente admin (CLAUDE.md §6.5).
-  if (existing.status === "fechado" && user.perfil !== "admin") {
-    return NextResponse.json(
-      { error: "lead fechado só pode ser reaberto por admin" },
-      { status: 403 },
-    );
-  }
-
   let body: unknown;
   try {
     body = await request.json();
@@ -54,6 +51,34 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     );
   }
   const data = parsed.data;
+
+  if (isLeadBankStage(data.status)) {
+    const bancos = "bancos" in data ? data.bancos ?? [] : [];
+    const alreadyHasBanks = await hasLeadBanks(id);
+    if (!alreadyHasBanks && bancos.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Informe ao menos um banco para mover o lead para documentação enviada ou negociação.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
+  // Transições que tocam o status 'fechado' (entrar OU sair) exigem admin —
+  // só admin conhece os valores de comissão recebidos por banco.
+  const tocaFechado =
+    existing.status === "fechado" || data.status === "fechado";
+  if (tocaFechado && !checkPermission(user, "lead.close_or_reopen")) {
+    return NextResponse.json(
+      {
+        error:
+          "Apenas administradores podem fechar leads ou reabrir leads fechados.",
+      },
+      { status: 403 },
+    );
+  }
 
   const updates: Record<string, unknown> = { status: data.status };
   let extraMeta: Record<string, unknown> = {};
@@ -99,15 +124,44 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     metadata: { de: existing.status, para: data.status, ...extraMeta } as never,
   });
 
-  void logAction(
-    null,
-    user.id,
-    "lead_status_mudou",
-    "lead",
-    id,
-    { de: existing.status, para: data.status, ...extraMeta },
-    extractRequestMeta(request),
-  );
+  if (isLeadBankStage(data.status) && "bancos" in data && data.bancos?.length) {
+    for (const banco of data.bancos) {
+      await db
+        .insert(leadBancos)
+        .values({
+          leadId: id,
+          banco,
+          status: data.status === "documentacao_enviada" ? "enviado" : "em_analise",
+          criadoPor: user.id,
+        })
+        .onConflictDoNothing();
+      await ensureBancoInteracao({
+        leadId: id,
+        userId: user.id,
+        banco,
+        status: data.status === "documentacao_enviada" ? "enviado" : "em_analise",
+      });
+    }
+  }
+
+  // Reusa `tocaFechado` definido acima na validação de permissão.
+  // Mudanças que tocam 'fechado' são CRÍTICAS (auditoria de receita) → await.
+  // Outras transições vão pra after() — não bloqueia resposta.
+  const auditCall = () =>
+    logAction(
+      null,
+      user.id,
+      "lead_status_mudou",
+      "lead",
+      id,
+      { de: existing.status, para: data.status, ...extraMeta },
+      extractRequestMeta(request),
+    );
+  if (tocaFechado) {
+    await auditCall();
+  } else {
+    after(() => auditCall());
+  }
 
   return NextResponse.json({ data: updated });
 }

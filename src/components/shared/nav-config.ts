@@ -1,8 +1,11 @@
 import {
-  BarChart3,
+  Crown,
+  ClipboardList,
   KanbanSquare,
+  PieChart,
   Settings,
   ShieldCheck,
+  TrendingUp,
   User,
   Users,
   type LucideIcon,
@@ -12,7 +15,10 @@ export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Visível apenas pra admin. */
   adminOnly?: boolean;
+  /** Oculto pra perfil 'consultor' (ex: relatórios gerenciais). */
+  hideForConsultor?: boolean;
   /** Se true, ativa quando pathname === href (não startsWith). */
   exact?: boolean;
 };
@@ -28,21 +34,42 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/leads", label: "Leads", icon: Users, exact: true },
       { href: "/leads/kanban", label: "Kanban", icon: KanbanSquare },
-      { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+      { href: "/tarefas", label: "Tarefas", icon: ClipboardList },
+      { href: "/meu-desempenho", label: "Meu desempenho", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "Análise",
+    items: [
+      {
+        href: "/relatorios",
+        label: "Relatórios",
+        icon: PieChart,
+        hideForConsultor: true,
+      },
+      {
+        href: "/admin/painel-executivo",
+        label: "Painel executivo",
+        icon: Crown,
+        adminOnly: true,
+      },
     ],
   },
   {
     label: "Administração",
     items: [
-      { href: "/configuracoes", label: "Configurações", icon: Settings, adminOnly: true },
+      {
+        href: "/configuracoes",
+        label: "Configurações",
+        icon: Settings,
+        adminOnly: true,
+      },
       { href: "/audit", label: "Auditoria", icon: ShieldCheck, adminOnly: true },
     ],
   },
   {
     label: "Pessoal",
-    items: [
-      { href: "/perfil", label: "Meu perfil", icon: User },
-    ],
+    items: [{ href: "/perfil", label: "Meu perfil", icon: User }],
   },
 ];
 
@@ -53,9 +80,23 @@ export type SimpleNavMeta = {
 
 export const ROUTE_META: Record<string, SimpleNavMeta> = {
   "/leads": { title: "Leads", description: "Lista de leads" },
-  "/leads/kanban": { title: "Kanban", description: "Visualização kanban do pipeline" },
-  "/relatorios": { title: "Relatórios", description: "Métricas e dashboards" },
-  "/relatorios/google-ads": { title: "Auditoria Google Ads" },
+  "/leads/kanban": {
+    title: "Kanban",
+    description: "Visualização kanban do pipeline",
+  },
+  "/meu-desempenho": {
+    title: "Meu desempenho",
+    description: "Métricas pessoais e pipeline",
+  },
+  "/tarefas": {
+    title: "Tarefas",
+    description: "Follow-ups e pendências do dia",
+  },
+  "/relatorios": { title: "Relatórios", description: "Visão consolidada" },
+  "/admin/painel-executivo": {
+    title: "Painel executivo",
+    description: "Visão estratégica · admin",
+  },
   "/configuracoes": { title: "Configurações" },
   "/configuracoes/usuarios": { title: "Usuários" },
   "/configuracoes/roteamento": { title: "Regras de roteamento" },

@@ -105,10 +105,27 @@ npm run db:generate  # depois de editar db/schema.ts
 npm run db:migrate   # aplica no banco do .env.local
 ```
 
-Pra mudanças de RLS/triggers/views (não-Drizzle), edita `db/policies.sql` e:
+Pra mudanças de RLS/triggers/views/constraints custom (não-Drizzle), edita
+`db/policies.sql` e:
 ```bash
-npm run db:policies  # idempotente (DROP POLICY IF EXISTS)
+npm run db:policies  # idempotente — sempre seguro re-rodar
 ```
+
+> **OBRIGATÓRIO em todo deploy**: depois de `npm run db:migrate`, sempre rodar
+> `npm run db:policies`. O arquivo contém:
+> - Policies RLS (drop+recreate)
+> - View `leads_marketing` (mascaramento PII)
+> - Trigger `on_auth_user_created` (provisionamento auto de `public.users`)
+> - **Constraints sincronizadas com o app**:
+>   - `round_robin_estado_regra_id_key` (UNIQUE em regra_id — necessário pro
+>     UPSERT atômico do round-robin)
+>   - `sla_alertas_unico_ativo` (UNIQUE parcial em (lead_id, tipo) WHERE
+>     resolvido_em IS NULL — previne duplicação de alertas em concorrência)
+> - **Índices compostos pra relatórios** (created_at+status, consultor+created,
+>   data_fechamento, atribuido_em, interacoes(lead+tipo+criado), sla_alertas)
+>
+> Se esquecer, queries de webhook idempotência e SLA podem falhar silenciosamente
+> ou gerar duplicações. Adicionar ao playbook do CI/CD do Vercel.
 
 ## Rotacionar segredos
 

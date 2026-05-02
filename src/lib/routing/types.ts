@@ -88,4 +88,11 @@ export type RoutingDeps = {
     grupo: string[],
     options?: { dryRun?: boolean },
   ) => Promise<string>;
+  /**
+   * IDs de usuários ELEGÍVEIS para receber leads (ativos + perfil consultor /
+   * gerente / admin). Engine filtra grupos do round-robin e valida o
+   * usuario_id de regras `atribuir_usuario` contra esse set — assim regra
+   * que aponta pra usuário inativo/marketing cai no pool em vez de atribuir.
+   */
+  listAssignableUserIds: () => Promise<string[]>;
 };

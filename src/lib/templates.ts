@@ -6,17 +6,24 @@ export type TemplateLeadVars = {
   estado: string | null;
   valorCreditoCentavos: number | null;
   valorImovelCentavos: number | null;
+  /** Nome do consultor logado (assina mensagens). Resolve {{consultor}}. */
+  consultor?: string | null;
 };
 
 /**
- * Substitui variáveis {{nome}}, {{primeiro_nome}}, {{valor_credito}},
- * {{valor_imovel}}, {{cidade}}, {{estado}} no conteúdo do template.
+ * Substitui variáveis {{nome}}, {{primeiro_nome}}, {{primeiro_nome_consultor}},
+ * {{consultor}}, {{valor_credito}}, {{valor_imovel}}, {{cidade}}, {{estado}}
+ * no conteúdo do template.
  */
 export function renderTemplate(content: string, lead: TemplateLeadVars): string {
   const primeiroNome = (lead.nome ?? "").split(/\s+/)[0] ?? "";
+  const consultor = lead.consultor ?? "";
+  const primeiroNomeConsultor = consultor.split(/\s+/)[0] ?? "";
   return content
     .replace(/\{\{nome\}\}/g, lead.nome ?? "")
     .replace(/\{\{primeiro_nome\}\}/g, primeiroNome)
+    .replace(/\{\{consultor\}\}/g, consultor || "—")
+    .replace(/\{\{primeiro_nome_consultor\}\}/g, primeiroNomeConsultor || "—")
     .replace(
       /\{\{valor_credito\}\}/g,
       lead.valorCreditoCentavos != null
@@ -40,4 +47,5 @@ export const SAMPLE_LEAD: TemplateLeadVars = {
   estado: "SC",
   valorCreditoCentavos: 35_000_000,
   valorImovelCentavos: 80_000_000,
+  consultor: "Gabriel Marinho",
 };

@@ -20,6 +20,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { EmptyState } from "@/components/shared/empty-state";
+import { EmptyRules } from "@/components/shared/illustrations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -59,8 +61,12 @@ export function RulesList({
 
   if (rules.length === 0) {
     return (
-      <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Nenhuma regra configurada. Sem regras, todo lead vai para o pool não-atribuído.
+      <div className="rounded-xl border border-dashed">
+        <EmptyState
+          illustration={<EmptyRules />}
+          title="Nenhuma regra configurada"
+          description="Sem regras, todo lead novo cai no pool não-atribuído. Crie uma regra pra distribuir automaticamente."
+        />
       </div>
     );
   }

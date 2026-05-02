@@ -34,18 +34,11 @@ export const perfilEnum = pgEnum("perfil", [
   "marketing",
 ]);
 
-export const statusLeadEnum = pgEnum("status_lead", [
-  "novo",
-  "conversa_inicial",
-  "aguardando_resposta",
-  "aguardando_documentacao",
-  "documentacao_enviada",
-  "em_negociacao",
-  "fechado",
-  "perdido",
-  "sem_resposta",
-  "desqualificado",
-]);
+// status do lead virou TEXT livre (migration 0003) — keys e metadata são
+// gerenciadas dinamicamente via tabela `status_lead_config` (admin pode
+// criar/desativar/renomear pela UI). SYSTEM_STATUS_KEYS em
+// src/lib/status/canonical.ts mantém os 10 keys originais que o app
+// referencia direto pra lógica especial (fechado, desqualificado, etc.).
 
 export const tipoInteracaoEnum = pgEnum("tipo_interacao", [
   "ligacao",
@@ -69,6 +62,38 @@ export const acaoRegraEnum = pgEnum("acao_regra", [
 export const tipoSlaEnum = pgEnum("tipo_sla", [
   "primeiro_contato_atrasado",
   "lead_esfriando",
+]);
+
+export const statusTarefaEnum = pgEnum("status_tarefa", [
+  "aberta",
+  "concluida",
+  "atrasada",
+]);
+
+export const tipoTarefaEnum = pgEnum("tipo_tarefa", [
+  "contato_diario",
+  "follow_up_banco",
+]);
+
+export const acaoTarefaEnum = pgEnum("acao_tarefa", [
+  "liguei",
+  "enviei_whatsapp",
+  "recebi_resposta",
+  "cobrei_documentacao",
+  "atualizei_retorno_banco",
+  "atualizei_banco_parceiro",
+  "cliente_pediu_retorno",
+  "nao_consegui_contato",
+  "outro",
+]);
+
+export const statusPropostaBancoEnum = pgEnum("status_proposta_banco", [
+  "enviado",
+  "em_analise",
+  "aprovado",
+  "recusado",
+  "pendencia",
+  "proposta_emitida",
 ]);
 
 // ============================================================================
@@ -122,7 +147,8 @@ export const leads = pgTable(
     valorCreditoCentavos: bigint("valor_credito_centavos", { mode: "number" }),
 
     // --- Pipeline ---
-    status: statusLeadEnum("status").notNull().default("novo"),
+    // text livre — validado em app-layer contra status_lead_config.key.
+    status: text("status").notNull().default("novo"),
     motivoDesqualificacao: text("motivo_desqualificacao"),
 
     // --- Atribuição ---
@@ -239,9 +265,12 @@ export const regrasRoteamento = pgTable("regras_roteamento", {
 
 export const roundRobinEstado = pgTable("round_robin_estado", {
   id: uuid("id").primaryKey().defaultRandom(),
-  regraId: uuid("regra_id").references(() => regrasRoteamento.id, {
-    onDelete: "cascade",
-  }),
+  // unique() em regra_id: garante 1 linha por regra. Necessário pro UPSERT
+  // (ON CONFLICT) do pickNextRoundRobin não criar 2 linhas em race condition
+  // no primeiro uso da regra.
+  regraId: uuid("regra_id")
+    .references(() => regrasRoteamento.id, { onDelete: "cascade" })
+    .unique(),
   ultimoUsuarioId: uuid("ultimo_usuario_id").references(() => users.id, {
     onDelete: "set null",
   }),
@@ -258,13 +287,45 @@ export const mensagensTemplate = pgTable("mensagens_template", {
   id: uuid("id").primaryKey().defaultRandom(),
   nome: text("nome").notNull(),
   ordem: integer("ordem").notNull().default(0),
-  statusAplicavel: statusLeadEnum("status_aplicavel").array(),
+  statusAplicavel: text("status_aplicavel").array(),
   conteudo: text("conteudo").notNull(),
   ativa: boolean("ativa").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
+
+// ============================================================================
+// status_lead_config — keys/labels/ordem do funil, gerenciado pelo Admin
+// ============================================================================
+
+export const statusLeadConfig = pgTable(
+  "status_lead_config",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Chave estável que aparece em leads.status e nas referências do código
+    // (ex: 'fechado', 'novo'). Para custom statuses, snake_case sem espaço.
+    key: text("key").notNull().unique(),
+    label: text("label").notNull(),
+    ordem: integer("ordem").notNull().default(0),
+    ativo: boolean("ativo").notNull().default(true),
+    // Terminal = "lead concluído nesse fluxo" (fechado, perdido, etc.).
+    // Não recebe SLA de esfriando, não aparece em "pipeline ativo".
+    eTerminal: boolean("e_terminal").notNull().default(false),
+    // Sistema = key referenciada direto pelo código (modais especiais,
+    // permissões etc.). Não pode ser deletada ou ter o `key` mudado;
+    // só desativada e relabel.
+    eSistema: boolean("e_sistema").notNull().default(false),
+    cor: text("cor"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_status_config_ordem").on(table.ordem)],
+);
 
 // ============================================================================
 // duplicidades_pendentes — CPFs duplicados pendentes de revisão
@@ -305,6 +366,112 @@ export const slaAlertas = pgTable("sla_alertas", {
     .defaultNow(),
   resolvidoEm: timestamp("resolvido_em", { withTimezone: true }),
 });
+
+// ============================================================================
+// tarefas — follow-up diário por lead ativo
+// ============================================================================
+
+export const tarefas = pgTable(
+  "tarefas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    consultorId: uuid("consultor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tipo: tipoTarefaEnum("tipo").notNull().default("contato_diario"),
+    titulo: text("titulo").notNull(),
+    descricao: text("descricao"),
+    status: statusTarefaEnum("status").notNull().default("aberta"),
+    dataReferencia: date("data_referencia").notNull(),
+    venceEm: timestamp("vence_em", { withTimezone: true }).notNull(),
+    concluidaEm: timestamp("concluida_em", { withTimezone: true }),
+    concluidaPor: uuid("concluida_por").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    acaoConclusao: acaoTarefaEnum("acao_conclusao"),
+    observacaoConclusao: text("observacao_conclusao"),
+    emailResumoEnviadoEm: timestamp("email_resumo_enviado_em", {
+      withTimezone: true,
+    }),
+    emailAtrasoEnviadoEm: timestamp("email_atraso_enviado_em", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_tarefas_consultor_status_data").on(
+      table.consultorId,
+      table.status,
+      table.dataReferencia,
+    ),
+    index("idx_tarefas_lead_status").on(table.leadId, table.status),
+    index("idx_tarefas_vence_em").on(table.venceEm),
+  ],
+);
+
+// ============================================================================
+// task_config_por_status — configura quais tarefas o cron diário gera por status
+// ============================================================================
+// Substitui o switch-case hardcoded em src/lib/tasks/service.ts. Admin edita
+// pela UI: título, descrição, frequência (em dias), ou desativa pra parar
+// de gerar tarefas pra leads naquele status. Status sem row aqui também não
+// gera tarefa (default: ativo=false implícito).
+
+export const taskConfigPorStatus = pgTable("task_config_por_status", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // FK lógico pra status_lead_config.key — sem hard FK pra tolerar custom
+  // statuses criadas/desativadas sem cascatear pro cron.
+  statusKey: text("status_key").notNull().unique(),
+  ativo: boolean("ativo").notNull().default(true),
+  titulo: text("titulo").notNull().default("Fazer acompanhamento do lead"),
+  descricao: text("descricao"),
+  // 1 = diária; 7 = semanal; 14 = quinzenal. CHECK no DB ([1,30]).
+  frequenciaDias: integer("frequencia_dias").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// ============================================================================
+// lead_bancos — propostas/documentação enviada para bancos parceiros
+// ============================================================================
+
+export const leadBancos = pgTable(
+  "lead_bancos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    banco: text("banco").notNull(),
+    status: statusPropostaBancoEnum("status").notNull().default("enviado"),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    atualizadoEm: timestamp("atualizado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    criadoPor: uuid("criado_por").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    observacoes: text("observacoes"),
+  },
+  (table) => [
+    index("idx_lead_bancos_lead").on(table.leadId),
+    index("idx_lead_bancos_status").on(table.status),
+  ],
+);
 
 // ============================================================================
 // audit_log — trilha de auditoria LGPD (append-only)

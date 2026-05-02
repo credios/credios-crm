@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { extractRequestMeta, logAudit } from "@/lib/audit";
+import { safeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/leads";
+  // Sanitiza next contra open redirect — qualquer URL externa vira "/leads".
+  const next = safeNext(url.searchParams.get("next"));
   const error = url.searchParams.get("error");
   const errorDescription = url.searchParams.get("error_description");
 
@@ -33,7 +35,8 @@ export async function GET(request: NextRequest) {
 
   if (data.user) {
     const meta = extractRequestMeta(request);
-    void logAudit({
+    // await: login é evento crítico LGPD, não pode ser fire-and-forget.
+    await logAudit({
       usuarioId: data.user.id,
       acao: "login",
       recursoTipo: "sessao",

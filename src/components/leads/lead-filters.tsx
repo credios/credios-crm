@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { ORIGENS, STATUS_LEAD_LABEL, UFS } from "@/lib/constants";
 
 const STATUS_VALUES = Object.keys(STATUS_LEAD_LABEL);
@@ -140,11 +141,26 @@ export function LeadFilters({ consultores, origens }: Props) {
         </div>
       </div>
 
-      {hasFilters && (
-        <Button variant="ghost" size="sm" onClick={clearAll}>
-          <X className="size-3.5" /> Limpar filtros
-        </Button>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <label className="inline-flex items-center gap-2 cursor-pointer">
+          <Switch
+            checked={params.get("incluirEncerrados") === "1"}
+            onCheckedChange={(v) =>
+              setParam("incluirEncerrados", v ? "1" : null)
+            }
+            aria-label="Mostrar leads perdidos e desqualificados"
+          />
+          <span className="text-xs text-muted-foreground">
+            Mostrar perdidos / desqualificados
+          </span>
+        </label>
+
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={clearAll}>
+            <X className="size-3.5" /> Limpar filtros
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
-import { regrasRoteamento } from "../../../db/schema";
+import { regrasRoteamento, users } from "../../../db/schema";
 import { db } from "@/lib/db";
 
 import { pickNextRoundRobin } from "./round-robin";
@@ -29,4 +29,16 @@ export const realRoutingDeps: RoutingDeps = {
     }));
   },
   pickNextRoundRobin,
+  listAssignableUserIds: async (): Promise<string[]> => {
+    const rows = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.ativo, true),
+          inArray(users.perfil, ["admin", "gerente", "consultor"]),
+        ),
+      );
+    return rows.map((r) => r.id);
+  },
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -82,6 +82,7 @@ function UserEditForm({
   const [ativo, setAtivo] = useState(user.ativo);
   const [pending, setPending] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onSave() {
@@ -121,6 +122,52 @@ function UserEditForm({
       return;
     }
     toast.success(`${json.removed ?? 0} fatores removidos`);
+    onSaved();
+  }
+
+  async function onDelete() {
+    const msg = [
+      `Excluir DEFINITIVAMENTE ${user.nome}?`,
+      "",
+      "Esta ação não pode ser desfeita. O acesso ao sistema é revogado imediatamente.",
+      "",
+      "Leads atribuídos a este usuário voltarão automaticamente ao pool não-atribuído.",
+      "Histórico de interações e auditoria são preservados (com autor em branco).",
+      "",
+      "Para confirmar, digite EXCLUIR no prompt seguinte.",
+    ].join("\n");
+    if (!confirm(msg)) return;
+    const txt = window.prompt(`Digite EXCLUIR para excluir ${user.nome}:`);
+    if (txt?.trim().toUpperCase() !== "EXCLUIR") {
+      toast.error("Exclusão cancelada — texto não confere.");
+      return;
+    }
+    setDeleting(true);
+    const res = await fetch(`/api/configuracoes/usuarios/${user.id}`, {
+      method: "DELETE",
+    });
+    setDeleting(false);
+    const json = (await res
+      .json()
+      .catch(() => ({}))) as {
+      error?: string;
+      leadsAtribuidosAtivos?: number;
+    };
+    if (!res.ok) {
+      const m = typeof json.error === "string" ? json.error : `Falha (${res.status})`;
+      setError(m);
+      toast.error("Falha ao excluir", { description: m });
+      return;
+    }
+    const liberados = json.leadsAtribuidosAtivos ?? 0;
+    toast.success(`${user.nome} excluído.`, {
+      description:
+        liberados > 0
+          ? `${liberados} lead${liberados === 1 ? "" : "s"} ${
+              liberados === 1 ? "voltou" : "voltaram"
+            } pro pool não-atribuído.`
+          : undefined,
+    });
     onSaved();
   }
 
@@ -216,14 +263,33 @@ function UserEditForm({
         </div>
       </div>
 
-      <DialogFooter>
-        <Button variant="outline" onClick={onCancel} disabled={pending}>
-          Cancelar
-        </Button>
-        <Button onClick={onSave} disabled={pending}>
-          {pending && <Loader2 className="size-4 animate-spin" />}
-          Salvar
-        </Button>
+      <DialogFooter className="sm:justify-between">
+        {!isSelf ? (
+          <Button
+            variant="destructive"
+            onClick={onDelete}
+            disabled={deleting || pending}
+            className="sm:mr-auto"
+          >
+            {deleting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}
+            Excluir usuário
+          </Button>
+        ) : (
+          <span />
+        )}
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={pending}>
+            Cancelar
+          </Button>
+          <Button onClick={onSave} disabled={pending}>
+            {pending && <Loader2 className="size-4 animate-spin" />}
+            Salvar
+          </Button>
+        </div>
       </DialogFooter>
     </>
   );

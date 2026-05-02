@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { LoginForm } from "@/components/auth/login-form";
+import { CrediosLogo } from "@/components/shared/credios-logo";
 import {
   Card,
   CardContent,
@@ -17,9 +18,14 @@ export default async function LoginPage({ searchParams }: Props) {
   const { error, redirectTo } = await searchParams;
   return (
     <Card className="w-full max-w-md">
-      <CardHeader className="space-y-1 text-center">
-        <CardTitle className="text-2xl">CRM Credios</CardTitle>
-        <CardDescription>Entre na sua conta para continuar</CardDescription>
+      <CardHeader className="space-y-3 text-center">
+        <CrediosLogo size="lg" className="justify-center" />
+        <div className="space-y-1">
+          <CardTitle className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-700 dark:text-gold-400">
+            CRM
+          </CardTitle>
+          <CardDescription>Entre na sua conta para continuar</CardDescription>
+        </div>
       </CardHeader>
       <CardContent>
         <LoginForm error={error} redirectTo={redirectTo} />

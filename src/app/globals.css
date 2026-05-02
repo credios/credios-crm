@@ -4,41 +4,144 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* =========================================================================
+   Credios brand tokens — fonte da verdade: credios-website-v2/src/app/globals.css
+   ========================================================================= */
+@theme {
+  /* === Brand (4 cores oficiais Credios) === */
+  --color-credios-blue: #4b7be5;
+  --color-credios-gold: #d4a351;
+  --color-credios-ivory: #f8f6f0;
+  --color-credios-charcoal: #141e30;
+
+  /* === Blue scale (pivot 500 = #4B7BE5) === */
+  --color-blue-50: #eef3fe;
+  --color-blue-100: #dce6fd;
+  --color-blue-200: #bccffb;
+  --color-blue-300: #91b0f6;
+  --color-blue-400: #6e94ee;
+  --color-blue-500: #4b7be5;
+  --color-blue-600: #3863cc;
+  --color-blue-700: #2c4fa8;
+  --color-blue-800: #213d80;
+  --color-blue-900: #182c5c;
+  --color-blue-950: #0f1b3d;
+
+  /* === Gold scale (pivot 500 = #D4A351) === */
+  --color-gold-50: #fbf6eb;
+  --color-gold-100: #f6ebd1;
+  --color-gold-200: #ecd7a2;
+  --color-gold-300: #e1be73;
+  --color-gold-400: #d9b05f;
+  --color-gold-500: #d4a351;
+  --color-gold-600: #b8893a;
+  --color-gold-700: #95702e;
+  --color-gold-800: #735524;
+  --color-gold-900: #4f3a15;
+  --color-gold-950: #2d2008;
+
+  /* === Charcoal scale (pivot 800 = #141E30) === */
+  --color-charcoal-50: #e8eaef;
+  --color-charcoal-100: #c9cdd8;
+  --color-charcoal-200: #9ba3b4;
+  --color-charcoal-300: #6e7891;
+  --color-charcoal-400: #4d5670;
+  --color-charcoal-500: #353d55;
+  --color-charcoal-600: #252d43;
+  --color-charcoal-700: #1b2438;
+  --color-charcoal-800: #141e30;
+  --color-charcoal-900: #0e1623;
+  --color-charcoal-950: #060a14;
+
+  /* === Ivory scale === */
+  --color-ivory-base: #f8f6f0;
+  --color-ivory-elevated: #ffffff;
+  --color-ivory-muted: #f0ede5;
+  --color-ivory-subtle: #e8e4d9;
+
+  /* === Status colors === */
+  --color-status-novo: #4b7be5;
+  --color-status-conversa: #91b0f6;
+  --color-status-aguardando-resp: #d4a351;
+  --color-status-aguardando-doc: #b8893a;
+  --color-status-doc-enviada: #6366f1;
+  --color-status-em-negociacao: #8b5cf6;
+  --color-status-fechado: #10b981;
+  --color-status-perdido: #f43f5e;
+  --color-status-sem-resposta: #6e7891;
+  --color-status-desqualificado: #dc2626;
+
+  /* === Fonts (5 fontes Credios via next/font) === */
+  --font-sans: var(--font-plus-jakarta-sans), "Outfit", system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-plus-jakarta-sans),
+    system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
+  --font-mono: var(--font-inter), "SF Mono", ui-monospace, monospace;
+  --font-outfit: var(--font-outfit), var(--font-plus-jakarta-sans), system-ui,
+    sans-serif;
+  --font-heading: var(--font-plus-jakarta-sans), system-ui, sans-serif;
+
+  /* === Motion === */
+  --duration-instant: 80ms;
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-slow: 400ms;
+  --duration-deliberate: 600ms;
+
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-snappy: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: cubic-bezier(0.5, 1.6, 0.4, 1);
+  --ease-in-out-soft: cubic-bezier(0.83, 0, 0.17, 1);
+}
+
+/* =========================================================================
+   Bridge: shadcn-style tokens (background/foreground/primary/etc) → Credios
+   Componentes existentes consomem essas vars; agora apontam pra paleta nova.
+   ========================================================================= */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-gold-soft: var(--gold-soft);
+  --color-bg-base: var(--bg-base);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-muted: var(--bg-muted);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-fg-base: var(--fg-base);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-faint: var(--fg-faint);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,83 +151,384 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* =========================================================================
+   Light mode — base ivory + charcoal text
+   ========================================================================= */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+
+  /* Semânticos Credios */
+  --bg-base: #f8f6f0;
+  --bg-elevated: #ffffff;
+  --bg-muted: #f0ede5;
+  --bg-subtle: #e8e4d9;
+
+  --fg-base: #141e30;
+  --fg-muted: #353d55;
+  --fg-subtle: #6e7891;
+  --fg-faint: #9ba3b4;
+
+  /* shadcn bridge: tudo consome dessas vars */
+  --background: var(--bg-base);
+  --foreground: var(--fg-base);
+  --card: var(--bg-elevated);
+  --card-foreground: var(--fg-base);
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--fg-base);
+
+  --primary: #4b7be5; /* blue-500 Credios */
+  --primary-foreground: #ffffff;
+
+  --secondary: #f0ede5; /* ivory-muted */
+  --secondary-foreground: #141e30;
+
+  --muted: #f0ede5;
+  --muted-foreground: #353d55;
+
+  /* shadcn `accent` é hover neutro (não confundir com brand gold) */
+  --accent: #e8e4d9; /* ivory-subtle */
+  --accent-foreground: #141e30;
+
+  --destructive: #dc2626;
+
+  --border: color-mix(in oklch, #141e30 10%, transparent);
+  --input: color-mix(in oklch, #141e30 14%, transparent);
+  --ring: #4b7be5;
+
+  /* Brand gold variant (usar via classes utility ou variant accent do Button) */
+  --gold: #d4a351;
+  --gold-foreground: #141e30;
+  --gold-soft: #fbf6eb;
+
+  /* Charts: paleta brand harmonizada */
+  --chart-1: #4b7be5; /* blue */
+  --chart-2: #d4a351; /* gold */
+  --chart-3: #10b981; /* emerald */
+  --chart-4: #8b5cf6; /* violet */
+  --chart-5: #f43f5e; /* rose */
+
+  /* Sidebar — frosted leve sobre ivory */
+  --sidebar: rgba(248, 246, 240, 0.92);
+  --sidebar-foreground: #141e30;
+  --sidebar-primary: #4b7be5;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0ede5;
+  --sidebar-accent-foreground: #141e30;
+  --sidebar-border: color-mix(in oklch, #141e30 8%, transparent);
+  --sidebar-ring: #4b7be5;
 }
 
+/* =========================================================================
+   Dark mode — base charcoal + ivory text
+   ========================================================================= */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --bg-base: #0e1623; /* charcoal-900 */
+  --bg-elevated: #141e30; /* charcoal-800 (Credios) */
+  --bg-muted: #1b2438; /* charcoal-700 */
+  --bg-subtle: #252d43; /* charcoal-600 */
+
+  --fg-base: #f8f6f0; /* ivory-base */
+  --fg-muted: #9ba3b4; /* charcoal-200 */
+  --fg-subtle: #6e7891; /* charcoal-300 */
+  --fg-faint: #4d5670; /* charcoal-400 */
+
+  --background: var(--bg-base);
+  --foreground: var(--fg-base);
+  --card: var(--bg-elevated);
+  --card-foreground: var(--fg-base);
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--fg-base);
+
+  --primary: #6e94ee; /* blue-400 mais saturado pra dark */
+  --primary-foreground: #0e1623;
+
+  --secondary: #1b2438;
+  --secondary-foreground: #f8f6f0;
+
+  --muted: #1b2438;
+  --muted-foreground: #9ba3b4;
+
+  --accent: #252d43;
+  --accent-foreground: #f8f6f0;
+
+  --destructive: #f87171;
+
+  --border: color-mix(in oklch, #f8f6f0 10%, transparent);
+  --input: color-mix(in oklch, #f8f6f0 14%, transparent);
+  --ring: #6e94ee;
+
+  --gold: #d9b05f; /* gold-400 mais saturado */
+  --gold-foreground: #0e1623;
+  --gold-soft: color-mix(in oklch, #d4a351 18%, #141e30);
+
+  --chart-1: #6e94ee;
+  --chart-2: #d9b05f;
+  --chart-3: #34d399;
+  --chart-4: #a78bfa;
+  --chart-5: #fb7185;
+
+  --sidebar: rgba(20, 30, 48, 0.85);
+  --sidebar-foreground: #f8f6f0;
+  --sidebar-primary: #6e94ee;
+  --sidebar-primary-foreground: #0e1623;
+  --sidebar-accent: #1b2438;
+  --sidebar-accent-foreground: #f8f6f0;
+  --sidebar-border: color-mix(in oklch, #f8f6f0 8%, transparent);
+  --sidebar-ring: #6e94ee;
 }
 
+/* =========================================================================
+   Base layer
+   ========================================================================= */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    font-family: var(--font-sans);
+  }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01" 1, "cv11" 1;
   }
-  html {
-    @apply font-sans;
+  ::selection {
+    background: color-mix(in oklch, #d4a351 32%, transparent);
+    color: #141e30;
   }
+  .dark ::selection {
+    background: color-mix(in oklch, #d4a351 38%, transparent);
+    color: #f8f6f0;
+  }
+
+  /* Tabular numerals em valores monetários e IDs */
+  .font-mono,
+  [data-tabular],
+  .tabular-nums {
+    font-feature-settings: "tnum" 1, "lnum" 1, "zero" 1;
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+}
+
+/* =========================================================================
+   Materiais — 4 níveis (solid, frosted, vibrant, ethereal)
+   ========================================================================= */
+@layer components {
+  .surface-solid {
+    background: var(--bg-elevated);
+    border: 1px solid color-mix(in oklch, var(--fg-base) 8%, transparent);
+    box-shadow: 0 1px 0 0 color-mix(in oklch, var(--fg-base) 4%, transparent);
+  }
+
+  .surface-frosted {
+    background: color-mix(in oklch, var(--bg-elevated) 72%, transparent);
+    backdrop-filter: blur(12px) saturate(1.4);
+    -webkit-backdrop-filter: blur(12px) saturate(1.4);
+    border: 1px solid color-mix(in oklch, var(--fg-base) 8%, transparent);
+    box-shadow:
+      0 1px 2px -1px color-mix(in oklch, var(--fg-base) 10%, transparent),
+      0 1px 0 0 color-mix(in oklch, var(--fg-base) 3%, transparent);
+  }
+
+  .surface-vibrant {
+    background: color-mix(in oklch, var(--bg-elevated) 55%, transparent);
+    backdrop-filter: blur(24px) saturate(1.8);
+    -webkit-backdrop-filter: blur(24px) saturate(1.8);
+    border: 1px solid color-mix(in oklch, var(--fg-base) 12%, transparent);
+    box-shadow:
+      0 16px 40px -8px color-mix(in oklch, var(--fg-base) 24%, transparent),
+      0 8px 16px -6px color-mix(in oklch, var(--fg-base) 16%, transparent);
+  }
+
+  .surface-ethereal {
+    background: color-mix(in oklch, var(--bg-elevated) 32%, transparent);
+    backdrop-filter: blur(40px) saturate(1.6);
+    -webkit-backdrop-filter: blur(40px) saturate(1.6);
+    border: 1px solid color-mix(in oklch, var(--fg-base) 8%, transparent);
+    box-shadow: 0 10px 24px -6px
+      color-mix(in oklch, var(--fg-base) 18%, transparent);
+  }
+
+  @supports not (backdrop-filter: blur(1px)) {
+    .surface-frosted,
+    .surface-vibrant,
+    .surface-ethereal {
+      background: var(--bg-elevated);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
+  /* Sombras discretas com tinge charcoal */
+  .shadow-elev-sm {
+    box-shadow:
+      0 1px 2px -1px color-mix(in oklch, var(--fg-base) 10%, transparent),
+      0 1px 0 0 color-mix(in oklch, var(--fg-base) 3%, transparent);
+  }
+  .shadow-elev-md {
+    box-shadow:
+      0 4px 8px -2px color-mix(in oklch, var(--fg-base) 12%, transparent),
+      0 2px 4px -2px color-mix(in oklch, var(--fg-base) 6%, transparent);
+  }
+  .shadow-elev-lg {
+    box-shadow:
+      0 10px 24px -6px color-mix(in oklch, var(--fg-base) 18%, transparent),
+      0 4px 10px -4px color-mix(in oklch, var(--fg-base) 10%, transparent);
+  }
+  .shadow-elev-popover {
+    box-shadow:
+      0 16px 40px -8px color-mix(in oklch, var(--fg-base) 24%, transparent),
+      0 8px 16px -6px color-mix(in oklch, var(--fg-base) 16%, transparent);
+  }
+  .shadow-gold-glow {
+    box-shadow:
+      0 4px 12px -4px color-mix(in oklch, #d4a351 40%, transparent),
+      0 2px 6px -2px color-mix(in oklch, #d4a351 24%, transparent);
+  }
+}
+
+/* =========================================================================
+   Motion utilities — keyframes pra stagger e entrance animations
+   ========================================================================= */
+@layer utilities {
+  @keyframes credios-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes credios-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes credios-scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes credios-bell-bounce {
+    0%, 100% {
+      transform: scale(1);
+    }
+    20% {
+      transform: scale(1.18) rotate(-8deg);
+    }
+    40% {
+      transform: scale(1.06) rotate(6deg);
+    }
+    60% {
+      transform: scale(1.1) rotate(-3deg);
+    }
+  }
+
+  /* Highlight discreto em itens de timeline recém-criados (via realtime).
+     Fade dourado suave pra não atrapalhar leitura — ~1.4s total. */
+  @keyframes credios-timeline-flash {
+    0% {
+      background-color: color-mix(in oklch, var(--primary) 14%, transparent);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  .animate-fade-up {
+    animation: credios-fade-up var(--duration-base) var(--ease-out-soft) both;
+  }
+
+  .animate-fade-in {
+    animation: credios-fade-in var(--duration-base) var(--ease-out-soft) both;
+  }
+
+  .animate-scale-in {
+    animation: credios-scale-in var(--duration-base) var(--ease-out-snappy) both;
+  }
+
+  .animate-bell-bounce {
+    animation: credios-bell-bounce 600ms var(--ease-out-snappy);
+  }
+
+  .animate-timeline-flash {
+    animation: credios-timeline-flash 1400ms var(--ease-out-soft) both;
+  }
+
+  /* Stagger delays — usa em listas curtas (até 8 items). */
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 40ms; }
+  .stagger > *:nth-child(3) { animation-delay: 80ms; }
+  .stagger > *:nth-child(4) { animation-delay: 120ms; }
+  .stagger > *:nth-child(5) { animation-delay: 160ms; }
+  .stagger > *:nth-child(6) { animation-delay: 200ms; }
+  .stagger > *:nth-child(7) { animation-delay: 240ms; }
+  .stagger > *:nth-child(8) { animation-delay: 280ms; }
+}
+
+/* =========================================================================
+   Densidade — controle global via class no <html>
+   compact (32px row), comfortable (40px, default), spacious (48px)
+   ========================================================================= */
+:root {
+  --density-row-h: 2.5rem; /* 40px default */
+  --density-pad-y: 0.625rem;
+  --density-text: 0.875rem;
+}
+
+html.dens-compact {
+  --density-row-h: 2rem; /* 32px */
+  --density-pad-y: 0.375rem;
+  --density-text: 0.8125rem;
+}
+
+html.dens-comfortable {
+  --density-row-h: 2.5rem;
+  --density-pad-y: 0.625rem;
+  --density-text: 0.875rem;
+}
+
+html.dens-spacious {
+  --density-row-h: 3rem; /* 48px */
+  --density-pad-y: 0.875rem;
+  --density-text: 0.9375rem;
+}
+
+/* Aplica densidade às tabelas e linhas do kanban via custom prop. */
+table tbody tr td {
+  padding-top: var(--density-pad-y);
+  padding-bottom: var(--density-pad-y);
+}
+
+/* Reduce motion — nativo + opt-in via /perfil */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

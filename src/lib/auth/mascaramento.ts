@@ -33,6 +33,15 @@ export function shouldMaskFor(perfil: Perfil): boolean {
   return perfil === "marketing";
 }
 
+/**
+ * Dados financeiros do fechamento (banco, valor liberado, comissão recebida)
+ * são receita da empresa — visíveis apenas pra admin. Gerentes/consultores
+ * gerenciam pipeline mas não têm acesso ao spread de comissão por banco.
+ */
+export function shouldMaskFinancial(perfil: Perfil): boolean {
+  return perfil !== "admin";
+}
+
 export type LeadLikeForMasking = {
   cpf: string | null;
   rendaMensalCentavos: number | null;
@@ -48,30 +57,45 @@ export type MaskedLeadFields = {
 };
 
 /**
- * Aplica mascaramento PII para perfil 'marketing' (CLAUDE.md §5).
- * Para outros perfis retorna o objeto original sem alterações.
+ * Aplica mascaramento PII para perfil 'marketing' (CLAUDE.md §5) E mascaramento
+ * de receita da empresa (banco/valor liberado/comissão) para qualquer perfil
+ * que não seja admin.
  *
- * Mascarado:
+ * Mascarado pra marketing:
  *  - cpf: '***.***.***-XX'
  *  - email: '***@dominio.com'
  *  - whatsapp: null (oculto)
  *  - rendaMensalCentavos: null + adiciona rendaFaixa
+ *  - dados financeiros (banco, valor liberado, comissão): null
+ *
+ * Mascarado pra gerente/consultor (não-admin):
  *  - dados financeiros (banco, valor liberado, comissão): null
  */
 export function maskLeadForPerfil<T extends LeadLikeForMasking>(
   lead: T,
   perfil: Perfil,
 ): T & Partial<MaskedLeadFields> {
-  if (!shouldMaskFor(perfil)) return lead;
-  return {
-    ...lead,
-    cpf: maskCpf(lead.cpf),
-    email: maskEmail(lead.email),
-    whatsapp: null,
-    rendaMensalCentavos: null,
-    rendaFaixa: rendaParaFaixa(lead.rendaMensalCentavos),
-    bancoAprovador: null,
-    valorLiberadoCentavos: null,
-    comissaoCentavos: null,
-  };
+  let out: T & Partial<MaskedLeadFields> = lead;
+
+  if (shouldMaskFor(perfil)) {
+    out = {
+      ...out,
+      cpf: maskCpf(out.cpf),
+      email: maskEmail(out.email),
+      whatsapp: null,
+      rendaMensalCentavos: null,
+      rendaFaixa: rendaParaFaixa(out.rendaMensalCentavos),
+    };
+  }
+
+  if (shouldMaskFinancial(perfil)) {
+    out = {
+      ...out,
+      bancoAprovador: null,
+      valorLiberadoCentavos: null,
+      comissaoCentavos: null,
+    };
+  }
+
+  return out;
 }

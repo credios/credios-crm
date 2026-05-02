@@ -9,15 +9,19 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { AlertTriangle, Snowflake } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { LeadBulkActions } from "./lead-bulk-actions";
 import { LeadFilters } from "./lead-filters";
+import { MobileLeadCards } from "./mobile-lead-cards";
+import { SortPicker } from "./sort-picker";
 import { StatusBadge } from "./status-badge";
 import { ViewToggle } from "./view-toggle";
+import { EmptyState } from "@/components/shared/empty-state";
+import { EmptyLeads } from "@/components/shared/illustrations";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
@@ -72,22 +76,34 @@ export function LeadList({ result, consultores, origens }: Props) {
       {
         accessorKey: "nome",
         header: "Nome",
-        cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            {row.original.slaAtrasado && (
-              <AlertTriangle
-                className="size-4 text-destructive shrink-0"
-                aria-label="SLA: sem primeiro contato há mais de 30min"
-              />
-            )}
-            <Link
-              href={`/leads/${row.original.id}`}
-              className="font-medium hover:underline"
-            >
-              {row.original.nome}
-            </Link>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const cold = isEsfriando(row.original.ultimoContato);
+          return (
+            <div className="flex items-center gap-2">
+              {row.original.slaAtrasado && (
+                <AlertTriangle
+                  className="size-4 text-destructive shrink-0"
+                  aria-label="SLA: sem primeiro contato há mais de 30min"
+                />
+              )}
+              {!row.original.slaAtrasado && cold && (
+                <AlertTriangle
+                  className="size-4 text-destructive shrink-0"
+                  aria-label="Esfriando: 5+ dias sem contato"
+                />
+              )}
+              <Link
+                href={`/leads/${row.original.id}`}
+                className={cn(
+                  "font-medium hover:underline",
+                  cold && "text-destructive",
+                )}
+              >
+                {row.original.nome}
+              </Link>
+            </div>
+          );
+        },
       },
       {
         accessorKey: "status",
@@ -97,7 +113,11 @@ export function LeadList({ result, consultores, origens }: Props) {
       {
         accessorKey: "valorCreditoCentavos",
         header: "Valor buscado",
-        cell: ({ row }) => formatBrlFromCents(row.original.valorCreditoCentavos),
+        cell: ({ row }) => (
+          <span className="font-mono tabular-nums text-[13px] font-medium">
+            {formatBrlFromCents(row.original.valorCreditoCentavos)}
+          </span>
+        ),
       },
       {
         accessorKey: "whatsapp",
@@ -141,8 +161,15 @@ export function LeadList({ result, consultores, origens }: Props) {
           const cold = isEsfriando(v);
           return (
             <div className="flex items-center gap-1.5">
-              <span className={cn(cold && "text-blue-600")}>{formatRelative(v)}</span>
-              {cold && <Snowflake className="size-3 text-blue-500" aria-label="Esfriando" />}
+              <span className={cn(cold && "text-destructive font-medium")}>
+                {formatRelative(v)}
+              </span>
+              {cold && (
+                <AlertTriangle
+                  className="size-3 text-destructive"
+                  aria-label="Esfriando: 5+ dias sem contato"
+                />
+              )}
             </div>
           );
         },
@@ -180,7 +207,10 @@ export function LeadList({ result, consultores, origens }: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ViewToggle current="lista" />
-        <Button nativeButton={false} render={<Link href="/leads/novo">+ Novo lead</Link>} />
+        <div className="flex flex-wrap items-center gap-2">
+          <SortPicker />
+          <Button nativeButton={false} render={<Link href="/leads/novo">+ Novo lead</Link>} />
+        </div>
       </div>
 
       {selectedLeads.length > 0 && (
@@ -195,16 +225,26 @@ export function LeadList({ result, consultores, origens }: Props) {
         />
       )}
 
-      <div className="rounded-md border overflow-hidden">
+      <MobileLeadCards
+        rows={data}
+        emptyAction={
+          <Button
+            nativeButton={false}
+            render={<Link href="/leads/novo">+ Novo lead</Link>}
+          />
+        }
+      />
+
+      <div className="surface-solid rounded-xl overflow-hidden p-0 hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-muted/50 border-b">
+            <thead className="bg-bg-subtle border-b border-foreground/8 sticky top-0 z-10">
               {table.getHeaderGroups().map((hg) => (
                 <tr key={hg.id}>
                   {hg.headers.map((h) => (
                     <th
                       key={h.id}
-                      className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                      className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-subtle"
                     >
                       {flexRender(h.column.columnDef.header, h.getContext())}
                     </th>
@@ -215,18 +255,35 @@ export function LeadList({ result, consultores, origens }: Props) {
             <tbody>
               {table.getRowModel().rows.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={columns.length}
-                    className="text-center py-12 text-sm text-muted-foreground"
-                  >
-                    Nenhum lead encontrado com os filtros atuais.
+                  <td colSpan={columns.length}>
+                    <EmptyState
+                      illustration={<EmptyLeads />}
+                      title="Nenhum lead encontrado"
+                      description="Tente afrouxar os filtros — ou crie o primeiro lead manual da fila."
+                      action={
+                        <Button
+                          nativeButton={false}
+                          render={<Link href="/leads/novo">+ Novo lead</Link>}
+                        />
+                      }
+                    />
                   </td>
                 </tr>
               ) : (
                 table.getRowModel().rows.map((row) => (
-                  <tr key={row.id} className="border-t hover:bg-muted/30">
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-3 py-2.5 text-sm">
+                  <tr
+                    key={row.id}
+                    className="group/row relative border-t border-foreground/5 transition-colors duration-fast hover:bg-foreground/3"
+                  >
+                    {row.getVisibleCells().map((cell, idx) => (
+                      <td
+                        key={cell.id}
+                        className={cn(
+                          "px-3 py-2.5 text-[13px]",
+                          idx === 0 &&
+                            "relative before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:bg-primary before:opacity-0 group-hover/row:before:opacity-100 before:transition-opacity",
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

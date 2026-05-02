@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { logAction } from "@/lib/audit";
 import { checkSlaPrimeiroContato } from "@/lib/sla/check";
@@ -25,18 +25,20 @@ export async function GET(request: NextRequest) {
   const result = await checkSlaPrimeiroContato();
 
   if (result.newAlerts.length > 0) {
-    void sendSlaAlertEmail(result.newAlerts);
-    void logAction(
-      null,
-      null,
-      "sla_alertas_disparados",
-      "sla_alertas",
-      null,
-      {
-        count: result.newAlerts.length,
-        evaluatedAt: result.evaluatedAt.toISOString(),
-        leadIds: result.newAlerts.map((a) => a.leadId),
-      },
+    after(() => sendSlaAlertEmail(result.newAlerts));
+    after(() =>
+      logAction(
+        null,
+        null,
+        "sla_alertas_disparados",
+        "sla_alertas",
+        null,
+        {
+          count: result.newAlerts.length,
+          evaluatedAt: result.evaluatedAt.toISOString(),
+          leadIds: result.newAlerts.map((a) => a.leadId),
+        },
+      ),
     );
   }
 

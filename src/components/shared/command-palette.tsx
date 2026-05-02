@@ -32,7 +32,7 @@ export function CommandPalette() {
   const [hits, setHits] = useState<LeadHit[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Atalho global: Cmd/Ctrl + K
+  // Atalho global: Cmd/Ctrl + K + custom event do trigger inline.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -40,8 +40,21 @@ export function CommandPalette() {
         setOpen((o) => !o);
       }
     }
+    function onOpenEvent() {
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(
+      "crm:command-palette:open",
+      onOpenEvent as EventListener,
+    );
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(
+        "crm:command-palette:open",
+        onOpenEvent as EventListener,
+      );
+    };
   }, []);
 
   // Debounce search
@@ -96,15 +109,26 @@ export function CommandPalette() {
         ) : (
           <CommandGroup heading="Leads">
             {hits.map((h) => (
-              <CommandItem key={h.id} value={`${h.nome} ${h.email ?? ""} ${h.id}`} onSelect={() => pick(h.id)}>
+              <CommandItem
+                key={h.id}
+                value={`${h.nome} ${h.email ?? ""} ${h.id}`}
+                onSelect={() => pick(h.id)}
+              >
                 <div className="flex items-center gap-3 w-full">
+                  <span
+                    aria-hidden
+                    className="size-1.5 shrink-0 rounded-full"
+                    style={{
+                      background: `var(--color-status-${h.status.replace(/_/g, "-")}, var(--color-charcoal-300))`,
+                    }}
+                  />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{h.nome}</p>
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate font-mono">
                       {h.email ?? h.whatsapp ?? "—"}
                     </p>
                   </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">
                     {STATUS_LEAD_LABEL[h.status] ?? h.status}
                   </span>
                 </div>

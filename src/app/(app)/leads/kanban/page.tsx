@@ -2,11 +2,13 @@ import { redirect } from "next/navigation";
 
 import { LeadKanban } from "@/components/leads/lead-kanban";
 import { getAppUser } from "@/lib/auth/get-app-user";
+import { isAdmin } from "@/lib/auth/permissions";
 import {
   listConsultoresAtivos,
   listLeadsForKanban,
   listOrigensDistintas,
 } from "@/lib/leads/list-leads";
+import { listActiveStatuses } from "@/lib/status/queries";
 import { listLeadsQuerySchema } from "@/lib/validators/lead";
 
 type Props = {
@@ -25,10 +27,11 @@ export default async function KanbanPage({ searchParams }: Props) {
   }
   const filters = listLeadsQuerySchema.parse(flat);
 
-  const [leads, consultores, origens] = await Promise.all([
+  const [leads, consultores, origens, statuses] = await Promise.all([
     listLeadsForKanban(filters, user),
     listConsultoresAtivos(),
     listOrigensDistintas(),
+    listActiveStatuses(),
   ]);
 
   return (
@@ -40,7 +43,17 @@ export default async function KanbanPage({ searchParams }: Props) {
           desqualificado ou perdido abre modal pra confirmação.
         </p>
       </div>
-      <LeadKanban leads={leads} consultores={consultores} origens={origens} />
+      <LeadKanban
+        leads={leads}
+        consultores={consultores}
+        origens={origens}
+        canCloseOrReopen={isAdmin(user)}
+        statuses={statuses.map((s) => ({
+          key: s.key,
+          label: s.label,
+          eTerminal: s.eTerminal,
+        }))}
+      />
     </div>
   );
 }

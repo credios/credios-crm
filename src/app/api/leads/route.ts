@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { interacoes, leads as leadsTable } from "../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -48,14 +48,20 @@ export async function GET(request: NextRequest) {
   }
   if (q.q) {
     const like = `%${q.q}%`;
-    conds.push(
-      or(
-        ilike(leadsTable.nome, like),
-        ilike(leadsTable.email, like),
-        ilike(leadsTable.cpf, like),
-        ilike(leadsTable.whatsapp, like),
-      ),
-    );
+    // Marketing: busca apenas em `nome` pra evitar oracle de PII
+    // (não confirmar se um CPF/email/whatsapp existe).
+    if (user.perfil === "marketing") {
+      conds.push(ilike(leadsTable.nome, like));
+    } else {
+      conds.push(
+        or(
+          ilike(leadsTable.nome, like),
+          ilike(leadsTable.email, like),
+          ilike(leadsTable.cpf, like),
+          ilike(leadsTable.whatsapp, like),
+        ),
+      );
+    }
   }
   const where = conds.length > 0 ? and(...conds) : undefined;
   const offset = (q.page - 1) * q.pageSize;
@@ -104,8 +110,20 @@ export async function POST(request: NextRequest) {
 
   const parsed = createLeadSchema.safeParse(body);
   if (!parsed.success) {
+    // Mensagem útil pro cliente: "campo X: razão · campo Y: razão"
+    // (vs o "validation failed" genérico anterior).
+    const summary = parsed.error.issues
+      .slice(0, 3)
+      .map((i) => {
+        const path = i.path.join(".") || "(raiz)";
+        return `${path}: ${i.message}`;
+      })
+      .join(" · ");
     return NextResponse.json(
-      { error: "validation failed", details: parsed.error.issues },
+      {
+        error: summary || "Dados inválidos",
+        details: parsed.error.issues,
+      },
       { status: 400 },
     );
   }
@@ -180,14 +198,18 @@ export async function POST(request: NextRequest) {
   });
 
   const meta = extractRequestMeta(request);
-  void logAction(
-    null,
-    user.id,
-    "lead_criado_manual",
-    "lead",
-    newLead.id,
-    { origem: data.origem ?? "Manual", consultorId, regraAplicada, regraId },
-    meta,
+  // Não-crítico: roda APÓS resposta. Em serverless (Vercel) `void` é
+  // interrompido — `after()` mantém execução até completar.
+  after(() =>
+    logAction(
+      null,
+      user.id,
+      "lead_criado_manual",
+      "lead",
+      newLead.id,
+      { origem: data.origem ?? "Manual", consultorId, regraAplicada, regraId },
+      meta,
+    ),
   );
 
   return NextResponse.json({ data: newLead }, { status: 201 });

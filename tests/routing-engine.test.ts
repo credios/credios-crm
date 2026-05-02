@@ -34,11 +34,32 @@ function rule(overrides: Partial<RoutingRule>): RoutingRule {
 function makeDeps(
   rules: RoutingRule[],
   picker?: RoutingDeps["pickNextRoundRobin"],
+  assignableUserIds?: string[],
 ): RoutingDeps {
   return {
     listActiveRules: async () => rules,
     pickNextRoundRobin: picker ?? (async (_id, grupo) => grupo[0]),
+    // Default: considera todos os usuários referenciados nas regras como
+    // elegíveis (mantém comportamento dos testes existentes). Tests novos
+    // que validam usuário inativo passam um array explícito.
+    listAssignableUserIds: async () =>
+      assignableUserIds ?? extractUserIdsFromRules(rules),
   };
+}
+
+function extractUserIdsFromRules(rules: RoutingRule[]): string[] {
+  const ids = new Set<string>();
+  for (const r of rules) {
+    if (r.acao === "atribuir_usuario") {
+      const id = (r.parametros as { usuario_id?: string } | null)?.usuario_id;
+      if (id) ids.add(id);
+    } else if (r.acao === "round_robin_grupo") {
+      const grupo = (r.parametros as { grupo_usuarios?: string[] } | null)
+        ?.grupo_usuarios;
+      if (Array.isArray(grupo)) for (const id of grupo) ids.add(id);
+    }
+  }
+  return Array.from(ids);
 }
 
 describe("matchesConditions", () => {
@@ -283,5 +304,67 @@ describe("aplicarRoteamento", () => {
       { dryRun: true },
     );
     expect(picker).toHaveBeenCalledWith("r-id", ["a", "b"], { dryRun: true });
+  });
+});
+
+describe("aplicarRoteamento — validação de usuários elegíveis", () => {
+  it("atribuir_usuario com user inativo cai pro pool", async () => {
+    const result = await aplicarRoteamento(
+      baseCtx,
+      makeDeps(
+        [
+          rule({
+            id: "r-id",
+            acao: "atribuir_usuario",
+            parametros: { usuario_id: "user-inativo" },
+          }),
+        ],
+        undefined,
+        [], // nenhum usuário elegível
+      ),
+    );
+    expect(result.consultorId).toBeNull();
+    expect(result.regraAplicada).toContain("nenhum usuário elegível");
+    expect(result.regraId).toBe("r-id"); // identifica qual regra ficou inválida
+  });
+
+  it("round_robin_grupo filtra inativos antes de chamar picker", async () => {
+    const picker = vi.fn(async (_id: string, grupo: string[]) => grupo[0]);
+    const result = await aplicarRoteamento(
+      baseCtx,
+      makeDeps(
+        [
+          rule({
+            id: "r-id",
+            acao: "round_robin_grupo",
+            parametros: { grupo_usuarios: ["ativo-1", "inativo", "ativo-2"] },
+          }),
+        ],
+        picker,
+        ["ativo-1", "ativo-2"], // só esses 2 elegíveis
+      ),
+    );
+    expect(result.consultorId).toBe("ativo-1");
+    expect(picker).toHaveBeenCalledWith("r-id", ["ativo-1", "ativo-2"], undefined);
+  });
+
+  it("round_robin_grupo SEM usuários elegíveis cai pro pool", async () => {
+    const picker = vi.fn(async (_id: string, grupo: string[]) => grupo[0]);
+    const result = await aplicarRoteamento(
+      baseCtx,
+      makeDeps(
+        [
+          rule({
+            id: "r-id",
+            acao: "round_robin_grupo",
+            parametros: { grupo_usuarios: ["inativo-1", "inativo-2"] },
+          }),
+        ],
+        picker,
+        [],
+      ),
+    );
+    expect(result.consultorId).toBeNull();
+    expect(picker).not.toHaveBeenCalled();
   });
 });

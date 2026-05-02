@@ -33,7 +33,7 @@ export async function updateProfileAction(input: UpdateProfileInput): Promise<Re
     .set({ nome: parsed.data.nome, whatsapp })
     .where(eq(usersTable.id, appUser.id));
 
-  void logAudit({
+  await logAudit({
     usuarioId: appUser.id,
     acao: "perfil_editado",
     recursoTipo: "usuario",
@@ -58,7 +58,7 @@ export async function updatePasswordAction(input: NewPasswordInput): Promise<Res
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) return { ok: false, error: error.message };
 
-  void logAudit({
+  await logAudit({
     usuarioId: user.id,
     acao: "senha_atualizada",
     recursoTipo: "sessao",
@@ -83,7 +83,7 @@ export async function disableMfaAction(factorId: string): Promise<Result> {
   const { error } = await supabase.auth.mfa.unenroll({ factorId });
   if (error) return { ok: false, error: error.message };
 
-  void logAudit({
+  await logAudit({
     usuarioId: appUser.id,
     acao: "mfa_desativado",
     recursoTipo: "sessao",

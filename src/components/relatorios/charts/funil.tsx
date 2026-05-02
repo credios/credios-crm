@@ -5,7 +5,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -21,6 +20,16 @@ import {
 import { STATUS_LEAD_LABEL } from "@/lib/constants";
 import type { FunilRow } from "@/lib/reports/queries";
 
+import { ChartFrame } from "./chart-frame";
+import {
+  AXIS_TICK,
+  GRID_STROKE,
+  STATUS_COLOR,
+  TOOLTIP_ITEM_STYLE,
+  TOOLTIP_LABEL_STYLE,
+  TOOLTIP_STYLE,
+} from "./theme";
+
 const STATUS_ORDER = [
   "novo",
   "conversa_inicial",
@@ -33,19 +42,6 @@ const STATUS_ORDER = [
   "sem_resposta",
   "desqualificado",
 ];
-
-const STATUS_COLOR: Record<string, string> = {
-  novo: "#3b82f6",
-  conversa_inicial: "#06b6d4",
-  aguardando_resposta: "#f59e0b",
-  aguardando_documentacao: "#fb923c",
-  documentacao_enviada: "#6366f1",
-  em_negociacao: "#8b5cf6",
-  fechado: "#10b981",
-  perdido: "#f43f5e",
-  sem_resposta: "#71717a",
-  desqualificado: "#ef4444",
-};
 
 export function FunilChart({ rows }: { rows: FunilRow[] }) {
   const map = new Map(rows.map((r) => [r.status, r.count]));
@@ -69,28 +65,49 @@ export function FunilChart({ rows }: { rows: FunilRow[] }) {
             Sem dados no período.
           </p>
         ) : (
-          <div className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} layout="vertical" margin={{ left: 100 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis type="number" allowDecimals={false} className="text-xs" />
-                <YAxis dataKey="status" type="category" width={140} className="text-xs" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    fontSize: "12px",
-                  }}
+          <ChartFrame height={280}>
+            {({ width, height }) => (
+              <BarChart
+                data={data}
+                layout="vertical"
+                margin={{ left: 100 }}
+                width={width}
+                height={height}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  horizontal={false}
+                  stroke={GRID_STROKE}
                 />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                <XAxis
+                  type="number"
+                  allowDecimals={false}
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  dataKey="status"
+                  type="category"
+                  width={140}
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
+                  cursor={{ fill: "color-mix(in oklch, var(--foreground) 4%, transparent)" }}
+                />
+                <Bar dataKey="count" radius={[0, 6, 6, 0]}>
                   {data.map((d) => (
-                    <Cell key={d.key} fill={STATUS_COLOR[d.key] ?? "#71717a"} />
+                    <Cell key={d.key} fill={STATUS_COLOR[d.key] ?? "#6e7891"} />
                   ))}
                 </Bar>
               </BarChart>
-            </ResponsiveContainer>
-          </div>
+            )}
+          </ChartFrame>
         )}
       </CardContent>
     </Card>

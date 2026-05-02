@@ -6,9 +6,16 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
+import { CrediosLogo } from "./credios-logo";
 import { Sidebar } from "./sidebar";
 
-export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
+export function MobileNav({
+  isAdmin,
+  isConsultor,
+}: {
+  isAdmin: boolean;
+  isConsultor?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -24,11 +31,20 @@ export function MobileNav({ isAdmin }: { isAdmin: boolean }) {
           </Button>
         }
       />
-      <SheetContent side="left" className="w-72 p-0">
+      <SheetContent side="left" className="w-[88vw] max-w-xs p-0">
         <SheetHeader className="border-b p-4">
-          <SheetTitle>CRM Credios</SheetTitle>
+          <SheetTitle className="flex flex-col items-start gap-1">
+            <CrediosLogo size="md" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-gold-700 dark:text-gold-400 pl-7">
+              CRM
+            </span>
+          </SheetTitle>
         </SheetHeader>
-        <Sidebar isAdmin={isAdmin} onNavigate={() => setOpen(false)} />
+        <Sidebar
+          isAdmin={isAdmin}
+          isConsultor={isConsultor}
+          onNavigate={() => setOpen(false)}
+        />
       </SheetContent>
     </Sheet>
   );

@@ -173,15 +173,19 @@ function TemplateForm({
 
         <div className="space-y-1.5">
           <Label>Status aplicáveis</Label>
-          <div className="grid gap-2 sm:grid-cols-3 rounded-md border bg-muted/30 p-3">
+          <div className="grid gap-x-4 gap-y-2.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 rounded-md border bg-muted/30 p-3">
             {STATUS_VALUES.map((s) => (
-              <label key={s} className="flex items-center gap-2 text-sm cursor-pointer">
+              <label
+                key={s}
+                className="flex items-start gap-2 text-sm cursor-pointer leading-snug"
+              >
                 <Checkbox
                   checked={statusAplicavel.includes(s)}
                   onCheckedChange={(v) => toggleStatus(s, v === true)}
                   disabled={pending}
+                  className="mt-0.5 shrink-0"
                 />
-                {STATUS_LEAD_LABEL[s]}
+                <span>{STATUS_LEAD_LABEL[s]}</span>
               </label>
             ))}
           </div>

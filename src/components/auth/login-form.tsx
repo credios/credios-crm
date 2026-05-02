@@ -1,10 +1,8 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
 
 import { GoogleIcon } from "@/components/auth/google-icon";
@@ -13,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { safeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/client";
-import { emailPasswordSchema, type EmailPasswordInput } from "@/lib/validators/auth";
+
+import { loginWithPasswordAction, type LoginState } from "@/app/(auth)/login/actions";
 
 type Props = {
   error?: string;
@@ -22,65 +22,50 @@ type Props = {
 };
 
 export function LoginForm({ error: initialError, redirectTo }: Props) {
-  const router = useRouter();
-  const supabase = createClient();
-  const next = redirectTo ?? "/leads";
+  // safeNext aplicado IMEDIATAMENTE no parâmetro recebido — nada do que
+  // chegar como `redirectTo` (URL pública) é confiável.
+  const next = safeNext(redirectTo);
 
-  const [pending, setPending] = useState(false);
+  const [state, formAction] = useActionState<LoginState, FormData>(
+    loginWithPasswordAction,
+    { error: initialError },
+  );
+
   const [googlePending, setGooglePending] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(initialError ?? null);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<EmailPasswordInput>({
-    resolver: zodResolver(emailPasswordSchema),
-  });
-
-  async function onSubmit(values: EmailPasswordInput) {
-    setSubmitError(null);
-    setPending(true);
-    const { error } = await supabase.auth.signInWithPassword(values);
-    setPending(false);
-    if (error) {
-      setSubmitError(error.message);
-      toast.error("Falha no login", { description: error.message });
-      return;
-    }
-    router.push(next);
-    router.refresh();
-  }
+  const [googleError, setGoogleError] = useState<string | null>(null);
+  const supabase = createClient();
 
   async function handleGoogle() {
-    setSubmitError(null);
+    setGoogleError(null);
     setGooglePending(true);
     const callback = new URL("/auth/callback", window.location.origin);
-    callback.searchParams.set("next", next);
+    callback.searchParams.set("next", next); // já sanitizado
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: callback.toString() },
     });
     if (error) {
       setGooglePending(false);
-      setSubmitError(error.message);
+      setGoogleError(error.message);
       toast.error("Falha no Google login", { description: error.message });
     }
     // Em sucesso, browser redireciona para Google.
   }
 
+  const error = googleError ?? state.error;
+
   return (
     <div className="space-y-4">
-      {submitError && (
+      {error && (
         <Alert variant="destructive">
-          <AlertDescription>{submitError}</AlertDescription>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
       <Button
         type="button"
         onClick={handleGoogle}
-        disabled={googlePending || pending}
+        disabled={googlePending}
         className="w-full"
         size="lg"
       >
@@ -99,46 +84,50 @@ export function LoginForm({ error: initialError, redirectTo }: Props) {
         </span>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate>
+      <form action={formAction} className="space-y-3" noValidate>
+        {/* next sanitizado vai como hidden input pra server action ler */}
+        <input type="hidden" name="next" value={next} />
+
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
+            name="email"
             type="email"
             autoComplete="email"
             placeholder="seu@credios.com.br"
-            disabled={pending || googlePending}
-            {...register("email")}
+            required
           />
-          {errors.email && (
-            <p className="text-xs text-destructive">{errors.email.message}</p>
-          )}
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="password">Senha</Label>
           <Input
             id="password"
+            name="password"
             type="password"
             autoComplete="current-password"
-            disabled={pending || googlePending}
-            {...register("password")}
+            required
           />
-          {errors.password && (
-            <p className="text-xs text-destructive">{errors.password.message}</p>
-          )}
         </div>
 
-        <Button
-          type="submit"
-          variant="outline"
-          disabled={pending || googlePending}
-          className="w-full"
-        >
-          {pending && <Loader2 className="size-4 animate-spin" />}
-          Entrar
-        </Button>
+        <SubmitButton disabled={googlePending} />
       </form>
     </div>
+  );
+}
+
+function SubmitButton({ disabled }: { disabled?: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button
+      type="submit"
+      variant="outline"
+      disabled={pending || disabled}
+      className="w-full"
+    >
+      {pending && <Loader2 className="size-4 animate-spin" />}
+      Entrar
+    </Button>
   );
 }

@@ -8,7 +8,6 @@ import {
   ComposedChart,
   Legend,
   Line,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -23,6 +22,15 @@ import {
 } from "@/components/ui/card";
 import { formatBrlShort } from "@/lib/formatters/currency";
 import type { ReceitaMensalRow } from "@/lib/reports/queries";
+
+import { ChartFrame } from "./chart-frame";
+import {
+  AXIS_TICK,
+  GRID_STROKE,
+  TOOLTIP_ITEM_STYLE,
+  TOOLTIP_LABEL_STYLE,
+  TOOLTIP_STYLE,
+} from "./theme";
 
 export function ReceitaMensalChart({ rows }: { rows: ReceitaMensalRow[] }) {
   const data = rows.map((r) => ({
@@ -46,19 +54,36 @@ export function ReceitaMensalChart({ rows }: { rows: ReceitaMensalRow[] }) {
             Sem fechamentos nos últimos 12 meses.
           </p>
         ) : (
-          <div className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+          <ChartFrame height={280}>
+            {({ width, height }) => (
+              <ComposedChart data={data} width={width} height={height}>
+                <defs>
+                  <linearGradient id="rec-bar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.85} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.55} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke={GRID_STROKE}
+                />
                 <XAxis
                   dataKey="mes"
                   tickFormatter={(v: string) =>
-                    format(parse(v, "yyyy-MM", new Date()), "MMM/yy", { locale: ptBR })
+                    format(parse(v, "yyyy-MM", new Date()), "MMM/yy", {
+                      locale: ptBR,
+                    })
                   }
-                  className="text-xs"
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
                 />
                 <YAxis
-                  className="text-xs"
+                  tick={AXIS_TICK}
+                  axisLine={false}
+                  tickLine={false}
+                  width={50}
                   tickFormatter={(v: number) =>
                     formatBrlShort(Math.round(v * 100))
                   }
@@ -75,25 +100,40 @@ export function ReceitaMensalChart({ rows }: { rows: ReceitaMensalRow[] }) {
                         })
                       : String(v)
                   }
-                  contentStyle={{
-                    backgroundColor: "var(--popover)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    fontSize: "12px",
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
+                  cursor={{
+                    fill: "color-mix(in oklch, var(--foreground) 4%, transparent)",
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: "12px" }} />
-                <Bar dataKey="valorLiberado" fill="#10b981" name="valorLiberado" />
+                <Legend
+                  wrapperStyle={{
+                    fontSize: 11,
+                    fontFamily: "var(--font-sans)",
+                    paddingTop: 8,
+                  }}
+                  iconType="circle"
+                  iconSize={8}
+                />
+                <Bar
+                  dataKey="valorLiberado"
+                  fill="url(#rec-bar)"
+                  name="valorLiberado"
+                  radius={[6, 6, 0, 0]}
+                />
                 <Line
                   type="monotone"
                   dataKey="comissao"
-                  stroke="#f59e0b"
+                  stroke="#d4a351"
                   strokeWidth={2}
+                  dot={{ r: 3, fill: "#d4a351", strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: "#d4a351", strokeWidth: 0 }}
                   name="comissao"
                 />
               </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+            )}
+          </ChartFrame>
         )}
       </CardContent>
     </Card>

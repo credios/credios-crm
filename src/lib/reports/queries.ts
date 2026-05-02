@@ -1,15 +1,38 @@
-import { and, eq, gte, lte, notInArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
 
 import { leads, users as usersTable } from "../../../db/schema";
 import { db } from "@/lib/db";
-import type { ReportFilters } from "@/lib/validators/report";
+import {
+  normalizeFilters,
+  type ReportFilters,
+} from "@/lib/validators/report";
 
 import type { PeriodRange } from "./period";
 
-function baseConds(filters: ReportFilters) {
+function baseConds(rawFilters: ReportFilters) {
+  const filters = normalizeFilters(rawFilters);
   const c = [];
-  if (filters.consultorId) c.push(eq(leads.consultorId, filters.consultorId));
-  if (filters.origem) c.push(eq(leads.origem, filters.origem));
+  if (filters.consultorIds.length === 1) {
+    c.push(eq(leads.consultorId, filters.consultorIds[0]!));
+  } else if (filters.consultorIds.length > 1) {
+    c.push(inArray(leads.consultorId, filters.consultorIds));
+  }
+  if (filters.origens.length === 1) {
+    c.push(eq(leads.origem, filters.origens[0]!));
+  } else if (filters.origens.length > 1) {
+    c.push(inArray(leads.origem, filters.origens));
+  }
+  if (filters.ufs.length === 1) {
+    c.push(eq(leads.estado, filters.ufs[0]!));
+  } else if (filters.ufs.length > 1) {
+    c.push(inArray(leads.estado, filters.ufs));
+  }
+  if (filters.valorMinCentavos != null) {
+    c.push(gte(leads.valorCreditoCentavos, filters.valorMinCentavos));
+  }
+  if (filters.valorMaxCentavos != null) {
+    c.push(lte(leads.valorCreditoCentavos, filters.valorMaxCentavos));
+  }
   return c;
 }
 
@@ -179,15 +202,30 @@ export async function fetchFunil(
 export type TempoMedioRow = { status: string; horasMedias: number; transicoes: number };
 
 export async function fetchTempoMedioPorStatus(
-  filters: ReportFilters,
+  rawFilters: ReportFilters,
   period: PeriodRange,
 ): Promise<TempoMedioRow[]> {
+  const filters = normalizeFilters(rawFilters);
   // Window function: pra cada interação tipo='mudanca_status', a duração no
   // status anterior = current.criado_em - LAG(criado_em).
   // Se primeira mudança, fallback pra leads.created_at.
   const cb: string[] = [];
-  if (filters.consultorId) cb.push(`l.consultor_id = '${filters.consultorId}'`);
-  if (filters.origem) cb.push(`l.origem = '${filters.origem.replace(/'/g, "''")}'`);
+  if (filters.consultorIds.length > 0) {
+    const list = filters.consultorIds
+      .map((id) => `'${id.replace(/'/g, "''")}'`)
+      .join(",");
+    cb.push(`l.consultor_id IN (${list})`);
+  }
+  if (filters.origens.length > 0) {
+    const list = filters.origens
+      .map((o) => `'${o.replace(/'/g, "''")}'`)
+      .join(",");
+    cb.push(`l.origem IN (${list})`);
+  }
+  if (filters.ufs.length > 0) {
+    const list = filters.ufs.map((uf) => `'${uf.replace(/'/g, "''")}'`).join(",");
+    cb.push(`l.estado IN (${list})`);
+  }
   const extra = cb.length > 0 ? `AND ${cb.join(" AND ")}` : "";
 
   const result = await db.execute<{
@@ -246,12 +284,27 @@ export type PerformanceConsultorRow = {
 };
 
 export async function fetchPerformanceConsultores(
-  filters: ReportFilters,
+  rawFilters: ReportFilters,
   period: PeriodRange,
 ): Promise<PerformanceConsultorRow[]> {
+  const filters = normalizeFilters(rawFilters);
   const consConds: string[] = [];
-  if (filters.origem) consConds.push(`l.origem = '${filters.origem.replace(/'/g, "''")}'`);
-  if (filters.consultorId) consConds.push(`u.id = '${filters.consultorId}'`);
+  if (filters.origens.length > 0) {
+    const list = filters.origens
+      .map((o) => `'${o.replace(/'/g, "''")}'`)
+      .join(",");
+    consConds.push(`l.origem IN (${list})`);
+  }
+  if (filters.consultorIds.length > 0) {
+    const list = filters.consultorIds
+      .map((id) => `'${id.replace(/'/g, "''")}'`)
+      .join(",");
+    consConds.push(`u.id IN (${list})`);
+  }
+  if (filters.ufs.length > 0) {
+    const list = filters.ufs.map((uf) => `'${uf.replace(/'/g, "''")}'`).join(",");
+    consConds.push(`l.estado IN (${list})`);
+  }
   const extra = consConds.length > 0 ? `AND ${consConds.join(" AND ")}` : "";
 
   const result = await db.execute<{
@@ -276,6 +329,7 @@ export async function fetchPerformanceConsultores(
       SELECT EXTRACT(EPOCH FROM (MIN(i.criado_em) - l.atribuido_em)) / 60.0 AS minutos
       FROM public.interacoes i
       WHERE i.lead_id = l.id
+        AND i.criado_em >= l.atribuido_em
         AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
     ) pc ON true
     WHERE u.perfil IN ('admin', 'gerente', 'consultor')
@@ -395,4 +449,1254 @@ export async function fetchOrigensDistintas() {
     .map((r) => r.origem)
     .filter((o): o is string => Boolean(o))
     .sort();
+}
+
+// ============================================================================
+// Sales metrics (avg deal size, avg sales cycle, sales velocity, win rate)
+// ============================================================================
+
+export type SalesMetrics = {
+  avgDealSizeCentavos: number;
+  avgSalesCycleDays: number | null;
+  salesVelocityCentavosPerDay: number;
+  winRate: number; // 0..1 (no período)
+  avgComissaoCentavos: number;
+};
+
+export async function fetchSalesMetrics(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<SalesMetrics> {
+  const cb = baseConds(filters);
+  const fromIso = period.from.toISOString().slice(0, 10);
+  const toIso = period.to.toISOString().slice(0, 10);
+
+  // Avg deal size + sales cycle dos fechados no período
+  const [avgRow] = await db
+    .select({
+      avgValor: sql<string>`coalesce(avg(${leads.valorLiberadoCentavos}), 0)::text`,
+      avgComissao: sql<string>`coalesce(avg(${leads.comissaoCentavos}), 0)::text`,
+      avgCycle: sql<string | null>`avg(extract(epoch from (${leads.dataFechamento}::timestamp - ${leads.createdAt})) / 86400.0)::text`,
+    })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.status, "fechado"),
+        sql`${leads.dataFechamento} >= ${fromIso}::date`,
+        sql`${leads.dataFechamento} <= ${toIso}::date`,
+        ...cb,
+      ),
+    );
+
+  // Win rate no período (fechados / criados que já tiveram resolução final)
+  const [resolvedRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(leads)
+    .where(
+      and(
+        sql`${leads.status} IN ('fechado', 'perdido', 'desqualificado')`,
+        gte(leads.createdAt, period.from),
+        lte(leads.createdAt, period.to),
+        ...cb,
+      ),
+    );
+  const [wonRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.status, "fechado"),
+        gte(leads.createdAt, period.from),
+        lte(leads.createdAt, period.to),
+        ...cb,
+      ),
+    );
+  const winRate =
+    resolvedRow.count > 0 ? wonRow.count / resolvedRow.count : 0;
+
+  // Pipeline atual pra velocity
+  const [pipelineRow] = await db
+    .select({
+      valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+    })
+    .from(leads)
+    .where(
+      and(
+        notInArray(
+          leads.status,
+          ["fechado", "perdido", "desqualificado", "sem_resposta"],
+        ),
+        ...cb,
+      ),
+    );
+
+  const avgCycleDays = avgRow.avgCycle ? Number(avgRow.avgCycle) : null;
+  const pipelineValor = Number(pipelineRow.valor ?? 0);
+  // Sales Velocity = Pipeline × WinRate / SalesCycle
+  // Resultado: "R$ esperados por dia" do pipeline atual
+  const salesVelocity =
+    avgCycleDays && avgCycleDays > 0 && winRate > 0
+      ? (pipelineValor * winRate) / avgCycleDays
+      : 0;
+
+  return {
+    avgDealSizeCentavos: Math.round(Number(avgRow.avgValor ?? 0)),
+    avgSalesCycleDays: avgCycleDays,
+    salesVelocityCentavosPerDay: Math.round(salesVelocity),
+    winRate,
+    avgComissaoCentavos: Math.round(Number(avgRow.avgComissao ?? 0)),
+  };
+}
+
+// ============================================================================
+// Conversion rates entre stages adjacentes (Hubspot-style funnel %)
+// Usa interações de mudança de status pra trackear progressão.
+// ============================================================================
+
+const STAGE_PROGRESSION = [
+  "novo",
+  "conversa_inicial",
+  "aguardando_resposta",
+  "aguardando_documentacao",
+  "documentacao_enviada",
+  "em_negociacao",
+  "fechado",
+] as const;
+
+export type ConversionStage = {
+  fromStatus: string;
+  toStatus: string;
+  reachedFrom: number; // quantos passaram pelo `fromStatus`
+  reachedTo: number; // quantos avançaram pra `toStatus`
+  rate: number; // 0..1
+};
+
+/**
+ * Calcula taxa de conversão entre cada par adjacente de stages do pipeline.
+ * Considera "passou pelo stage" quem está no stage OU em algum stage posterior
+ * (incl. fechado). Quem foi pra perdido/desqualificado não conta como progressão.
+ */
+export async function fetchConversionRates(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<ConversionStage[]> {
+  const cb = baseConds(filters);
+  // Pega leads criados no período (snapshot atual de status)
+  const rows = await db
+    .select({
+      status: leads.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(leads)
+    .where(
+      and(
+        gte(leads.createdAt, period.from),
+        lte(leads.createdAt, period.to),
+        ...cb,
+      ),
+    )
+    .groupBy(leads.status);
+
+  const map = new Map<string, number>();
+  for (const r of rows) map.set(String(r.status), Number(r.count));
+
+  // Quantos chegaram em cada stage (= count no stage + todos posteriores)
+  const reachedAt: Record<string, number> = {};
+  for (let i = 0; i < STAGE_PROGRESSION.length; i++) {
+    let total = 0;
+    for (let j = i; j < STAGE_PROGRESSION.length; j++) {
+      total += map.get(STAGE_PROGRESSION[j]!) ?? 0;
+    }
+    reachedAt[STAGE_PROGRESSION[i]!] = total;
+  }
+
+  const result: ConversionStage[] = [];
+  for (let i = 0; i < STAGE_PROGRESSION.length - 1; i++) {
+    const from = STAGE_PROGRESSION[i]!;
+    const to = STAGE_PROGRESSION[i + 1]!;
+    const rFrom = reachedAt[from]!;
+    const rTo = reachedAt[to]!;
+    result.push({
+      fromStatus: from,
+      toStatus: to,
+      reachedFrom: rFrom,
+      reachedTo: rTo,
+      rate: rFrom > 0 ? rTo / rFrom : 0,
+    });
+  }
+  return result;
+}
+
+// ============================================================================
+// Loss reasons (motivos de perda/desqualificação)
+// ============================================================================
+
+export type LossReasonRow = { motivo: string; count: number };
+
+export async function fetchLossReasons(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<LossReasonRow[]> {
+  const cb = baseConds(filters);
+  const rows = await db
+    .select({
+      motivo: sql<string>`coalesce(${leads.motivoDesqualificacao}, 'Não informado')`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(leads)
+    .where(
+      and(
+        sql`${leads.status} IN ('perdido', 'desqualificado')`,
+        gte(leads.createdAt, period.from),
+        lte(leads.createdAt, period.to),
+        ...cb,
+      ),
+    )
+    .groupBy(sql`coalesce(${leads.motivoDesqualificacao}, 'Não informado')`)
+    .orderBy(sql`count(*) desc`);
+
+  return rows.map((r) => ({
+    motivo: String(r.motivo),
+    count: Number(r.count),
+  }));
+}
+
+// ============================================================================
+// ROI por origem (count, win rate, total liberado)
+// ============================================================================
+
+export type OrigemROIRow = {
+  origem: string;
+  leadsCount: number;
+  resolvidos: number;
+  fechados: number;
+  winRate: number;
+  totalLiberadoCentavos: number;
+  avgValorBuscadoCentavos: number;
+};
+
+export async function fetchOrigemROI(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<OrigemROIRow[]> {
+  const cb = baseConds(filters);
+  const rows = await db
+    .select({
+      origem: sql<string>`coalesce(${leads.origem}, 'Sem origem')`,
+      total: sql<number>`count(*)::int`,
+      resolvidos: sql<number>`count(*) filter (where ${leads.status} IN ('fechado', 'perdido', 'desqualificado'))::int`,
+      fechados: sql<number>`count(*) filter (where ${leads.status} = 'fechado')::int`,
+      liberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}) filter (where ${leads.status} = 'fechado'), 0)::text`,
+      avgBuscado: sql<string>`coalesce(avg(${leads.valorCreditoCentavos}), 0)::text`,
+    })
+    .from(leads)
+    .where(
+      and(
+        gte(leads.createdAt, period.from),
+        lte(leads.createdAt, period.to),
+        ...cb,
+      ),
+    )
+    .groupBy(sql`coalesce(${leads.origem}, 'Sem origem')`)
+    .orderBy(sql`count(*) desc`);
+
+  return rows.map((r) => {
+    const total = Number(r.total);
+    const resolvidos = Number(r.resolvidos);
+    const fechados = Number(r.fechados);
+    return {
+      origem: String(r.origem),
+      leadsCount: total,
+      resolvidos,
+      fechados,
+      winRate: resolvidos > 0 ? fechados / resolvidos : 0,
+      totalLiberadoCentavos: Number(r.liberado ?? 0),
+      avgValorBuscadoCentavos: Math.round(Number(r.avgBuscado ?? 0)),
+    };
+  });
+}
+
+// ============================================================================
+// SLA compliance (% leads com 1º contato dentro do SLA de 30min)
+// ============================================================================
+
+export type SlaComplianceRow = {
+  totalAtribuidos: number;
+  dentroSla: number;
+  rate: number; // 0..1
+  avgPrimeiroContatoMin: number | null;
+};
+
+export async function fetchSlaCompliance(
+  rawFilters: ReportFilters,
+  period: PeriodRange,
+): Promise<SlaComplianceRow> {
+  const filters = normalizeFilters(rawFilters);
+  const cb = baseConds(filters);
+  const fromIso = period.from.toISOString();
+  const toIso = period.to.toISOString();
+  const consConds: string[] = [];
+  if (filters.origens.length > 0) {
+    const list = filters.origens
+      .map((o) => `'${o.replace(/'/g, "''")}'`)
+      .join(",");
+    consConds.push(`l.origem IN (${list})`);
+  }
+  if (filters.consultorIds.length > 0) {
+    const list = filters.consultorIds
+      .map((id) => `'${id.replace(/'/g, "''")}'`)
+      .join(",");
+    consConds.push(`l.consultor_id IN (${list})`);
+  }
+  if (filters.ufs.length > 0) {
+    const list = filters.ufs.map((uf) => `'${uf.replace(/'/g, "''")}'`).join(",");
+    consConds.push(`l.estado IN (${list})`);
+  }
+  void cb;
+  const extra = consConds.length > 0 ? `AND ${consConds.join(" AND ")}` : "";
+
+  const result = await db.execute<{
+    total: string;
+    dentro: string;
+    avg_min: string | null;
+  }>(sql.raw(`
+    SELECT
+      COUNT(*)::text AS total,
+      COUNT(*) FILTER (WHERE pc.minutos IS NOT NULL AND pc.minutos <= 30)::text AS dentro,
+      AVG(pc.minutos)::text AS avg_min
+    FROM public.leads l
+    LEFT JOIN LATERAL (
+      SELECT EXTRACT(EPOCH FROM (MIN(i.criado_em) - l.atribuido_em)) / 60.0 AS minutos
+      FROM public.interacoes i
+      WHERE i.lead_id = l.id
+        AND i.criado_em >= l.atribuido_em
+        AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
+    ) pc ON true
+    WHERE l.consultor_id IS NOT NULL
+      AND l.atribuido_em >= '${fromIso}'
+      AND l.atribuido_em <= '${toIso}'
+      ${extra}
+  `));
+
+  const r = result[0];
+  if (!r) {
+    return {
+      totalAtribuidos: 0,
+      dentroSla: 0,
+      rate: 0,
+      avgPrimeiroContatoMin: null,
+    };
+  }
+  const total = Number(r.total ?? 0);
+  const dentro = Number(r.dentro ?? 0);
+  return {
+    totalAtribuidos: total,
+    dentroSla: dentro,
+    rate: total > 0 ? dentro / total : 0,
+    avgPrimeiroContatoMin: r.avg_min != null ? Number(r.avg_min) : null,
+  };
+}
+
+// ============================================================================
+// Saúde do pipeline pessoal (esfriando, SLA atrasado, aguardando ação)
+// ============================================================================
+
+export type SaudePipeline = {
+  esfriando: number;
+  slaAtrasado: number;
+  aguardandoAcao: number;
+};
+
+/**
+ * 3 contadores agregados pra um consultor específico:
+ *  - esfriando: leads ativos sem interação manual há 5+ dias (alinhado com
+ *    o alerta de borda vermelha em listagens).
+ *  - slaAtrasado: leads novos atribuídos há 30+ minutos sem 1ª interação.
+ *  - aguardandoAcao: leads que demandam movimento — status='novo' há >2h, ou
+ *    'conversa_inicial' sem update há 24h+, ou 'aguardando_documentacao' há 5d+.
+ */
+export async function fetchSaudePipeline(
+  consultorId: string,
+): Promise<SaudePipeline> {
+  const result = await db.execute<{
+    esfriando: string;
+    sla_atrasado: string;
+    aguardando_acao: string;
+  }>(sql.raw(`
+    WITH base AS (
+      SELECT l.id, l.status, l.atribuido_em, l.ultimo_contato, l.updated_at,
+        COALESCE(
+          (
+            SELECT MAX(i.criado_em) FROM public.interacoes i
+            WHERE i.lead_id = l.id
+              AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
+          ),
+          NULL
+        ) AS ultima_interacao_manual
+      FROM public.leads l
+      WHERE l.consultor_id = '${consultorId.replace(/'/g, "''")}'
+        AND l.status NOT IN ('fechado', 'perdido', 'desqualificado')
+    )
+    SELECT
+      COUNT(*) FILTER (
+        WHERE ultima_interacao_manual IS NULL AND atribuido_em < NOW() - INTERVAL '5 days'
+        OR ultima_interacao_manual < NOW() - INTERVAL '5 days'
+      )::text AS esfriando,
+      COUNT(*) FILTER (
+        WHERE status = 'novo'
+        AND atribuido_em IS NOT NULL
+        AND atribuido_em < NOW() - INTERVAL '30 minutes'
+        AND ultima_interacao_manual IS NULL
+      )::text AS sla_atrasado,
+      COUNT(*) FILTER (
+        WHERE
+          (status = 'novo' AND atribuido_em < NOW() - INTERVAL '2 hours')
+          OR (status = 'conversa_inicial' AND COALESCE(ultima_interacao_manual, atribuido_em) < NOW() - INTERVAL '24 hours')
+          OR (status = 'aguardando_documentacao' AND updated_at < NOW() - INTERVAL '5 days')
+      )::text AS aguardando_acao
+    FROM base
+  `));
+  const r = result[0];
+  if (!r) return { esfriando: 0, slaAtrasado: 0, aguardandoAcao: 0 };
+  return {
+    esfriando: Number(r.esfriando ?? 0),
+    slaAtrasado: Number(r.sla_atrasado ?? 0),
+    aguardandoAcao: Number(r.aguardando_acao ?? 0),
+  };
+}
+
+// ============================================================================
+// Histórico detalhado de fechamentos no período (pra /meu-desempenho)
+// ============================================================================
+
+export type FechamentoRow = {
+  leadId: string;
+  leadNome: string;
+  bancoAprovador: string | null;
+  valorLiberadoCentavos: number;
+  comissaoCentavos: number;
+  dataFechamento: string; // YYYY-MM-DD
+  cicloDias: number;
+};
+
+export async function fetchHistoricoFechamentos(
+  consultorId: string,
+  period: PeriodRange,
+): Promise<FechamentoRow[]> {
+  const result = await db.execute<{
+    lead_id: string;
+    lead_nome: string;
+    banco: string | null;
+    valor_liberado: string;
+    comissao: string;
+    data_fechamento: string;
+    ciclo_dias: string;
+  }>(sql.raw(`
+    SELECT
+      l.id AS lead_id,
+      l.nome AS lead_nome,
+      l.banco_aprovador AS banco,
+      COALESCE(l.valor_liberado_centavos, 0)::text AS valor_liberado,
+      COALESCE(l.comissao_centavos, 0)::text AS comissao,
+      to_char(l.data_fechamento, 'YYYY-MM-DD') AS data_fechamento,
+      EXTRACT(EPOCH FROM (l.data_fechamento::timestamp - l.created_at)) / 86400.0 AS ciclo_dias
+    FROM public.leads l
+    WHERE l.consultor_id = '${consultorId.replace(/'/g, "''")}'
+      AND l.status = 'fechado'
+      AND l.data_fechamento >= '${period.from.toISOString().slice(0, 10)}'::date
+      AND l.data_fechamento <= '${period.to.toISOString().slice(0, 10)}'::date
+    ORDER BY l.data_fechamento DESC
+  `));
+  return result.map((r) => ({
+    leadId: r.lead_id,
+    leadNome: r.lead_nome,
+    bancoAprovador: r.banco,
+    valorLiberadoCentavos: Number(r.valor_liberado ?? 0),
+    comissaoCentavos: Number(r.comissao ?? 0),
+    dataFechamento: r.data_fechamento,
+    cicloDias: Math.round(Number(r.ciclo_dias ?? 0)),
+  }));
+}
+
+// ============================================================================
+// Volume de leads atribuídos por dia (pra um consultor) — sem segmentar
+// ============================================================================
+
+export type VolumeAtribuidoPorDia = { dia: string; count: number };
+
+export async function fetchVolumeAtribuidoPorDia(
+  consultorId: string,
+  period: PeriodRange,
+): Promise<VolumeAtribuidoPorDia[]> {
+  const result = await db.execute<{ dia: string; count: string }>(sql.raw(`
+    SELECT
+      to_char(date_trunc('day', l.atribuido_em), 'YYYY-MM-DD') AS dia,
+      COUNT(*)::text AS count
+    FROM public.leads l
+    WHERE l.consultor_id = '${consultorId.replace(/'/g, "''")}'
+      AND l.atribuido_em IS NOT NULL
+      AND l.atribuido_em >= '${period.from.toISOString()}'
+      AND l.atribuido_em <= '${period.to.toISOString()}'
+    GROUP BY date_trunc('day', l.atribuido_em)
+    ORDER BY date_trunc('day', l.atribuido_em)
+  `));
+  return result.map((r) => ({ dia: r.dia, count: Number(r.count ?? 0) }));
+}
+
+// ============================================================================
+// Performance por estado (UF) — leads, R$, conversão
+// ============================================================================
+
+export type PerformanceUfRow = {
+  uf: string;
+  leadsCount: number;
+  pipelineCount: number;
+  fechados: number;
+  totalBuscadoCentavos: number;
+  totalLiberadoCentavos: number;
+  taxaConversao: number;
+};
+
+export async function fetchPerformancePorUf(
+  rawFilters: ReportFilters,
+  period: PeriodRange,
+): Promise<PerformanceUfRow[]> {
+  const filters = normalizeFilters(rawFilters);
+  // baseConds reutilizado pra herdar filtros de origem/consultor/etc; mas
+  // não filtramos por UF aqui (queremos VER por UF). Removo da clausula.
+  const filtersWithoutUf = { ...filters, ufs: [] };
+  const cb = baseConds(filtersWithoutUf);
+  const rows = await db
+    .select({
+      uf: sql<string>`coalesce(${leads.estado}, '—')`,
+      total: sql<number>`count(*)::int`,
+      pipeline: sql<number>`count(*) filter (where ${leads.status} not in ('fechado','perdido','desqualificado','sem_resposta'))::int`,
+      fechados: sql<number>`count(*) filter (where ${leads.status} = 'fechado')::int`,
+      buscado: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+      liberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}) filter (where ${leads.status} = 'fechado'), 0)::text`,
+      resolvidos: sql<number>`count(*) filter (where ${leads.status} in ('fechado','perdido','desqualificado'))::int`,
+    })
+    .from(leads)
+    .where(
+      and(
+        gte(leads.createdAt, period.from),
+        lte(leads.createdAt, period.to),
+        ...cb,
+      ),
+    )
+    .groupBy(sql`coalesce(${leads.estado}, '—')`)
+    .orderBy(sql`count(*) desc`);
+
+  return rows.map((r) => {
+    const fechados = Number(r.fechados);
+    const resolvidos = Number(r.resolvidos);
+    return {
+      uf: String(r.uf),
+      leadsCount: Number(r.total),
+      pipelineCount: Number(r.pipeline),
+      fechados,
+      totalBuscadoCentavos: Number(r.buscado ?? 0),
+      totalLiberadoCentavos: Number(r.liberado ?? 0),
+      taxaConversao: resolvidos > 0 ? fechados / resolvidos : 0,
+    };
+  });
+}
+
+// ============================================================================
+// UFs distintas (pra autocomplete de filtros)
+// ============================================================================
+
+export async function fetchUfsDistintas(): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ uf: leads.estado })
+    .from(leads);
+  return rows
+    .map((r) => r.uf)
+    .filter((u): u is string => Boolean(u))
+    .sort();
+}
+
+// ============================================================================
+// PAINEL EXECUTIVO — queries estratégicas (admin only no caller)
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// Projeção de receita do mês corrente
+// ----------------------------------------------------------------------------
+
+export type ProjecaoMes = {
+  comissaoFechadaCentavos: number;
+  pipelineEmNegociacaoCentavos: number;
+  ticketMedioCentavos: number;
+  comissaoMediaCentavos: number;
+  winRateHistorico: number; // 0..1 (rolling 90d)
+  projetadoCentavos: number;
+  /** Quantos leads atualmente em em_negociacao. */
+  emNegociacaoCount: number;
+};
+
+export async function fetchProjecaoMes(): Promise<ProjecaoMes> {
+  // Comissão já fechada no mês corrente
+  const result = await db.execute<{
+    comissao_fechada: string;
+    pipeline_em_negociacao: string;
+    ticket_medio: string;
+    comissao_media: string;
+    em_negociacao_count: string;
+    win_rate: string;
+  }>(sql.raw(`
+    WITH mes_atual AS (
+      SELECT
+        COALESCE(SUM(comissao_centavos), 0)::text AS comissao_fechada
+      FROM public.leads
+      WHERE status = 'fechado'
+        AND data_fechamento >= date_trunc('month', NOW())
+        AND data_fechamento < date_trunc('month', NOW()) + INTERVAL '1 month'
+    ),
+    pipeline AS (
+      SELECT
+        COALESCE(SUM(valor_credito_centavos), 0)::text AS pipeline_em_negociacao,
+        COUNT(*)::text AS em_negociacao_count
+      FROM public.leads
+      WHERE status = 'em_negociacao'
+    ),
+    fechados_90d AS (
+      SELECT
+        COALESCE(AVG(valor_liberado_centavos), 0)::text AS ticket_medio,
+        COALESCE(AVG(comissao_centavos), 0)::text AS comissao_media,
+        COUNT(*)::int AS fechados_count
+      FROM public.leads
+      WHERE status = 'fechado'
+        AND created_at >= NOW() - INTERVAL '90 days'
+    ),
+    resolvidos_90d AS (
+      SELECT COUNT(*)::int AS total
+      FROM public.leads
+      WHERE status IN ('fechado', 'perdido', 'desqualificado')
+        AND created_at >= NOW() - INTERVAL '90 days'
+    )
+    SELECT
+      ma.comissao_fechada,
+      p.pipeline_em_negociacao,
+      p.em_negociacao_count,
+      f.ticket_medio,
+      f.comissao_media,
+      CASE WHEN r.total > 0 THEN (f.fechados_count::numeric / r.total)::text ELSE '0' END AS win_rate
+    FROM mes_atual ma, pipeline p, fechados_90d f, resolvidos_90d r
+  `));
+
+  const r = result[0];
+  if (!r) {
+    return {
+      comissaoFechadaCentavos: 0,
+      pipelineEmNegociacaoCentavos: 0,
+      ticketMedioCentavos: 0,
+      comissaoMediaCentavos: 0,
+      winRateHistorico: 0,
+      projetadoCentavos: 0,
+      emNegociacaoCount: 0,
+    };
+  }
+
+  const comissaoFechada = Number(r.comissao_fechada ?? 0);
+  const emNegociacaoCount = Number(r.em_negociacao_count ?? 0);
+  const comissaoMedia = Number(r.comissao_media ?? 0);
+  const winRate = Number(r.win_rate ?? 0);
+  const expectedAdicional = Math.round(
+    emNegociacaoCount * comissaoMedia * winRate,
+  );
+
+  return {
+    comissaoFechadaCentavos: comissaoFechada,
+    pipelineEmNegociacaoCentavos: Number(r.pipeline_em_negociacao ?? 0),
+    ticketMedioCentavos: Math.round(Number(r.ticket_medio ?? 0)),
+    comissaoMediaCentavos: Math.round(comissaoMedia),
+    winRateHistorico: winRate,
+    projetadoCentavos: comissaoFechada + expectedAdicional,
+    emNegociacaoCount,
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Pipeline em R$ por status (barras horizontais)
+// ----------------------------------------------------------------------------
+
+export type PipelineEmReaisRow = {
+  status: string;
+  count: number;
+  totalCentavos: number;
+};
+
+export async function fetchPipelineEmReais(): Promise<PipelineEmReaisRow[]> {
+  const rows = await db
+    .select({
+      status: leads.status,
+      count: sql<number>`count(*)::int`,
+      total: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+    })
+    .from(leads)
+    .where(notInArray(leads.status, ["fechado", "perdido", "desqualificado"]))
+    .groupBy(leads.status);
+  return rows.map((r) => ({
+    status: String(r.status),
+    count: Number(r.count),
+    totalCentavos: Number(r.total ?? 0),
+  }));
+}
+
+// ----------------------------------------------------------------------------
+// Percentis de tempo (P25/P50/P75/P90) entre milestones
+// ----------------------------------------------------------------------------
+
+export type PercentilRow = {
+  metrica: string;
+  unidade: "min" | "horas" | "dias";
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  p90: number | null;
+};
+
+export async function fetchTempoPercentis(
+  period: PeriodRange,
+): Promise<PercentilRow[]> {
+  const fromIso = period.from.toISOString();
+  const toIso = period.to.toISOString();
+
+  // 1. Atribuição → 1º contato (minutos) — pra leads atribuídos no período
+  const r1 = await db.execute<{
+    p25: string;
+    p50: string;
+    p75: string;
+    p90: string;
+  }>(sql.raw(`
+    WITH tempos AS (
+      SELECT EXTRACT(EPOCH FROM (MIN(i.criado_em) - l.atribuido_em)) / 60.0 AS minutos
+      FROM public.leads l
+      JOIN public.interacoes i ON i.lead_id = l.id
+      WHERE l.atribuido_em IS NOT NULL
+        AND l.atribuido_em >= '${fromIso}'
+        AND l.atribuido_em <= '${toIso}'
+        AND i.criado_em >= l.atribuido_em
+        AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
+      GROUP BY l.id, l.atribuido_em
+    )
+    SELECT
+      COALESCE(percentile_cont(0.25) WITHIN GROUP (ORDER BY minutos), 0)::text AS p25,
+      COALESCE(percentile_cont(0.50) WITHIN GROUP (ORDER BY minutos), 0)::text AS p50,
+      COALESCE(percentile_cont(0.75) WITHIN GROUP (ORDER BY minutos), 0)::text AS p75,
+      COALESCE(percentile_cont(0.90) WITHIN GROUP (ORDER BY minutos), 0)::text AS p90
+    FROM tempos
+  `));
+
+  // 2. Criação → fechamento (dias) — pra leads fechados no período
+  const r2 = await db.execute<{
+    p25: string;
+    p50: string;
+    p75: string;
+    p90: string;
+  }>(sql.raw(`
+    WITH ciclos AS (
+      SELECT EXTRACT(EPOCH FROM (data_fechamento::timestamp - created_at)) / 86400.0 AS dias
+      FROM public.leads
+      WHERE status = 'fechado'
+        AND data_fechamento >= '${period.from.toISOString().slice(0, 10)}'::date
+        AND data_fechamento <= '${period.to.toISOString().slice(0, 10)}'::date
+    )
+    SELECT
+      COALESCE(percentile_cont(0.25) WITHIN GROUP (ORDER BY dias), 0)::text AS p25,
+      COALESCE(percentile_cont(0.50) WITHIN GROUP (ORDER BY dias), 0)::text AS p50,
+      COALESCE(percentile_cont(0.75) WITHIN GROUP (ORDER BY dias), 0)::text AS p75,
+      COALESCE(percentile_cont(0.90) WITHIN GROUP (ORDER BY dias), 0)::text AS p90
+    FROM ciclos
+  `));
+
+  // 3. Atribuição → fechamento (dias) — quanto tempo tomou nas mãos do consultor
+  const r3 = await db.execute<{
+    p25: string;
+    p50: string;
+    p75: string;
+    p90: string;
+  }>(sql.raw(`
+    WITH ciclos AS (
+      SELECT EXTRACT(EPOCH FROM (data_fechamento::timestamp - atribuido_em)) / 86400.0 AS dias
+      FROM public.leads
+      WHERE status = 'fechado'
+        AND atribuido_em IS NOT NULL
+        AND data_fechamento >= '${period.from.toISOString().slice(0, 10)}'::date
+        AND data_fechamento <= '${period.to.toISOString().slice(0, 10)}'::date
+    )
+    SELECT
+      COALESCE(percentile_cont(0.25) WITHIN GROUP (ORDER BY dias), 0)::text AS p25,
+      COALESCE(percentile_cont(0.50) WITHIN GROUP (ORDER BY dias), 0)::text AS p50,
+      COALESCE(percentile_cont(0.75) WITHIN GROUP (ORDER BY dias), 0)::text AS p75,
+      COALESCE(percentile_cont(0.90) WITHIN GROUP (ORDER BY dias), 0)::text AS p90
+    FROM ciclos
+  `));
+
+  function pickRow(rs: {
+    p25: string;
+    p50: string;
+    p75: string;
+    p90: string;
+  }[]): { p25: number | null; p50: number | null; p75: number | null; p90: number | null } {
+    const r = rs[0];
+    if (!r)
+      return { p25: null, p50: null, p75: null, p90: null };
+    const conv = (v: string) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    return {
+      p25: conv(r.p25),
+      p50: conv(r.p50),
+      p75: conv(r.p75),
+      p90: conv(r.p90),
+    };
+  }
+
+  return [
+    { metrica: "Atribuição → 1º contato", unidade: "min", ...pickRow(r1) },
+    { metrica: "Criação → fechamento", unidade: "dias", ...pickRow(r2) },
+    { metrica: "Atribuição → fechamento", unidade: "dias", ...pickRow(r3) },
+  ];
+}
+
+// ----------------------------------------------------------------------------
+// Top origens detalhadas (origem + utm_source + utm_campaign)
+// ----------------------------------------------------------------------------
+
+export type TopOrigemRow = {
+  origem: string;
+  utmSource: string;
+  utmCampaign: string;
+  leads: number;
+  fechados: number;
+  totalLiberadoCentavos: number;
+  taxa: number;
+};
+
+export async function fetchTopOrigensDetalhadas(
+  period: PeriodRange,
+  limit: number = 10,
+): Promise<TopOrigemRow[]> {
+  const rows = await db.execute<{
+    origem: string;
+    utm_source: string;
+    utm_campaign: string;
+    leads_count: string;
+    fechados: string;
+    liberado: string;
+    resolvidos: string;
+  }>(sql.raw(`
+    SELECT
+      COALESCE(origem, '—') AS origem,
+      COALESCE(utm_source, '—') AS utm_source,
+      COALESCE(utm_campaign, '—') AS utm_campaign,
+      COUNT(*)::text AS leads_count,
+      COUNT(*) FILTER (WHERE status = 'fechado')::text AS fechados,
+      COALESCE(SUM(valor_liberado_centavos) FILTER (WHERE status = 'fechado'), 0)::text AS liberado,
+      COUNT(*) FILTER (WHERE status IN ('fechado', 'perdido', 'desqualificado'))::text AS resolvidos
+    FROM public.leads
+    WHERE created_at >= '${period.from.toISOString()}'
+      AND created_at <= '${period.to.toISOString()}'
+    GROUP BY COALESCE(origem, '—'), COALESCE(utm_source, '—'), COALESCE(utm_campaign, '—')
+    ORDER BY SUM(valor_liberado_centavos) FILTER (WHERE status = 'fechado') DESC NULLS LAST,
+             COUNT(*) DESC
+    LIMIT ${limit}
+  `));
+
+  return rows.map((r) => {
+    const fechados = Number(r.fechados ?? 0);
+    const resolvidos = Number(r.resolvidos ?? 0);
+    return {
+      origem: r.origem,
+      utmSource: r.utm_source,
+      utmCampaign: r.utm_campaign,
+      leads: Number(r.leads_count ?? 0),
+      fechados,
+      totalLiberadoCentavos: Number(r.liberado ?? 0),
+      taxa: resolvidos > 0 ? fechados / resolvidos : 0,
+    };
+  });
+}
+
+// ----------------------------------------------------------------------------
+// Comparativo de períodos (8 métricas × atual/anterior/Δ)
+// ----------------------------------------------------------------------------
+
+export type ComparativoRow = {
+  metrica: string;
+  atual: number;
+  anterior: number;
+  /** Quando aplicável: "R$" pra valores em centavos, "%" pra taxas. */
+  formato: "numero" | "centavos" | "pct" | "dias";
+};
+
+export async function fetchComparativoPeriodos(
+  filters: ReportFilters,
+  curr: PeriodRange,
+  prev: PeriodRange,
+): Promise<ComparativoRow[]> {
+  const [kCurr, kPrev, sCurr, sPrev] = await Promise.all([
+    fetchKpis(filters, curr),
+    fetchKpis(filters, prev),
+    fetchSalesMetrics(filters, curr),
+    fetchSalesMetrics(filters, prev),
+  ]);
+
+  return [
+    {
+      metrica: "Leads novos",
+      atual: kCurr.leadsNovosCount,
+      anterior: kPrev.leadsNovosCount,
+      formato: "numero",
+    },
+    {
+      metrica: "Leads fechados",
+      atual: kCurr.fechadosCount,
+      anterior: kPrev.fechadosCount,
+      formato: "numero",
+    },
+    {
+      metrica: "R$ liberado",
+      atual: kCurr.fechadosValorLiberadoCentavos,
+      anterior: kPrev.fechadosValorLiberadoCentavos,
+      formato: "centavos",
+    },
+    {
+      metrica: "R$ comissão",
+      atual: kCurr.fechadosComissaoCentavos,
+      anterior: kPrev.fechadosComissaoCentavos,
+      formato: "centavos",
+    },
+    {
+      metrica: "Ticket médio",
+      atual: sCurr.avgDealSizeCentavos,
+      anterior: sPrev.avgDealSizeCentavos,
+      formato: "centavos",
+    },
+    {
+      metrica: "Ciclo médio",
+      atual: sCurr.avgSalesCycleDays ?? 0,
+      anterior: sPrev.avgSalesCycleDays ?? 0,
+      formato: "dias",
+    },
+    {
+      metrica: "Win rate",
+      atual: sCurr.winRate * 100,
+      anterior: sPrev.winRate * 100,
+      formato: "pct",
+    },
+    {
+      metrica: "Pipeline ativo (R$)",
+      atual: kCurr.pipelineValorCentavos,
+      anterior: kPrev.pipelineValorCentavos,
+      formato: "centavos",
+    },
+  ];
+}
+
+// ----------------------------------------------------------------------------
+// Sparklines: receita dos últimos N períodos (mensais)
+// ----------------------------------------------------------------------------
+
+export type SparklinePoint = { mes: string; valor: number };
+
+export async function fetchSparkRevenue(
+  meses: number = 6,
+): Promise<{
+  comissao: SparklinePoint[];
+  liberado: SparklinePoint[];
+  ticketMedio: SparklinePoint[];
+  cicloMedio: SparklinePoint[];
+}> {
+  const rows = await db.execute<{
+    mes: string;
+    comissao: string;
+    liberado: string;
+    ticket: string;
+    ciclo: string | null;
+  }>(sql.raw(`
+    SELECT
+      to_char(date_trunc('month', data_fechamento), 'YYYY-MM') AS mes,
+      COALESCE(SUM(comissao_centavos), 0)::text AS comissao,
+      COALESCE(SUM(valor_liberado_centavos), 0)::text AS liberado,
+      COALESCE(AVG(valor_liberado_centavos), 0)::text AS ticket,
+      AVG(EXTRACT(EPOCH FROM (data_fechamento::timestamp - created_at)) / 86400.0)::text AS ciclo
+    FROM public.leads
+    WHERE status = 'fechado'
+      AND data_fechamento >= date_trunc('month', NOW() - INTERVAL '${meses - 1} months')
+    GROUP BY date_trunc('month', data_fechamento)
+    ORDER BY date_trunc('month', data_fechamento)
+  `));
+
+  return {
+    comissao: rows.map((r) => ({ mes: r.mes, valor: Number(r.comissao ?? 0) })),
+    liberado: rows.map((r) => ({ mes: r.mes, valor: Number(r.liberado ?? 0) })),
+    ticketMedio: rows.map((r) => ({ mes: r.mes, valor: Number(r.ticket ?? 0) })),
+    cicloMedio: rows.map((r) => ({ mes: r.mes, valor: r.ciclo ? Number(r.ciclo) : 0 })),
+  };
+}
+
+// ============================================================================
+// Distribuições demográficas/operacionais (% por categoria)
+// ============================================================================
+
+export type DistribRow = { valor: string; count: number; pct: number };
+
+export type Distribuicoes = {
+  tipoPessoa: DistribRow[];
+  objetivoCredito: DistribRow[];
+  tipoImovel: DistribRow[];
+  situacaoImovel: DistribRow[];
+  ocupacao: DistribRow[];
+  estadoCivil: DistribRow[];
+  totalLeads: number;
+};
+
+/**
+ * Agrega 6 distribuições demográficas/operacionais dos leads no período,
+ * respeitando filtros (consultor/origem/uf/valor). Útil pra entender quem é
+ * o lead típico que chega — base pra decisões de marketing e produto.
+ *
+ * Usa um único scan com FILTER (WHERE ...) por valor pra evitar 6 queries
+ * separadas. Performance: ~1 plano de query agregando tudo.
+ */
+export async function fetchDistribuicoes(
+  rawFilters: ReportFilters,
+  period: PeriodRange,
+): Promise<Distribuicoes> {
+  const filters = normalizeFilters(rawFilters);
+  const cb = baseConds(filters);
+
+  // Single-pass com group sets via UNION ALL — uma query, 6 dimensões
+  const fromIso = period.from.toISOString();
+  const toIso = period.to.toISOString();
+
+  // Onde-clause em SQL raw pra reaproveitar nas 6 sub-queries
+  const consConds: string[] = [
+    `created_at >= '${fromIso}'`,
+    `created_at <= '${toIso}'`,
+  ];
+  if (filters.consultorIds.length > 0) {
+    const list = filters.consultorIds
+      .map((id) => `'${id.replace(/'/g, "''")}'`)
+      .join(",");
+    consConds.push(`consultor_id IN (${list})`);
+  }
+  if (filters.origens.length > 0) {
+    const list = filters.origens
+      .map((o) => `'${o.replace(/'/g, "''")}'`)
+      .join(",");
+    consConds.push(`origem IN (${list})`);
+  }
+  if (filters.ufs.length > 0) {
+    const list = filters.ufs.map((uf) => `'${uf.replace(/'/g, "''")}'`).join(",");
+    consConds.push(`estado IN (${list})`);
+  }
+  if (filters.valorMinCentavos != null) {
+    consConds.push(`valor_credito_centavos >= ${filters.valorMinCentavos}`);
+  }
+  if (filters.valorMaxCentavos != null) {
+    consConds.push(`valor_credito_centavos <= ${filters.valorMaxCentavos}`);
+  }
+  const whereClause = consConds.join(" AND ");
+
+  // Pega total + 6 distribuições em paralelo (Promise.all dentro do mesmo
+  // pool de conexões — fica rápido em produção mas sequencial em dev se
+  // max=1, ainda assim < 100ms cada).
+  const [
+    totalRow,
+    tipoPessoa,
+    objetivoCredito,
+    tipoImovel,
+    situacaoImovel,
+    ocupacao,
+    estadoCivil,
+  ] = await Promise.all([
+    db.execute<{ total: string }>(
+      sql.raw(
+        `SELECT COUNT(*)::text AS total FROM public.leads WHERE ${whereClause}`,
+      ),
+    ),
+    distribOf("tipo_pessoa", whereClause),
+    distribOf("objetivo_credito", whereClause),
+    distribOf("tipo_imovel", whereClause),
+    distribOf("situacao_imovel", whereClause),
+    distribOf("ocupacao", whereClause),
+    distribOf("estado_civil", whereClause),
+  ]);
+
+  void cb;
+  const totalLeads = Number(totalRow[0]?.total ?? 0);
+
+  return {
+    tipoPessoa,
+    objetivoCredito,
+    tipoImovel,
+    situacaoImovel,
+    ocupacao,
+    estadoCivil,
+    totalLeads,
+  };
+}
+
+async function distribOf(
+  column: string,
+  whereClause: string,
+): Promise<DistribRow[]> {
+  const rows = await db.execute<{ valor: string; count: string }>(
+    sql.raw(`
+      SELECT
+        COALESCE(${column}, 'Não informado') AS valor,
+        COUNT(*)::text AS count
+      FROM public.leads
+      WHERE ${whereClause}
+      GROUP BY COALESCE(${column}, 'Não informado')
+      ORDER BY COUNT(*) DESC
+    `),
+  );
+  const total = rows.reduce((s, r) => s + Number(r.count ?? 0), 0);
+  return rows.map((r) => {
+    const count = Number(r.count ?? 0);
+    return {
+      valor: r.valor,
+      count,
+      pct: total > 0 ? count / total : 0,
+    };
+  });
+}
+
+// ============================================================================
+// Saúde global (esfriando) — agregado de toda operação, sem filtro de consultor
+// ============================================================================
+
+/**
+ * Conta leads ATIVOS (status não-terminal) "esfriando" — sem interação
+ * manual há 5+ dias OU nunca tiveram interação manual e foram atribuídos
+ * há 5+ dias.
+ *
+ * Threshold alinhado com o alerta de borda vermelha em listagens (mesma
+ * janela de 5 dias = uma única "régua" pra todo o sistema).
+ *
+ * Usado pelo card "Pipeline esfriando" em /relatorios.
+ */
+export async function fetchEsfriandoGlobal(): Promise<{ count: number }> {
+  const result = await db.execute<{ count: string }>(sql.raw(`
+    WITH base AS (
+      SELECT l.id, l.atribuido_em,
+        (
+          SELECT MAX(i.criado_em) FROM public.interacoes i
+          WHERE i.lead_id = l.id
+            AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
+        ) AS ultima_interacao_manual
+      FROM public.leads l
+      WHERE l.status NOT IN ('fechado', 'perdido', 'desqualificado', 'sem_resposta')
+    )
+    SELECT COUNT(*)::text AS count
+    FROM base
+    WHERE
+      (ultima_interacao_manual IS NULL AND atribuido_em < NOW() - INTERVAL '5 days')
+      OR (ultima_interacao_manual < NOW() - INTERVAL '5 days')
+  `));
+  return { count: Number(result[0]?.count ?? 0) };
+}
+
+// ============================================================================
+// KPIs por consultor — métrica baseada em atribuido_em (não created_at)
+//
+// Diferente de fetchKpis (que conta `created_at`), esta variante conta leads
+// pela data de ATRIBUIÇÃO ao consultor. Pra /meu-desempenho isso é correto
+// porque:
+//   - Um lead criado mês passado mas atribuído hoje conta na semana atual.
+//   - Um lead atribuído mês passado e movido pra outro consultor hoje
+//     ainda conta no histórico do consultor original (atribuido_em é o
+//     primeiro momento de atribuição — preservado).
+//
+// fetchKpis global continua usando created_at (correto pra visão da operação
+// inteira: "quantos leads NOVOS chegaram no funil no período").
+// ============================================================================
+
+export type KpisConsultor = {
+  atribuidosCount: number;
+  pipelineCount: number;
+  pipelineValorCentavos: number;
+  fechadosCount: number;
+  fechadosValorLiberadoCentavos: number;
+  fechadosComissaoCentavos: number;
+  /**
+   * Taxa de conversão LOCAL ao período: fechados / atribuídos no período.
+   * Diferente da rolling 90d global do fetchKpis.
+   */
+  conversaoPeriodo: { atribuidos: number; fechados: number; taxa: number };
+};
+
+export async function fetchKpisConsultor(
+  consultorId: string,
+  period: PeriodRange,
+): Promise<KpisConsultor> {
+  // Atribuídos NO PERÍODO (atribuido_em entre from..to, mesmo consultor).
+  const [atribRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.consultorId, consultorId),
+        sql`${leads.atribuidoEm} >= ${period.from.toISOString()}`,
+        sql`${leads.atribuidoEm} <= ${period.to.toISOString()}`,
+      ),
+    );
+
+  // Pipeline ATUAL (snapshot agora) — desse consultor, status não-terminal.
+  const [pipelineRow] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+      valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+    })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.consultorId, consultorId),
+        notInArray(leads.status, [
+          "fechado",
+          "perdido",
+          "desqualificado",
+          "sem_resposta",
+        ]),
+      ),
+    );
+
+  // Fechados no período (data_fechamento entre from..to, mesmo consultor).
+  const [fechRow] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+      valorLiberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}), 0)::text`,
+      comissao: sql<string>`coalesce(sum(${leads.comissaoCentavos}), 0)::text`,
+    })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.consultorId, consultorId),
+        eq(leads.status, "fechado"),
+        sql`${leads.dataFechamento} >= ${period.from.toISOString().slice(0, 10)}::date`,
+        sql`${leads.dataFechamento} <= ${period.to.toISOString().slice(0, 10)}::date`,
+      ),
+    );
+
+  const atribuidos = atribRow.count;
+  const fechados = fechRow.count;
+  return {
+    atribuidosCount: atribuidos,
+    pipelineCount: pipelineRow.count,
+    pipelineValorCentavos: Number(pipelineRow.valor ?? 0),
+    fechadosCount: fechados,
+    fechadosValorLiberadoCentavos: Number(fechRow.valorLiberado ?? 0),
+    fechadosComissaoCentavos: Number(fechRow.comissao ?? 0),
+    conversaoPeriodo: {
+      atribuidos,
+      fechados,
+      taxa: atribuidos > 0 ? fechados / atribuidos : 0,
+    },
+  };
 }

@@ -68,6 +68,16 @@ CREATE TRIGGER set_atualizado_em
   BEFORE UPDATE ON public.round_robin_estado
   FOR EACH ROW EXECUTE FUNCTION public.trigger_set_atualizado_em();
 
+DROP TRIGGER IF EXISTS set_updated_at ON public.tarefas;
+CREATE TRIGGER set_updated_at
+  BEFORE UPDATE ON public.tarefas
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_set_updated_at();
+
+DROP TRIGGER IF EXISTS set_atualizado_em ON public.lead_bancos;
+CREATE TRIGGER set_atualizado_em
+  BEFORE UPDATE ON public.lead_bancos
+  FOR EACH ROW EXECUTE FUNCTION public.trigger_set_atualizado_em();
+
 -- ----------------------------------------------------------------
 -- Auto-provisionamento de public.users em novo auth.users
 -- ----------------------------------------------------------------
@@ -120,6 +130,8 @@ ALTER TABLE public.round_robin_estado     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mensagens_template     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.duplicidades_pendentes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sla_alertas            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tarefas                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.lead_bancos            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log              ENABLE ROW LEVEL SECURITY;
 -- webhook_idempotency: somente backend (service_role bypassa RLS).
 -- Não criamos policies → nega tudo para anon/authenticated.
@@ -296,11 +308,12 @@ USING (
   AND lead_id IN (SELECT id FROM public.leads WHERE consultor_id = auth.uid())
 );
 
--- Marketing também vê interações (sem mascaramento extra — texto livre é benigno).
+-- Marketing NÃO vê interações: texto livre pode conter PII (CPF, telefone,
+-- banco, valores) que mascaramento de campos não cobre. Bloqueio TOTAL.
+-- Defesa em profundidade — o app-layer já bloqueia em GET /api/leads/[id] e
+-- na page de detalhe, mas RLS protege contra acessos via supabase-js cliente.
 DROP POLICY IF EXISTS interacoes_select_marketing ON public.interacoes;
-CREATE POLICY interacoes_select_marketing
-ON public.interacoes FOR SELECT TO authenticated
-USING (current_user_perfil() = 'marketing');
+-- (sem CREATE — política removida deliberadamente).
 
 -- INSERT: admin/gerente sempre; consultor só em leads próprios.
 DROP POLICY IF EXISTS interacoes_insert_admin_gerente ON public.interacoes;
@@ -384,6 +397,94 @@ USING (current_user_perfil() = 'admin');
 
 -- INSERT vem do backend (service_role bypassa RLS) — sem policy adicional.
 
+-- ----------------------------------------------------------------
+-- 12. Policies — tarefas
+-- ----------------------------------------------------------------
+
+DROP POLICY IF EXISTS tarefas_select_admin_gerente ON public.tarefas;
+CREATE POLICY tarefas_select_admin_gerente
+ON public.tarefas FOR SELECT TO authenticated
+USING (current_user_perfil() = ANY(ARRAY['admin','gerente']));
+
+DROP POLICY IF EXISTS tarefas_select_consultor ON public.tarefas;
+CREATE POLICY tarefas_select_consultor
+ON public.tarefas FOR SELECT TO authenticated
+USING (
+  current_user_perfil() = 'consultor'
+  AND consultor_id = auth.uid()
+);
+
+DROP POLICY IF EXISTS tarefas_update_admin_gerente ON public.tarefas;
+CREATE POLICY tarefas_update_admin_gerente
+ON public.tarefas FOR UPDATE TO authenticated
+USING (current_user_perfil() = ANY(ARRAY['admin','gerente']))
+WITH CHECK (current_user_perfil() = ANY(ARRAY['admin','gerente']));
+
+DROP POLICY IF EXISTS tarefas_update_consultor ON public.tarefas;
+CREATE POLICY tarefas_update_consultor
+ON public.tarefas FOR UPDATE TO authenticated
+USING (
+  current_user_perfil() = 'consultor'
+  AND consultor_id = auth.uid()
+)
+WITH CHECK (
+  current_user_perfil() = 'consultor'
+  AND consultor_id = auth.uid()
+);
+
+-- Criação de tarefas vem do backend/cron com DATABASE_URL.
+
+-- ----------------------------------------------------------------
+-- 13. Policies — lead_bancos
+-- ----------------------------------------------------------------
+
+DROP POLICY IF EXISTS lead_bancos_select_admin_gerente ON public.lead_bancos;
+CREATE POLICY lead_bancos_select_admin_gerente
+ON public.lead_bancos FOR SELECT TO authenticated
+USING (current_user_perfil() = ANY(ARRAY['admin','gerente']));
+
+DROP POLICY IF EXISTS lead_bancos_select_consultor ON public.lead_bancos;
+CREATE POLICY lead_bancos_select_consultor
+ON public.lead_bancos FOR SELECT TO authenticated
+USING (
+  current_user_perfil() = 'consultor'
+  AND lead_id IN (SELECT id FROM public.leads WHERE consultor_id = auth.uid())
+);
+
+DROP POLICY IF EXISTS lead_bancos_select_marketing ON public.lead_bancos;
+-- Marketing não acessa bancos/propostas: pode revelar estratégia, bancos e valores.
+
+DROP POLICY IF EXISTS lead_bancos_insert_admin_gerente ON public.lead_bancos;
+CREATE POLICY lead_bancos_insert_admin_gerente
+ON public.lead_bancos FOR INSERT TO authenticated
+WITH CHECK (current_user_perfil() = ANY(ARRAY['admin','gerente']));
+
+DROP POLICY IF EXISTS lead_bancos_insert_consultor ON public.lead_bancos;
+CREATE POLICY lead_bancos_insert_consultor
+ON public.lead_bancos FOR INSERT TO authenticated
+WITH CHECK (
+  current_user_perfil() = 'consultor'
+  AND lead_id IN (SELECT id FROM public.leads WHERE consultor_id = auth.uid())
+);
+
+DROP POLICY IF EXISTS lead_bancos_update_admin_gerente ON public.lead_bancos;
+CREATE POLICY lead_bancos_update_admin_gerente
+ON public.lead_bancos FOR UPDATE TO authenticated
+USING (current_user_perfil() = ANY(ARRAY['admin','gerente']))
+WITH CHECK (current_user_perfil() = ANY(ARRAY['admin','gerente']));
+
+DROP POLICY IF EXISTS lead_bancos_update_consultor ON public.lead_bancos;
+CREATE POLICY lead_bancos_update_consultor
+ON public.lead_bancos FOR UPDATE TO authenticated
+USING (
+  current_user_perfil() = 'consultor'
+  AND lead_id IN (SELECT id FROM public.leads WHERE consultor_id = auth.uid())
+)
+WITH CHECK (
+  current_user_perfil() = 'consultor'
+  AND lead_id IN (SELECT id FROM public.leads WHERE consultor_id = auth.uid())
+);
+
 COMMIT;
 
 -- ================================================================
@@ -409,3 +510,69 @@ COMMIT;
 --   SET LOCAL "request.jwt.claim.sub" = '<UUID DO MARKETING>';
 --   SELECT count(*) FROM public.leads;          -- 0 (sem policy)
 --   SELECT cpf, renda_faixa FROM public.leads_marketing;  -- mascarado
+
+-- ============================================================================
+-- 12. Constraints e índices sincronizados com a aplicação
+--
+-- Alguns constraints precisam existir para o app funcionar correto (ON
+-- CONFLICT em UPSERTs, índices únicos parciais para evitar duplicação em
+-- concorrência). Mantidos AQUI (não em drizzle migrations) porque:
+--   - drizzle não suporta unique parcial (WHERE) bem
+--   - ficam idempotentes via IF NOT EXISTS
+--   - documentam claramente o motivo
+-- ============================================================================
+
+-- round_robin_estado: garante 1 linha por regra_id pra UPSERT atômico no
+-- pickNextRoundRobin (evita race condition no primeiro uso da regra).
+CREATE UNIQUE INDEX IF NOT EXISTS round_robin_estado_regra_id_key
+  ON public.round_robin_estado (regra_id);
+
+-- sla_alertas: índice único parcial para "alertas ativos" — evita duas
+-- requests do cron criarem 2 alertas pro mesmo (lead, tipo) quando ambos
+-- ainda estão sem resolvido_em. Permite múltiplos alertas históricos
+-- (resolvidos) pro mesmo par.
+CREATE UNIQUE INDEX IF NOT EXISTS sla_alertas_unico_ativo
+  ON public.sla_alertas (lead_id, tipo)
+  WHERE resolvido_em IS NULL;
+
+-- ============================================================================
+-- 13. Índices compostos para relatórios e queries quentes
+--
+-- Adicionados pra escalar sem materialized views nas queries mais frequentes:
+--   - Relatórios por período + status / consultor / data_fechamento
+--   - SLA dedupe parcial já criado acima (sla_alertas_unico_ativo)
+--   - Lookup de interações por lead+tipo+data (timeline)
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS idx_leads_created_status
+  ON public.leads (created_at DESC, status);
+
+CREATE INDEX IF NOT EXISTS idx_leads_consultor_created
+  ON public.leads (consultor_id, created_at DESC)
+  WHERE consultor_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_leads_data_fechamento
+  ON public.leads (data_fechamento DESC)
+  WHERE data_fechamento IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_leads_atribuido_em
+  ON public.leads (atribuido_em DESC)
+  WHERE atribuido_em IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_interacoes_lead_tipo_criado
+  ON public.interacoes (lead_id, tipo, criado_em DESC);
+
+CREATE INDEX IF NOT EXISTS idx_sla_alertas_lead_tipo_resolvido
+  ON public.sla_alertas (lead_id, tipo, resolvido_em);
+
+-- tarefas: uma única tarefa ativa por lead (evita funil poluído) e uma única
+-- tarefa por lead/dia (evita duplicidade no cron diário).
+CREATE UNIQUE INDEX IF NOT EXISTS tarefas_lead_ativa_unica
+  ON public.tarefas (lead_id)
+  WHERE status IN ('aberta', 'atrasada');
+
+CREATE UNIQUE INDEX IF NOT EXISTS tarefas_lead_dia_unica
+  ON public.tarefas (lead_id, data_referencia);
+
+CREATE UNIQUE INDEX IF NOT EXISTS lead_bancos_lead_banco_unico
+  ON public.lead_bancos (lead_id, banco);
