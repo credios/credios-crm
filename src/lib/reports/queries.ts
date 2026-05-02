@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import { leads, users as usersTable } from "../../../db/schema";
+import { mvFechadosDiarios, mvLeadsDiarios } from "../../../db/views";
 import { db } from "@/lib/db";
 import {
   normalizeFilters,
@@ -10,6 +11,59 @@ import {
 } from "@/lib/validators/report";
 
 import type { PeriodRange } from "./period";
+
+// Filtro por faixa de valor (valorMinCentavos / valorMaxCentavos) é
+// granular ao lead — não dá pra aplicar em rows da MV (que já são agregados).
+// Quando esse filtro está ativo, voltamos pra leitura direta da tabela
+// leads (com cache normal). Casos comuns (sem filter de valor) servem
+// das MVs em ms.
+function canUseMV(filters: ReportFilters): boolean {
+  return filters.valorMinCentavos == null && filters.valorMaxCentavos == null;
+}
+
+// Conditions pra mvLeadsDiarios — converte filtros pros campos da MV
+// (que tem COALESCE em origem/estado/consultor pra evitar NULLs).
+function mvLeadsConds(filters: ReportFilters) {
+  const f = normalizeFilters(filters);
+  const c = [];
+  if (f.consultorIds.length === 1) {
+    c.push(eq(mvLeadsDiarios.consultorId, f.consultorIds[0]!));
+  } else if (f.consultorIds.length > 1) {
+    c.push(inArray(mvLeadsDiarios.consultorId, f.consultorIds));
+  }
+  if (f.origens.length === 1) {
+    c.push(eq(mvLeadsDiarios.origem, f.origens[0]!));
+  } else if (f.origens.length > 1) {
+    c.push(inArray(mvLeadsDiarios.origem, f.origens));
+  }
+  if (f.ufs.length === 1) {
+    c.push(eq(mvLeadsDiarios.estado, f.ufs[0]!));
+  } else if (f.ufs.length > 1) {
+    c.push(inArray(mvLeadsDiarios.estado, f.ufs));
+  }
+  return c;
+}
+
+function mvFechadosConds(filters: ReportFilters) {
+  const f = normalizeFilters(filters);
+  const c = [];
+  if (f.consultorIds.length === 1) {
+    c.push(eq(mvFechadosDiarios.consultorId, f.consultorIds[0]!));
+  } else if (f.consultorIds.length > 1) {
+    c.push(inArray(mvFechadosDiarios.consultorId, f.consultorIds));
+  }
+  if (f.origens.length === 1) {
+    c.push(eq(mvFechadosDiarios.origem, f.origens[0]!));
+  } else if (f.origens.length > 1) {
+    c.push(inArray(mvFechadosDiarios.origem, f.origens));
+  }
+  if (f.ufs.length === 1) {
+    c.push(eq(mvFechadosDiarios.estado, f.ufs[0]!));
+  } else if (f.ufs.length > 1) {
+    c.push(inArray(mvFechadosDiarios.estado, f.ufs));
+  }
+  return c;
+}
 
 // Helper pra gerar chaves de cache determinísticas a partir de
 // (filters, period). Evita explosões de cache por ordem de keys do filter
@@ -97,6 +151,113 @@ export const fetchKpis = cache(async function fetchKpis(
 });
 
 async function fetchKpisUncached(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<Kpis> {
+  if (canUseMV(filters)) {
+    return fetchKpisFromMV(filters, period);
+  }
+  return fetchKpisFromTable(filters, period);
+}
+
+async function fetchKpisFromMV(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<Kpis> {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const fromDateStr = period.from.toISOString().slice(0, 10);
+  const toDateStr = period.to.toISOString().slice(0, 10);
+  const ninetyAgoStr = ninetyDaysAgo.toISOString().slice(0, 10);
+  const cbLeads = mvLeadsConds(filters);
+  const cbFechados = mvFechadosConds(filters);
+
+  const [
+    [novosRow],
+    [pipelineRow],
+    [fechadosRow],
+    [criadosRollRow],
+    [fechadosRollRow],
+  ] = await Promise.all([
+    db
+      .select({ count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int` })
+      .from(mvLeadsDiarios)
+      .where(
+        and(
+          gte(mvLeadsDiarios.diaCriacao, fromDateStr),
+          lte(mvLeadsDiarios.diaCriacao, toDateStr),
+          ...cbLeads,
+        ),
+      ),
+    db
+      .select({
+        count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
+        valor: sql<string>`coalesce(sum(${mvLeadsDiarios.somaValorCredito}), 0)::text`,
+      })
+      .from(mvLeadsDiarios)
+      .where(
+        and(
+          notInArray(mvLeadsDiarios.status, [
+            "fechado",
+            "perdido",
+            "desqualificado",
+            "sem_resposta",
+          ]),
+          ...cbLeads,
+        ),
+      ),
+    db
+      .select({
+        count: sql<number>`coalesce(sum(${mvFechadosDiarios.qtd}), 0)::int`,
+        valorLiberado: sql<string>`coalesce(sum(${mvFechadosDiarios.somaValorLiberado}), 0)::text`,
+        comissao: sql<string>`coalesce(sum(${mvFechadosDiarios.somaComissao}), 0)::text`,
+      })
+      .from(mvFechadosDiarios)
+      .where(
+        and(
+          gte(mvFechadosDiarios.diaFechamento, fromDateStr),
+          lte(mvFechadosDiarios.diaFechamento, toDateStr),
+          ...cbFechados,
+        ),
+      ),
+    db
+      .select({ count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int` })
+      .from(mvLeadsDiarios)
+      .where(
+        and(gte(mvLeadsDiarios.diaCriacao, ninetyAgoStr), ...cbLeads),
+      ),
+    db
+      .select({ count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int` })
+      .from(mvLeadsDiarios)
+      .where(
+        and(
+          eq(mvLeadsDiarios.status, "fechado"),
+          gte(mvLeadsDiarios.diaCriacao, ninetyAgoStr),
+          ...cbLeads,
+        ),
+      ),
+  ]);
+
+  const taxa =
+    criadosRollRow.count > 0 ? fechadosRollRow.count / criadosRollRow.count : 0;
+
+  return {
+    leadsNovosCount: novosRow.count,
+    pipelineCount: pipelineRow.count,
+    pipelineValorCentavos: Number(pipelineRow.valor ?? 0),
+    fechadosCount: fechadosRow.count,
+    fechadosValorLiberadoCentavos: Number(fechadosRow.valorLiberado ?? 0),
+    fechadosComissaoCentavos: Number(fechadosRow.comissao ?? 0),
+    conversaoRolling90d: {
+      criados: criadosRollRow.count,
+      fechados: fechadosRollRow.count,
+      taxa,
+    },
+  };
+}
+
+// Fallback pra leitura direta da tabela leads — usado quando filter de
+// valor está ativo (granular ao lead, não cabe em agregado da MV).
+async function fetchKpisFromTable(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<Kpis> {
@@ -199,26 +360,47 @@ export async function fetchVolumePorDia(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<VolumePorDiaRow[]> {
-  const cb = baseConds(filters);
-  const rows = await db
-    .select({
-      dia: sql<string>`to_char(date_trunc('day', ${leads.createdAt}), 'YYYY-MM-DD')`,
-      origem: sql<string>`coalesce(${leads.origem}, 'Sem origem')`,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(leads)
-    .where(
-      and(
-        gte(leads.createdAt, period.from),
-        lte(leads.createdAt, period.to),
-        ...cb,
-      ),
-    )
-    .groupBy(
-      sql`date_trunc('day', ${leads.createdAt})`,
-      sql`coalesce(${leads.origem}, 'Sem origem')`,
-    )
-    .orderBy(sql`date_trunc('day', ${leads.createdAt})`);
+  const fromDateStr = period.from.toISOString().slice(0, 10);
+  const toDateStr = period.to.toISOString().slice(0, 10);
+  const useMV = canUseMV(filters);
+
+  const rows = useMV
+    ? await db
+        .select({
+          dia: sql<string>`to_char(${mvLeadsDiarios.diaCriacao}, 'YYYY-MM-DD')`,
+          origem: mvLeadsDiarios.origem,
+          count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
+        })
+        .from(mvLeadsDiarios)
+        .where(
+          and(
+            gte(mvLeadsDiarios.diaCriacao, fromDateStr),
+            lte(mvLeadsDiarios.diaCriacao, toDateStr),
+            ...mvLeadsConds(filters),
+          ),
+        )
+        .groupBy(mvLeadsDiarios.diaCriacao, mvLeadsDiarios.origem)
+        .orderBy(mvLeadsDiarios.diaCriacao)
+    : await db
+        .select({
+          dia: sql<string>`to_char(date_trunc('day', ${leads.createdAt}), 'YYYY-MM-DD')`,
+          origem: sql<string>`coalesce(${leads.origem}, 'Sem origem')`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(leads)
+        .where(
+          and(
+            gte(leads.createdAt, period.from),
+            lte(leads.createdAt, period.to),
+            ...baseConds(filters),
+          ),
+        )
+        .groupBy(
+          sql`date_trunc('day', ${leads.createdAt})`,
+          sql`coalesce(${leads.origem}, 'Sem origem')`,
+        )
+        .orderBy(sql`date_trunc('day', ${leads.createdAt})`);
+
   // Defensivo: se postgres-js retornar tipos inesperados (origem null mesmo
   // com COALESCE em corner cases, count vindo bigint não-conversível, etc),
   // filtra/sanitiza pra não vazar NaN/undefined pro componente.
@@ -449,21 +631,46 @@ export type PipelineRow = { status: string; count: number; valorCentavos: number
 export async function fetchPipelineAtivoPorStatus(
   filters: ReportFilters,
 ): Promise<PipelineRow[]> {
-  const cb = baseConds(filters);
-  const rows = await db
-    .select({
-      status: leads.status,
-      count: sql<number>`count(*)::int`,
-      valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
-    })
-    .from(leads)
-    .where(
-      and(
-        notInArray(leads.status, ["fechado", "perdido", "desqualificado", "sem_resposta"]),
-        ...cb,
-      ),
-    )
-    .groupBy(leads.status);
+  const useMV = canUseMV(filters);
+  const rows = useMV
+    ? await db
+        .select({
+          status: mvLeadsDiarios.status,
+          count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
+          valor: sql<string>`coalesce(sum(${mvLeadsDiarios.somaValorCredito}), 0)::text`,
+        })
+        .from(mvLeadsDiarios)
+        .where(
+          and(
+            notInArray(mvLeadsDiarios.status, [
+              "fechado",
+              "perdido",
+              "desqualificado",
+              "sem_resposta",
+            ]),
+            ...mvLeadsConds(filters),
+          ),
+        )
+        .groupBy(mvLeadsDiarios.status)
+    : await db
+        .select({
+          status: leads.status,
+          count: sql<number>`count(*)::int`,
+          valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+        })
+        .from(leads)
+        .where(
+          and(
+            notInArray(leads.status, [
+              "fechado",
+              "perdido",
+              "desqualificado",
+              "sem_resposta",
+            ]),
+            ...baseConds(filters),
+          ),
+        )
+        .groupBy(leads.status);
   return rows.map((r) => ({
     status: r.status,
     count: Number(r.count),
@@ -495,24 +702,41 @@ export async function fetchReceitaMensal(
 async function fetchReceitaMensalUncached(
   filters: ReportFilters,
 ): Promise<ReceitaMensalRow[]> {
-  const cb = baseConds(filters);
-  const rows = await db
-    .select({
-      mes: sql<string>`to_char(date_trunc('month', ${leads.dataFechamento}), 'YYYY-MM')`,
-      comissao: sql<string>`coalesce(sum(${leads.comissaoCentavos}), 0)::text`,
-      valorLiberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}), 0)::text`,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(leads)
-    .where(
-      and(
-        eq(leads.status, "fechado"),
-        sql`${leads.dataFechamento} >= (NOW() - INTERVAL '12 months')::date`,
-        ...cb,
-      ),
-    )
-    .groupBy(sql`date_trunc('month', ${leads.dataFechamento})`)
-    .orderBy(sql`date_trunc('month', ${leads.dataFechamento})`);
+  const useMV = canUseMV(filters);
+  const rows = useMV
+    ? await db
+        .select({
+          mes: sql<string>`to_char(date_trunc('month', ${mvFechadosDiarios.diaFechamento}), 'YYYY-MM')`,
+          comissao: sql<string>`coalesce(sum(${mvFechadosDiarios.somaComissao}), 0)::text`,
+          valorLiberado: sql<string>`coalesce(sum(${mvFechadosDiarios.somaValorLiberado}), 0)::text`,
+          count: sql<number>`coalesce(sum(${mvFechadosDiarios.qtd}), 0)::int`,
+        })
+        .from(mvFechadosDiarios)
+        .where(
+          and(
+            sql`${mvFechadosDiarios.diaFechamento} >= (NOW() - INTERVAL '12 months')::date`,
+            ...mvFechadosConds(filters),
+          ),
+        )
+        .groupBy(sql`date_trunc('month', ${mvFechadosDiarios.diaFechamento})`)
+        .orderBy(sql`date_trunc('month', ${mvFechadosDiarios.diaFechamento})`)
+    : await db
+        .select({
+          mes: sql<string>`to_char(date_trunc('month', ${leads.dataFechamento}), 'YYYY-MM')`,
+          comissao: sql<string>`coalesce(sum(${leads.comissaoCentavos}), 0)::text`,
+          valorLiberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}), 0)::text`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.status, "fechado"),
+            sql`${leads.dataFechamento} >= (NOW() - INTERVAL '12 months')::date`,
+            ...baseConds(filters),
+          ),
+        )
+        .groupBy(sql`date_trunc('month', ${leads.dataFechamento})`)
+        .orderBy(sql`date_trunc('month', ${leads.dataFechamento})`);
   return rows.map((r) => ({
     mes: String(r.mes),
     comissaoCentavos: Number(r.comissao ?? 0),
@@ -586,67 +810,134 @@ async function fetchSalesMetricsUncached(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<SalesMetrics> {
-  const cb = baseConds(filters);
   const fromIso = period.from.toISOString().slice(0, 10);
   const toIso = period.to.toISOString().slice(0, 10);
+  const useMV = canUseMV(filters);
 
-  // 4 queries em PARALELO (antes sequenciais → 4x latência).
-  const [[avgRow], [resolvedRow], [wonRow], [pipelineRow]] = await Promise.all([
-    // Avg deal size + sales cycle dos fechados no período
-    db
-      .select({
-        avgValor: sql<string>`coalesce(avg(${leads.valorLiberadoCentavos}), 0)::text`,
-        avgComissao: sql<string>`coalesce(avg(${leads.comissaoCentavos}), 0)::text`,
-        avgCycle: sql<string | null>`avg(extract(epoch from (${leads.dataFechamento}::timestamp - ${leads.createdAt})) / 86400.0)::text`,
-      })
-      .from(leads)
-      .where(
-        and(
-          eq(leads.status, "fechado"),
-          sql`${leads.dataFechamento} >= ${fromIso}::date`,
-          sql`${leads.dataFechamento} <= ${toIso}::date`,
-          ...cb,
-        ),
-      ),
-    // Win rate no período (fechados / criados que já tiveram resolução final)
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(leads)
-      .where(
-        and(
-          sql`${leads.status} IN ('fechado', 'perdido', 'desqualificado')`,
-          gte(leads.createdAt, period.from),
-          lte(leads.createdAt, period.to),
-          ...cb,
-        ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(leads)
-      .where(
-        and(
-          eq(leads.status, "fechado"),
-          gte(leads.createdAt, period.from),
-          lte(leads.createdAt, period.to),
-          ...cb,
-        ),
-      ),
-    // Pipeline atual pra velocity
-    db
-      .select({
-        valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
-      })
-      .from(leads)
-      .where(
-        and(
-          notInArray(
-            leads.status,
-            ["fechado", "perdido", "desqualificado", "sem_resposta"],
-          ),
-          ...cb,
-        ),
-      ),
-  ]);
+  // 4 queries em PARALELO. Quando useMV: lê de mv_fechados_diarios (avg) e
+  // mv_leads_diarios (winRate / pipeline). Senão: tabela leads original.
+  const [[avgRow], [resolvedRow], [wonRow], [pipelineRow]] = await Promise.all(
+    useMV
+      ? [
+          // Avg deal size + comissão + ciclo (médias ponderadas via MV).
+          db
+            .select({
+              avgValor: sql<string>`(coalesce(sum(${mvFechadosDiarios.somaValorLiberado}), 0)::numeric / nullif(sum(${mvFechadosDiarios.qtd}), 0))::text`,
+              avgComissao: sql<string>`(coalesce(sum(${mvFechadosDiarios.somaComissao}), 0)::numeric / nullif(sum(${mvFechadosDiarios.qtd}), 0))::text`,
+              avgCycle: sql<string | null>`(sum(${mvFechadosDiarios.somaSegundosCiclo})::numeric / nullif(sum(${mvFechadosDiarios.qtd}) * 86400.0, 0))::text`,
+            })
+            .from(mvFechadosDiarios)
+            .where(
+              and(
+                gte(mvFechadosDiarios.diaFechamento, fromIso),
+                lte(mvFechadosDiarios.diaFechamento, toIso),
+                ...mvFechadosConds(filters),
+              ),
+            ),
+          db
+            .select({
+              count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
+            })
+            .from(mvLeadsDiarios)
+            .where(
+              and(
+                inArray(mvLeadsDiarios.status, [
+                  "fechado",
+                  "perdido",
+                  "desqualificado",
+                ]),
+                gte(mvLeadsDiarios.diaCriacao, fromIso),
+                lte(mvLeadsDiarios.diaCriacao, toIso),
+                ...mvLeadsConds(filters),
+              ),
+            ),
+          db
+            .select({
+              count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
+            })
+            .from(mvLeadsDiarios)
+            .where(
+              and(
+                eq(mvLeadsDiarios.status, "fechado"),
+                gte(mvLeadsDiarios.diaCriacao, fromIso),
+                lte(mvLeadsDiarios.diaCriacao, toIso),
+                ...mvLeadsConds(filters),
+              ),
+            ),
+          db
+            .select({
+              valor: sql<string>`coalesce(sum(${mvLeadsDiarios.somaValorCredito}), 0)::text`,
+            })
+            .from(mvLeadsDiarios)
+            .where(
+              and(
+                notInArray(mvLeadsDiarios.status, [
+                  "fechado",
+                  "perdido",
+                  "desqualificado",
+                  "sem_resposta",
+                ]),
+                ...mvLeadsConds(filters),
+              ),
+            ),
+        ]
+      : [
+          // Fallback: leads direto (filter de valor ativo).
+          db
+            .select({
+              avgValor: sql<string>`coalesce(avg(${leads.valorLiberadoCentavos}), 0)::text`,
+              avgComissao: sql<string>`coalesce(avg(${leads.comissaoCentavos}), 0)::text`,
+              avgCycle: sql<string | null>`avg(extract(epoch from (${leads.dataFechamento}::timestamp - ${leads.createdAt})) / 86400.0)::text`,
+            })
+            .from(leads)
+            .where(
+              and(
+                eq(leads.status, "fechado"),
+                sql`${leads.dataFechamento} >= ${fromIso}::date`,
+                sql`${leads.dataFechamento} <= ${toIso}::date`,
+                ...baseConds(filters),
+              ),
+            ),
+          db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(leads)
+            .where(
+              and(
+                sql`${leads.status} IN ('fechado', 'perdido', 'desqualificado')`,
+                gte(leads.createdAt, period.from),
+                lte(leads.createdAt, period.to),
+                ...baseConds(filters),
+              ),
+            ),
+          db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(leads)
+            .where(
+              and(
+                eq(leads.status, "fechado"),
+                gte(leads.createdAt, period.from),
+                lte(leads.createdAt, period.to),
+                ...baseConds(filters),
+              ),
+            ),
+          db
+            .select({
+              valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+            })
+            .from(leads)
+            .where(
+              and(
+                notInArray(leads.status, [
+                  "fechado",
+                  "perdido",
+                  "desqualificado",
+                  "sem_resposta",
+                ]),
+                ...baseConds(filters),
+              ),
+            ),
+        ],
+  );
   const winRate =
     resolvedRow.count > 0 ? wonRow.count / resolvedRow.count : 0;
 
@@ -799,26 +1090,51 @@ export async function fetchOrigemROI(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<OrigemROIRow[]> {
-  const cb = baseConds(filters);
-  const rows = await db
-    .select({
-      origem: sql<string>`coalesce(${leads.origem}, 'Sem origem')`,
-      total: sql<number>`count(*)::int`,
-      resolvidos: sql<number>`count(*) filter (where ${leads.status} IN ('fechado', 'perdido', 'desqualificado'))::int`,
-      fechados: sql<number>`count(*) filter (where ${leads.status} = 'fechado')::int`,
-      liberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}) filter (where ${leads.status} = 'fechado'), 0)::text`,
-      avgBuscado: sql<string>`coalesce(avg(${leads.valorCreditoCentavos}), 0)::text`,
-    })
-    .from(leads)
-    .where(
-      and(
-        gte(leads.createdAt, period.from),
-        lte(leads.createdAt, period.to),
-        ...cb,
-      ),
-    )
-    .groupBy(sql`coalesce(${leads.origem}, 'Sem origem')`)
-    .orderBy(sql`count(*) desc`);
+  const fromDateStr = period.from.toISOString().slice(0, 10);
+  const toDateStr = period.to.toISOString().slice(0, 10);
+  const useMV = canUseMV(filters);
+
+  const rows = useMV
+    ? await db
+        .select({
+          origem: mvLeadsDiarios.origem,
+          total: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
+          resolvidos: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}) filter (where ${mvLeadsDiarios.status} IN ('fechado', 'perdido', 'desqualificado')), 0)::int`,
+          fechados: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}) filter (where ${mvLeadsDiarios.status} = 'fechado'), 0)::int`,
+          liberado: sql<string>`coalesce(sum(${mvLeadsDiarios.somaValorLiberado}) filter (where ${mvLeadsDiarios.status} = 'fechado'), 0)::text`,
+          // Avg ponderada: SUM(soma_valor_credito) / SUM(qtd) (sum of values
+          // / sum of weights). NULLIF evita div/0.
+          avgBuscado: sql<string>`(coalesce(sum(${mvLeadsDiarios.somaValorCredito}), 0)::numeric / nullif(sum(${mvLeadsDiarios.qtd}), 0))::text`,
+        })
+        .from(mvLeadsDiarios)
+        .where(
+          and(
+            gte(mvLeadsDiarios.diaCriacao, fromDateStr),
+            lte(mvLeadsDiarios.diaCriacao, toDateStr),
+            ...mvLeadsConds(filters),
+          ),
+        )
+        .groupBy(mvLeadsDiarios.origem)
+        .orderBy(sql`sum(${mvLeadsDiarios.qtd}) desc`)
+    : await db
+        .select({
+          origem: sql<string>`coalesce(${leads.origem}, 'Sem origem')`,
+          total: sql<number>`count(*)::int`,
+          resolvidos: sql<number>`count(*) filter (where ${leads.status} IN ('fechado', 'perdido', 'desqualificado'))::int`,
+          fechados: sql<number>`count(*) filter (where ${leads.status} = 'fechado')::int`,
+          liberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}) filter (where ${leads.status} = 'fechado'), 0)::text`,
+          avgBuscado: sql<string>`coalesce(avg(${leads.valorCreditoCentavos}), 0)::text`,
+        })
+        .from(leads)
+        .where(
+          and(
+            gte(leads.createdAt, period.from),
+            lte(leads.createdAt, period.to),
+            ...baseConds(filters),
+          ),
+        )
+        .groupBy(sql`coalesce(${leads.origem}, 'Sem origem')`)
+        .orderBy(sql`count(*) desc`);
 
   return rows.map((r) => {
     const total = Number(r.total);
@@ -1086,30 +1402,53 @@ export async function fetchPerformancePorUf(
   period: PeriodRange,
 ): Promise<PerformanceUfRow[]> {
   const filters = normalizeFilters(rawFilters);
-  // baseConds reutilizado pra herdar filtros de origem/consultor/etc; mas
-  // não filtramos por UF aqui (queremos VER por UF). Removo da clausula.
+  // Não filtra por UF aqui (queremos VER por UF). Mantém demais.
   const filtersWithoutUf = { ...filters, ufs: [] };
-  const cb = baseConds(filtersWithoutUf);
-  const rows = await db
-    .select({
-      uf: sql<string>`coalesce(${leads.estado}, '—')`,
-      total: sql<number>`count(*)::int`,
-      pipeline: sql<number>`count(*) filter (where ${leads.status} not in ('fechado','perdido','desqualificado','sem_resposta'))::int`,
-      fechados: sql<number>`count(*) filter (where ${leads.status} = 'fechado')::int`,
-      buscado: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
-      liberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}) filter (where ${leads.status} = 'fechado'), 0)::text`,
-      resolvidos: sql<number>`count(*) filter (where ${leads.status} in ('fechado','perdido','desqualificado'))::int`,
-    })
-    .from(leads)
-    .where(
-      and(
-        gte(leads.createdAt, period.from),
-        lte(leads.createdAt, period.to),
-        ...cb,
-      ),
-    )
-    .groupBy(sql`coalesce(${leads.estado}, '—')`)
-    .orderBy(sql`count(*) desc`);
+  const fromDateStr = period.from.toISOString().slice(0, 10);
+  const toDateStr = period.to.toISOString().slice(0, 10);
+  const useMV = canUseMV(filters);
+
+  const rows = useMV
+    ? await db
+        .select({
+          uf: mvLeadsDiarios.estado,
+          total: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
+          pipeline: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}) filter (where ${mvLeadsDiarios.status} not in ('fechado','perdido','desqualificado','sem_resposta')), 0)::int`,
+          fechados: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}) filter (where ${mvLeadsDiarios.status} = 'fechado'), 0)::int`,
+          buscado: sql<string>`coalesce(sum(${mvLeadsDiarios.somaValorCredito}), 0)::text`,
+          liberado: sql<string>`coalesce(sum(${mvLeadsDiarios.somaValorLiberado}) filter (where ${mvLeadsDiarios.status} = 'fechado'), 0)::text`,
+          resolvidos: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}) filter (where ${mvLeadsDiarios.status} in ('fechado','perdido','desqualificado')), 0)::int`,
+        })
+        .from(mvLeadsDiarios)
+        .where(
+          and(
+            gte(mvLeadsDiarios.diaCriacao, fromDateStr),
+            lte(mvLeadsDiarios.diaCriacao, toDateStr),
+            ...mvLeadsConds(filtersWithoutUf),
+          ),
+        )
+        .groupBy(mvLeadsDiarios.estado)
+        .orderBy(sql`sum(${mvLeadsDiarios.qtd}) desc`)
+    : await db
+        .select({
+          uf: sql<string>`coalesce(${leads.estado}, '—')`,
+          total: sql<number>`count(*)::int`,
+          pipeline: sql<number>`count(*) filter (where ${leads.status} not in ('fechado','perdido','desqualificado','sem_resposta'))::int`,
+          fechados: sql<number>`count(*) filter (where ${leads.status} = 'fechado')::int`,
+          buscado: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+          liberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}) filter (where ${leads.status} = 'fechado'), 0)::text`,
+          resolvidos: sql<number>`count(*) filter (where ${leads.status} in ('fechado','perdido','desqualificado'))::int`,
+        })
+        .from(leads)
+        .where(
+          and(
+            gte(leads.createdAt, period.from),
+            lte(leads.createdAt, period.to),
+            ...baseConds(filtersWithoutUf),
+          ),
+        )
+        .groupBy(sql`coalesce(${leads.estado}, '—')`)
+        .orderBy(sql`count(*) desc`);
 
   return rows.map((r) => {
     const fechados = Number(r.fechados);
@@ -1600,6 +1939,8 @@ async function fetchSparkRevenueUncached(meses: number): Promise<{
   ticketMedio: SparklinePoint[];
   cicloMedio: SparklinePoint[];
 }> {
+  // Sempre lê da MV (não recebe filtros granulares). Ticket médio e ciclo
+  // médio são calculados como médias ponderadas: SUM(soma) / SUM(qtd).
   const rows = await db.execute<{
     mes: string;
     comissao: string;
@@ -1608,16 +1949,15 @@ async function fetchSparkRevenueUncached(meses: number): Promise<{
     ciclo: string | null;
   }>(sql.raw(`
     SELECT
-      to_char(date_trunc('month', data_fechamento), 'YYYY-MM') AS mes,
-      COALESCE(SUM(comissao_centavos), 0)::text AS comissao,
-      COALESCE(SUM(valor_liberado_centavos), 0)::text AS liberado,
-      COALESCE(AVG(valor_liberado_centavos), 0)::text AS ticket,
-      AVG(EXTRACT(EPOCH FROM (data_fechamento::timestamp - created_at)) / 86400.0)::text AS ciclo
-    FROM public.leads
-    WHERE status = 'fechado'
-      AND data_fechamento >= date_trunc('month', NOW() - INTERVAL '${meses - 1} months')
-    GROUP BY date_trunc('month', data_fechamento)
-    ORDER BY date_trunc('month', data_fechamento)
+      to_char(date_trunc('month', dia_fechamento), 'YYYY-MM') AS mes,
+      COALESCE(SUM(soma_comissao), 0)::text AS comissao,
+      COALESCE(SUM(soma_valor_liberado), 0)::text AS liberado,
+      (COALESCE(SUM(soma_valor_liberado), 0)::numeric / NULLIF(SUM(qtd), 0))::text AS ticket,
+      (SUM(soma_segundos_ciclo)::numeric / NULLIF(SUM(qtd) * 86400.0, 0))::text AS ciclo
+    FROM public.mv_fechados_diarios
+    WHERE dia_fechamento >= date_trunc('month', NOW() - INTERVAL '${meses - 1} months')::date
+    GROUP BY date_trunc('month', dia_fechamento)
+    ORDER BY date_trunc('month', dia_fechamento)
   `));
 
   return {
