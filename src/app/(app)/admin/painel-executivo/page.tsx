@@ -59,48 +59,6 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-type ExecKpis = Awaited<ReturnType<typeof fetchKpis>>;
-type ExecSalesMetrics = Awaited<ReturnType<typeof fetchSalesMetrics>>;
-type ExecSpark = Awaited<ReturnType<typeof fetchSparkRevenue>>;
-
-const EMPTY_KPIS: ExecKpis = {
-  leadsNovosCount: 0,
-  pipelineCount: 0,
-  pipelineValorCentavos: 0,
-  fechadosCount: 0,
-  fechadosValorLiberadoCentavos: 0,
-  fechadosComissaoCentavos: 0,
-  conversaoRolling90d: { criados: 0, fechados: 0, taxa: 0 },
-};
-
-const EMPTY_SALES: ExecSalesMetrics = {
-  avgDealSizeCentavos: 0,
-  avgSalesCycleDays: null,
-  salesVelocityCentavosPerDay: 0,
-  winRate: 0,
-  avgComissaoCentavos: 0,
-};
-
-const EMPTY_SPARK: ExecSpark = {
-  comissao: [],
-  liberado: [],
-  ticketMedio: [],
-  cicloMedio: [],
-};
-
-async function safeQuery<T>(
-  label: string,
-  promise: Promise<T>,
-  fallback: T,
-): Promise<T> {
-  try {
-    return await promise;
-  } catch (error) {
-    console.error(`[/admin/painel-executivo:${label}]`, error);
-    return fallback;
-  }
-}
-
 export default async function PainelExecutivoPage({ searchParams }: Props) {
   const user = await getAppUser();
   if (!user) redirect("/login");
@@ -120,28 +78,10 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
   const compMode: ComparacaoMode = filters.comparar;
   const compPeriod = comparisonPeriod(period, compMode);
 
-  // === Tier 1 (síncrono) — só o que aparece nos 4 KPIs do topo. ===
-  // KPIs + sales metrics + sparklines: tudo necessário pra renderizar os 4
-  // cards executive. Demais seções sobem em Suspense abaixo.
-  const [kpisCurr, kpisPrev, salesCurr, salesPrev, spark] = await Promise.all([
-    safeQuery("kpis-current", fetchKpis(filters, period), EMPTY_KPIS),
-    compPeriod
-      ? safeQuery<ExecKpis | null>(
-          "kpis-previous",
-          fetchKpis(filters, compPeriod),
-          null,
-        )
-      : Promise.resolve(null),
-    safeQuery("sales-current", fetchSalesMetrics(filters, period), EMPTY_SALES),
-    compPeriod
-      ? safeQuery<ExecSalesMetrics | null>(
-          "sales-previous",
-          fetchSalesMetrics(filters, compPeriod),
-          null,
-        )
-      : Promise.resolve(null),
-    safeQuery("spark-revenue", fetchSparkRevenue(6), EMPTY_SPARK),
-  ]);
+  // Tier 1 vazio: só auth + parse de filtros (rápidos). TUDO que vem do banco
+  // sobe em Suspense abaixo, inclusive os KPIs do topo. Antes, 5 queries
+  // paralelas mas cada uma com 5+ sub-queries seriais somavam >60s e
+  // estouravam maxDuration → 504 GATEWAY_TIMEOUT na página inteira.
 
   after(() =>
     logAction(null, user.id, "relatorio_acessado", "relatorio", null, {
@@ -179,80 +119,15 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
 
       <ExecFilters />
 
-      {/* KPIs estratégicos com sparklines */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 stagger [&>*]:animate-fade-up">
-        <KpiExecutive
-          icon={DollarSign}
-          tone="premium"
-          label="Receita realizada"
-          value={formatBrlShort(kpisCurr.fechadosComissaoCentavos)}
-          deltaPct={
-            kpisPrev
-              ? pctDelta(
-                  kpisCurr.fechadosComissaoCentavos,
-                  kpisPrev.fechadosComissaoCentavos,
-                )
-              : null
-          }
-          deltaLabel={`vs ${compPeriod?.label.toLowerCase() ?? "—"}`}
-          spark={spark.comissao}
+      {/* KPIs estratégicos com sparklines — Suspense próprio pra não travar
+          o resto da página caso alguma das queries internas demore. */}
+      <Suspense fallback={<KpisSkeleton />}>
+        <KpisSection
+          filters={filters}
+          period={period}
+          compPeriod={compPeriod}
         />
-        <KpiExecutive
-          icon={Banknote}
-          tone="growth"
-          label="Volume liberado"
-          value={formatBrlShort(kpisCurr.fechadosValorLiberadoCentavos)}
-          deltaPct={
-            kpisPrev
-              ? pctDelta(
-                  kpisCurr.fechadosValorLiberadoCentavos,
-                  kpisPrev.fechadosValorLiberadoCentavos,
-                )
-              : null
-          }
-          deltaLabel={`vs ${compPeriod?.label.toLowerCase() ?? "—"}`}
-          spark={spark.liberado}
-        />
-        <KpiExecutive
-          icon={TrendingUp}
-          label="Ticket médio"
-          value={
-            salesCurr.avgDealSizeCentavos > 0
-              ? formatBrlShort(salesCurr.avgDealSizeCentavos)
-              : "—"
-          }
-          deltaPct={
-            salesPrev
-              ? pctDelta(
-                  salesCurr.avgDealSizeCentavos,
-                  salesPrev.avgDealSizeCentavos,
-                )
-              : null
-          }
-          deltaLabel={`vs ${compPeriod?.label.toLowerCase() ?? "—"}`}
-          spark={spark.ticketMedio}
-        />
-        <KpiExecutive
-          icon={Gauge}
-          label="Ciclo de venda"
-          value={
-            salesCurr.avgSalesCycleDays != null
-              ? `${salesCurr.avgSalesCycleDays.toFixed(0)}d`
-              : "—"
-          }
-          deltaPct={
-            salesPrev && salesPrev.avgSalesCycleDays && salesCurr.avgSalesCycleDays
-              ? // ciclo menor é melhor → invertemos sinal pra "verde = melhorou"
-                -pointsDelta(
-                  salesCurr.avgSalesCycleDays,
-                  salesPrev.avgSalesCycleDays,
-                )
-              : null
-          }
-          deltaLabel="dias · menor é melhor"
-          spark={spark.cicloMedio}
-        />
-      </div>
+      </Suspense>
 
       {/* === Tier 2 (streaming) — cada seção pesada em Suspense isolado. === */}
 
@@ -356,6 +231,120 @@ function SectionError({ title }: { title: string }) {
       </div>
     </div>
   );
+}
+
+function KpisSkeleton() {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          key={i}
+          className="surface-solid rounded-xl animate-pulse h-32"
+          aria-hidden
+        />
+      ))}
+    </div>
+  );
+}
+
+async function KpisSection({
+  filters,
+  period,
+  compPeriod,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+  compPeriod: PeriodRange | null;
+}) {
+  return renderSection("KPIs executivos", async () => {
+    // Tudo que os 4 KPI cards do topo precisam, em paralelo. Com fetchKpis
+    // e fetchSalesMetrics agora paralelizadas internamente, esta seção
+    // termina rápido mesmo em pico.
+    const [kpisCurr, kpisPrev, salesCurr, salesPrev, spark] = await Promise.all([
+      fetchKpis(filters, period),
+      compPeriod ? fetchKpis(filters, compPeriod) : Promise.resolve(null),
+      fetchSalesMetrics(filters, period),
+      compPeriod
+        ? fetchSalesMetrics(filters, compPeriod)
+        : Promise.resolve(null),
+      fetchSparkRevenue(6),
+    ]);
+
+    return (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 stagger [&>*]:animate-fade-up">
+        <KpiExecutive
+          icon={DollarSign}
+          tone="premium"
+          label="Receita realizada"
+          value={formatBrlShort(kpisCurr.fechadosComissaoCentavos)}
+          deltaPct={
+            kpisPrev
+              ? pctDelta(
+                  kpisCurr.fechadosComissaoCentavos,
+                  kpisPrev.fechadosComissaoCentavos,
+                )
+              : null
+          }
+          deltaLabel={`vs ${compPeriod?.label.toLowerCase() ?? "—"}`}
+          spark={spark.comissao}
+        />
+        <KpiExecutive
+          icon={Banknote}
+          tone="growth"
+          label="Volume liberado"
+          value={formatBrlShort(kpisCurr.fechadosValorLiberadoCentavos)}
+          deltaPct={
+            kpisPrev
+              ? pctDelta(
+                  kpisCurr.fechadosValorLiberadoCentavos,
+                  kpisPrev.fechadosValorLiberadoCentavos,
+                )
+              : null
+          }
+          deltaLabel={`vs ${compPeriod?.label.toLowerCase() ?? "—"}`}
+          spark={spark.liberado}
+        />
+        <KpiExecutive
+          icon={TrendingUp}
+          label="Ticket médio"
+          value={
+            salesCurr.avgDealSizeCentavos > 0
+              ? formatBrlShort(salesCurr.avgDealSizeCentavos)
+              : "—"
+          }
+          deltaPct={
+            salesPrev
+              ? pctDelta(
+                  salesCurr.avgDealSizeCentavos,
+                  salesPrev.avgDealSizeCentavos,
+                )
+              : null
+          }
+          deltaLabel={`vs ${compPeriod?.label.toLowerCase() ?? "—"}`}
+          spark={spark.ticketMedio}
+        />
+        <KpiExecutive
+          icon={Gauge}
+          label="Ciclo de venda"
+          value={
+            salesCurr.avgSalesCycleDays != null
+              ? `${salesCurr.avgSalesCycleDays.toFixed(0)}d`
+              : "—"
+          }
+          deltaPct={
+            salesPrev && salesPrev.avgSalesCycleDays && salesCurr.avgSalesCycleDays
+              ? -pointsDelta(
+                  salesCurr.avgSalesCycleDays,
+                  salesPrev.avgSalesCycleDays,
+                )
+              : null
+          }
+          deltaLabel="dias · menor é melhor"
+          spark={spark.cicloMedio}
+        />
+      </div>
+    );
+  });
 }
 
 async function ReceitaMensalSection({ filters }: { filters: RFilters }) {

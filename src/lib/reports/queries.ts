@@ -52,66 +52,76 @@ export type Kpis = {
 
 export async function fetchKpis(filters: ReportFilters, period: PeriodRange): Promise<Kpis> {
   const cb = baseConds(filters);
-
-  const [novosRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(leads)
-    .where(
-      and(
-        gte(leads.createdAt, period.from),
-        lte(leads.createdAt, period.to),
-        ...cb,
-      ),
-    );
-
-  const [pipelineRow] = await db
-    .select({
-      count: sql<number>`count(*)::int`,
-      valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
-    })
-    .from(leads)
-    .where(
-      and(
-        notInArray(
-          leads.status,
-          ["fechado", "perdido", "desqualificado", "sem_resposta"],
-        ),
-        ...cb,
-      ),
-    );
-
-  const [fechadosRow] = await db
-    .select({
-      count: sql<number>`count(*)::int`,
-      valorLiberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}), 0)::text`,
-      comissao: sql<string>`coalesce(sum(${leads.comissaoCentavos}), 0)::text`,
-    })
-    .from(leads)
-    .where(
-      and(
-        eq(leads.status, "fechado"),
-        sql`${leads.dataFechamento} >= ${period.from.toISOString().slice(0, 10)}::date`,
-        sql`${leads.dataFechamento} <= ${period.to.toISOString().slice(0, 10)}::date`,
-        ...cb,
-      ),
-    );
-
-  // Conversão rolling 90d (sem filtros de período custom — sempre últimos 90d)
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-  const [criadosRollRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(leads)
-    .where(and(gte(leads.createdAt, ninetyDaysAgo), ...cb));
-  const [fechadosRollRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(leads)
-    .where(
-      and(
-        eq(leads.status, "fechado"),
-        gte(leads.createdAt, ninetyDaysAgo),
-        ...cb,
+  const fromDate = period.from.toISOString().slice(0, 10);
+  const toDate = period.to.toISOString().slice(0, 10);
+
+  // 5 queries em PARALELO (antes eram sequenciais — 5x latência). Com pool=10
+  // do pg-js sobre pgbouncer, todas pegam conexões simultaneamente.
+  const [
+    [novosRow],
+    [pipelineRow],
+    [fechadosRow],
+    [criadosRollRow],
+    [fechadosRollRow],
+  ] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(
+        and(
+          gte(leads.createdAt, period.from),
+          lte(leads.createdAt, period.to),
+          ...cb,
+        ),
       ),
-    );
+    db
+      .select({
+        count: sql<number>`count(*)::int`,
+        valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+      })
+      .from(leads)
+      .where(
+        and(
+          notInArray(
+            leads.status,
+            ["fechado", "perdido", "desqualificado", "sem_resposta"],
+          ),
+          ...cb,
+        ),
+      ),
+    db
+      .select({
+        count: sql<number>`count(*)::int`,
+        valorLiberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}), 0)::text`,
+        comissao: sql<string>`coalesce(sum(${leads.comissaoCentavos}), 0)::text`,
+      })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.status, "fechado"),
+          sql`${leads.dataFechamento} >= ${fromDate}::date`,
+          sql`${leads.dataFechamento} <= ${toDate}::date`,
+          ...cb,
+        ),
+      ),
+    // Conversão rolling 90d (sem filtros de período custom — sempre últimos 90d)
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(and(gte(leads.createdAt, ninetyDaysAgo), ...cb)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.status, "fechado"),
+          gte(leads.createdAt, ninetyDaysAgo),
+          ...cb,
+        ),
+      ),
+  ]);
+
   const taxa =
     criadosRollRow.count > 0 ? fechadosRollRow.count / criadosRollRow.count : 0;
 
@@ -488,64 +498,65 @@ export async function fetchSalesMetrics(
   const fromIso = period.from.toISOString().slice(0, 10);
   const toIso = period.to.toISOString().slice(0, 10);
 
-  // Avg deal size + sales cycle dos fechados no período
-  const [avgRow] = await db
-    .select({
-      avgValor: sql<string>`coalesce(avg(${leads.valorLiberadoCentavos}), 0)::text`,
-      avgComissao: sql<string>`coalesce(avg(${leads.comissaoCentavos}), 0)::text`,
-      avgCycle: sql<string | null>`avg(extract(epoch from (${leads.dataFechamento}::timestamp - ${leads.createdAt})) / 86400.0)::text`,
-    })
-    .from(leads)
-    .where(
-      and(
-        eq(leads.status, "fechado"),
-        sql`${leads.dataFechamento} >= ${fromIso}::date`,
-        sql`${leads.dataFechamento} <= ${toIso}::date`,
-        ...cb,
+  // 4 queries em PARALELO (antes sequenciais → 4x latência).
+  const [[avgRow], [resolvedRow], [wonRow], [pipelineRow]] = await Promise.all([
+    // Avg deal size + sales cycle dos fechados no período
+    db
+      .select({
+        avgValor: sql<string>`coalesce(avg(${leads.valorLiberadoCentavos}), 0)::text`,
+        avgComissao: sql<string>`coalesce(avg(${leads.comissaoCentavos}), 0)::text`,
+        avgCycle: sql<string | null>`avg(extract(epoch from (${leads.dataFechamento}::timestamp - ${leads.createdAt})) / 86400.0)::text`,
+      })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.status, "fechado"),
+          sql`${leads.dataFechamento} >= ${fromIso}::date`,
+          sql`${leads.dataFechamento} <= ${toIso}::date`,
+          ...cb,
+        ),
       ),
-    );
-
-  // Win rate no período (fechados / criados que já tiveram resolução final)
-  const [resolvedRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(leads)
-    .where(
-      and(
-        sql`${leads.status} IN ('fechado', 'perdido', 'desqualificado')`,
-        gte(leads.createdAt, period.from),
-        lte(leads.createdAt, period.to),
-        ...cb,
+    // Win rate no período (fechados / criados que já tiveram resolução final)
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(
+        and(
+          sql`${leads.status} IN ('fechado', 'perdido', 'desqualificado')`,
+          gte(leads.createdAt, period.from),
+          lte(leads.createdAt, period.to),
+          ...cb,
+        ),
       ),
-    );
-  const [wonRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(leads)
-    .where(
-      and(
-        eq(leads.status, "fechado"),
-        gte(leads.createdAt, period.from),
-        lte(leads.createdAt, period.to),
-        ...cb,
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.status, "fechado"),
+          gte(leads.createdAt, period.from),
+          lte(leads.createdAt, period.to),
+          ...cb,
+        ),
       ),
-    );
+    // Pipeline atual pra velocity
+    db
+      .select({
+        valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
+      })
+      .from(leads)
+      .where(
+        and(
+          notInArray(
+            leads.status,
+            ["fechado", "perdido", "desqualificado", "sem_resposta"],
+          ),
+          ...cb,
+        ),
+      ),
+  ]);
   const winRate =
     resolvedRow.count > 0 ? wonRow.count / resolvedRow.count : 0;
-
-  // Pipeline atual pra velocity
-  const [pipelineRow] = await db
-    .select({
-      valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
-    })
-    .from(leads)
-    .where(
-      and(
-        notInArray(
-          leads.status,
-          ["fechado", "perdido", "desqualificado", "sem_resposta"],
-        ),
-        ...cb,
-      ),
-    );
 
   const avgCycleDays = avgRow.avgCycle ? Number(avgRow.avgCycle) : null;
   const pipelineValor = Number(pipelineRow.valor ?? 0);
