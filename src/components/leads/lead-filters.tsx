@@ -135,7 +135,12 @@ export function LeadFilters({ consultores, origens }: Props) {
           label="Consultor"
           value={params.get("consultorId")}
           onChange={(v) => setParam("consultorId", v)}
-          options={consultores.map((c) => ({ value: c.id, label: c.nome }))}
+          // Sentinela "__none__" pra filtrar leads sem consultor (pool não-
+          // atribuído). Tratado em list-leads.ts → isNull(consultorId).
+          options={[
+            { value: "__none__", label: "Sem consultor (pool)" },
+            ...consultores.map((c) => ({ value: c.id, label: c.nome })),
+          ]}
         />
         <FilterSelect
           label="Origem"

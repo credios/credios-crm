@@ -72,16 +72,30 @@ export const STATUS_LEAD_LABEL: Record<string, string> = {
   desqualificado: "Desqualificado",
 };
 
+// Motivos pra DESQUALIFICAR um lead — quando ele já entra fora da
+// política ou sem condições básicas. É um "não-qualificado a priori":
+// imóvel/renda/localização/restrições não cabem na nossa esteira.
 export const MOTIVOS_DESQUALIFICACAO = [
   "Imóvel não atende critérios",
   "Renda insuficiente",
   "Localização fora da política",
   "LTV muito alto",
   "Restrições no nome",
+  "Documentação irregular",
+  "Lead duplicado",
+  "Dados incorretos / falsos",
+  "Outro",
+] as const;
+
+// Motivos pra marcar um lead como PERDIDO — ele era qualificado e
+// chegou a entrar no funil, mas não fechou. Diferente de desqualificado:
+// aqui já houve esforço comercial.
+export const MOTIVOS_PERDIDO = [
   "Cliente desistiu",
   "Taxa não competitiva",
   "Já fechou com concorrente",
-  "Documentação irregular",
+  "Sem retorno após várias tentativas",
+  "Mudou de planos",
   "Outro",
 ] as const;
 

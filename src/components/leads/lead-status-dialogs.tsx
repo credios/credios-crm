@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { MOTIVOS_DESQUALIFICACAO } from "@/lib/constants";
+import { MOTIVOS_DESQUALIFICACAO, MOTIVOS_PERDIDO } from "@/lib/constants";
 
 type CommonProps = {
   open: boolean;
@@ -211,6 +211,11 @@ export function DesqualificacaoDialog({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Lista correta de motivos por status — desqualificado (pré-funil) e
+  // perdido (no funil mas não fechou) têm causas distintas.
+  const motivos =
+    status === "desqualificado" ? MOTIVOS_DESQUALIFICACAO : MOTIVOS_PERDIDO;
+
   const isOutro = motivo === "Outro";
 
   function reset() {
@@ -274,7 +279,7 @@ export function DesqualificacaoDialog({
                 <SelectValue placeholder="Escolha um motivo" />
               </SelectTrigger>
               <SelectContent>
-                {MOTIVOS_DESQUALIFICACAO.map((m) => (
+                {motivos.map((m) => (
                   <SelectItem key={m} value={m}>
                     {m}
                   </SelectItem>

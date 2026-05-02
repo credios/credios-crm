@@ -136,7 +136,13 @@ async function rawQuery(
       ),
     );
   }
-  if (filters.consultorId) conds.push(eq(leadsTable.consultorId, filters.consultorId));
+  // "__none__" é sentinela do filtro pra leads sem consultor (pool não-
+  // atribuído). Qualquer outro valor é tratado como UUID de consultor real.
+  if (filters.consultorId === "__none__") {
+    conds.push(isNull(leadsTable.consultorId));
+  } else if (filters.consultorId) {
+    conds.push(eq(leadsTable.consultorId, filters.consultorId));
+  }
   if (filters.origem) conds.push(eq(leadsTable.origem, filters.origem));
   if (filters.estado) conds.push(eq(leadsTable.estado, filters.estado));
   if (filters.dispositivo) conds.push(eq(leadsTable.dispositivo, filters.dispositivo));
@@ -267,7 +273,13 @@ function buildCountWhere(filters: ListLeadsQuery, user: AppUser) {
       ),
     );
   }
-  if (filters.consultorId) conds.push(eq(leadsTable.consultorId, filters.consultorId));
+  // "__none__" é sentinela do filtro pra leads sem consultor (pool não-
+  // atribuído). Qualquer outro valor é tratado como UUID de consultor real.
+  if (filters.consultorId === "__none__") {
+    conds.push(isNull(leadsTable.consultorId));
+  } else if (filters.consultorId) {
+    conds.push(eq(leadsTable.consultorId, filters.consultorId));
+  }
   if (filters.origem) conds.push(eq(leadsTable.origem, filters.origem));
   if (filters.estado) conds.push(eq(leadsTable.estado, filters.estado));
   if (filters.dispositivo) conds.push(eq(leadsTable.dispositivo, filters.dispositivo));
