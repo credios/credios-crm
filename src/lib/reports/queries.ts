@@ -160,11 +160,23 @@ export async function fetchVolumePorDia(
       sql`coalesce(${leads.origem}, 'Sem origem')`,
     )
     .orderBy(sql`date_trunc('day', ${leads.createdAt})`);
-  return rows.map((r) => ({
-    dia: String(r.dia),
-    origem: String(r.origem),
-    count: Number(r.count),
-  }));
+  // Defensivo: se postgres-js retornar tipos inesperados (origem null mesmo
+  // com COALESCE em corner cases, count vindo bigint não-conversível, etc),
+  // filtra/sanitiza pra não vazar NaN/undefined pro componente.
+  return rows
+    .map((r) => {
+      const count = Number(r.count);
+      const dia = typeof r.dia === "string" && r.dia.length === 10 ? r.dia : null;
+      const origem =
+        typeof r.origem === "string" && r.origem.length > 0
+          ? r.origem
+          : "Sem origem";
+      return { dia, origem, count };
+    })
+    .filter(
+      (r): r is { dia: string; origem: string; count: number } =>
+        r.dia !== null && Number.isFinite(r.count),
+    );
 }
 
 // ============================================================================

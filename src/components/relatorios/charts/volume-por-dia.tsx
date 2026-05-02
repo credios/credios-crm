@@ -35,9 +35,15 @@ type Props = { rows: VolumePorDiaRow[] };
 
 export function VolumePorDiaChart({ rows }: Props) {
   const { data, origens } = pivot(rows);
+  // Number.isFinite garante que NaN/undefined nunca poluam o total — o gráfico
+  // mostrava "NaN leads no período" quando alguma row chegava com valor
+  // inesperado.
   const totalNoPeriodo = data.reduce((acc, d) => {
     let s = 0;
-    for (const o of origens) s += Number(d[o] ?? 0);
+    for (const o of origens) {
+      const v = Number(d[o]);
+      if (Number.isFinite(v)) s += v;
+    }
     return acc + s;
   }, 0);
 

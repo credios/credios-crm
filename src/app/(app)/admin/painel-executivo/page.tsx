@@ -305,15 +305,35 @@ function SectionSkeleton({ h }: { h: number }) {
   );
 }
 
+// Timeout por seção: ver comentário equivalente em /relatorios.
+const SECTION_TIMEOUT_MS = 25_000;
+
 async function renderSection(
   name: string,
   fn: () => Promise<ReactNode>,
 ): Promise<ReactNode> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await fn();
+    const result = await Promise.race([
+      fn(),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `section "${name}" timed out after ${SECTION_TIMEOUT_MS}ms`,
+              ),
+            ),
+          SECTION_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    return result;
   } catch (error) {
     console.error(`[/admin/painel-executivo:${name}]`, error);
     return <SectionError title={name} />;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
