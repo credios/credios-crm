@@ -188,6 +188,10 @@ export const leads = pgTable(
 
     // --- Auditoria ---
     rawPayload: jsonb("raw_payload"),
+    // UUID do Notion (filename do .md exportado) — preenchido apenas em
+    // leads importados via db/import-notion.ts. UNIQUE constraint pra ON
+    // CONFLICT funcionar; PG default permite múltiplos NULLs.
+    notionId: text("notion_id").unique(),
     ultimoContato: timestamp("ultimo_contato", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
