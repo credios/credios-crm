@@ -20,7 +20,7 @@ export default function SemPermissaoPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Button render={<Link href="/leads" />}>Voltar para Leads</Button>
+        <Button nativeButton={false} render={<Link href="/leads">Voltar para Leads</Link>} />
       </CardContent>
     </Card>
   );

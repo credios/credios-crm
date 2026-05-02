@@ -126,7 +126,7 @@ export function LeadKanban({ leads, consultores, origens }: Props) {
               Mostrando 500 leads (limite) — use filtros pra refinar.
             </p>
           )}
-          <Button render={<Link href="/leads/novo">+ Novo lead</Link>} />
+          <Button nativeButton={false} render={<Link href="/leads/novo">+ Novo lead</Link>} />
         </div>
       </div>
 

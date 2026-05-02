@@ -6,6 +6,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { createInteracaoSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -60,11 +61,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     })
     .returning();
 
-  // Atualiza ultimo_contato e resolve alertas de SLA pendentes.
+  // Atualiza ultimo_contato.
   await db
     .update(leadsTable)
     .set({ ultimoContato: now })
     .where(eq(leadsTable.id, id));
+
+  // Auto-resolve SLA ativos (interação manual indica que o lead foi atendido).
+  const resolvedCount = await resolveSlaAlertsForLead(id);
 
   void logAction(
     null,
@@ -72,7 +76,11 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     "interacao_criada",
     "lead",
     id,
-    { interacaoId: created.id, tipo: data.tipo },
+    {
+      interacaoId: created.id,
+      tipo: data.tipo,
+      slaResolved: resolvedCount,
+    },
     extractRequestMeta(request),
   );
 

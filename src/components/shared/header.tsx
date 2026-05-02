@@ -1,4 +1,5 @@
 import { MobileNav } from "./mobile-nav";
+import { NotificationsBell } from "./notifications-bell";
 import { UserMenu } from "./user-menu";
 import type { Perfil } from "@/lib/auth/types";
 
@@ -18,6 +19,7 @@ export function Header({ user }: Props) {
         <MobileNav isAdmin={isAdmin} />
         <div className="md:hidden font-semibold">CRM Credios</div>
         <div className="flex-1" />
+        {user.perfil !== "marketing" && <NotificationsBell />}
         <UserMenu user={user} />
       </div>
     </header>

@@ -125,7 +125,9 @@ async function main() {
 
   console.log("\n[1/2] Usuários...");
   await ensureAppUser({
-    email: "gabriel@credios.com.br",
+    // Email do Google Workspace pessoal — combina com o que o Supabase OAuth
+    // recebe na primeira autenticação Google.
+    email: "gabriel.meirelles@credios.com.br",
     nome: "Gabriel Marinho Meirelles",
     perfil: "admin",
   });

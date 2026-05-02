@@ -9,7 +9,7 @@ import {
   type ColumnDef,
   type RowSelectionState,
 } from "@tanstack/react-table";
-import { Snowflake } from "lucide-react";
+import { AlertTriangle, Snowflake } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
@@ -73,12 +73,20 @@ export function LeadList({ result, consultores, origens }: Props) {
         accessorKey: "nome",
         header: "Nome",
         cell: ({ row }) => (
-          <Link
-            href={`/leads/${row.original.id}`}
-            className="font-medium hover:underline"
-          >
-            {row.original.nome}
-          </Link>
+          <div className="flex items-center gap-2">
+            {row.original.slaAtrasado && (
+              <AlertTriangle
+                className="size-4 text-destructive shrink-0"
+                aria-label="SLA: sem primeiro contato há mais de 30min"
+              />
+            )}
+            <Link
+              href={`/leads/${row.original.id}`}
+              className="font-medium hover:underline"
+            >
+              {row.original.nome}
+            </Link>
+          </div>
         ),
       },
       {
@@ -172,7 +180,7 @@ export function LeadList({ result, consultores, origens }: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ViewToggle current="lista" />
-        <Button render={<Link href="/leads/novo">+ Novo lead</Link>} />
+        <Button nativeButton={false} render={<Link href="/leads/novo">+ Novo lead</Link>} />
       </div>
 
       {selectedLeads.length > 0 && (

@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatBrlFromCents } from "@/lib/formatters/currency";
+import { renderTemplate, type TemplateLeadVars } from "@/lib/templates";
 
 export type Template = {
   id: string;
@@ -30,34 +30,9 @@ export type Template = {
   statusAplicavel: string[] | null;
 };
 
-type LeadVarsSource = {
-  nome: string;
-  cidade: string | null;
-  estado: string | null;
-  valorCreditoCentavos: number | null;
-  valorImovelCentavos: number | null;
-};
-
-function renderTemplate(content: string, lead: LeadVarsSource): string {
-  const primeiroNome = (lead.nome ?? "").split(/\s+/)[0] ?? "";
-  return content
-    .replace(/\{\{nome\}\}/g, lead.nome ?? "")
-    .replace(/\{\{primeiro_nome\}\}/g, primeiroNome)
-    .replace(
-      /\{\{valor_credito\}\}/g,
-      lead.valorCreditoCentavos != null ? formatBrlFromCents(lead.valorCreditoCentavos) : "—",
-    )
-    .replace(
-      /\{\{valor_imovel\}\}/g,
-      lead.valorImovelCentavos != null ? formatBrlFromCents(lead.valorImovelCentavos) : "—",
-    )
-    .replace(/\{\{cidade\}\}/g, lead.cidade ?? "—")
-    .replace(/\{\{estado\}\}/g, lead.estado ?? "—");
-}
-
 type Props = {
   templates: Template[];
-  lead: LeadVarsSource;
+  lead: TemplateLeadVars;
 };
 
 export function MensagensSugeridas({ templates, lead }: Props) {

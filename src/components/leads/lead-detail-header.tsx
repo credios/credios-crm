@@ -132,7 +132,7 @@ export function LeadDetailHeader({ lead, canEdit, canAssign, isAdmin, consultore
 
   return (
     <div className="space-y-4">
-      <Button variant="ghost" size="sm" render={<Link href="/leads"><ArrowLeft className="size-4" /> Voltar</Link>} />
+      <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/leads"><ArrowLeft className="size-4" /> Voltar</Link>} />
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2 min-w-0">
@@ -193,6 +193,7 @@ export function LeadDetailHeader({ lead, canEdit, canAssign, isAdmin, consultore
           {wa && (
             <Button
               variant="outline"
+              nativeButton={false}
               render={
                 <a href={wa} target="_blank" rel="noopener noreferrer">
                   <MessageCircle className="size-4" /> WhatsApp
@@ -296,7 +297,12 @@ function ReassignDialog({
         <div className="py-2">
           <Select value={consultorId} onValueChange={(v) => setConsultorId(v ?? "__pool__")} disabled={pending}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {(v: unknown) => {
+                  if (v === "__pool__" || !v) return "Pool não-atribuído";
+                  return consultores.find((c) => c.id === v)?.nome ?? String(v);
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__pool__">Pool não-atribuído</SelectItem>

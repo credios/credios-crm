@@ -59,7 +59,13 @@ export function ActionEditor({ value, onChange, usuarios, disabled }: Props) {
             disabled={disabled}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Selecione um usuário…" />
+              <SelectValue placeholder="Selecione um usuário…">
+                {(v: unknown) => {
+                  if (typeof v !== "string" || !v) return null;
+                  const u = usuarios.find((u) => u.id === v);
+                  return u ? `${u.nome} (${u.perfil})` : v;
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {usuarios.map((u) => (

@@ -140,7 +140,12 @@ function BulkReassignDialog({
         <div className="space-y-2">
           <Select value={consultorId} onValueChange={(v) => setConsultorId(v ?? "__pool__")} disabled={pending}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {(v: unknown) => {
+                  if (v === "__pool__" || !v) return "Pool não-atribuído";
+                  return consultores.find((c) => c.id === v)?.nome ?? String(v);
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__pool__">Pool não-atribuído</SelectItem>
@@ -212,7 +217,11 @@ function BulkStatusDialog({
         <div className="space-y-2">
           <Select value={novoStatus} onValueChange={(v) => setNovoStatus(v ?? "")} disabled={pending}>
             <SelectTrigger>
-              <SelectValue placeholder="Escolha o novo status" />
+              <SelectValue placeholder="Escolha o novo status">
+                {(v: unknown) =>
+                  typeof v === "string" && v ? STATUS_LEAD_LABEL[v] ?? v : null
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {NON_TERMINAL_STATUSES.map((s) => (

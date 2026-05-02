@@ -1,8 +1,12 @@
 import "server-only";
 
-import { and, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 
-import { leads as leadsTable, users as usersTable } from "../../../db/schema";
+import {
+  leads as leadsTable,
+  slaAlertas,
+  users as usersTable,
+} from "../../../db/schema";
 import { type AppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { db } from "@/lib/db";
@@ -10,7 +14,24 @@ import type { ListLeadsQuery, StatusLead } from "@/lib/validators/lead";
 
 export type LeadRow = Awaited<ReturnType<typeof rawQuery>>[number] & {
   rendaFaixa?: string | null;
+  /** True se há SLA `primeiro_contato_atrasado` ativo (resolvido_em IS NULL). */
+  slaAtrasado?: boolean;
 };
+
+async function activeSlaLeadIds(leadIds: string[]): Promise<Set<string>> {
+  if (leadIds.length === 0) return new Set();
+  const rows = await db
+    .select({ leadId: slaAlertas.leadId })
+    .from(slaAlertas)
+    .where(
+      and(
+        inArray(slaAlertas.leadId, leadIds),
+        eq(slaAlertas.tipo, "primeiro_contato_atrasado"),
+        isNull(slaAlertas.resolvidoEm),
+      ),
+    );
+  return new Set(rows.map((r) => r.leadId));
+}
 
 export type ListLeadsResult = {
   data: LeadRow[];
@@ -108,7 +129,11 @@ export async function listLeads(
       .where(buildCountWhere(filters, user)),
   ]);
   const total = totals[0]?.total ?? 0;
-  const data = rows.map((l) => maskLeadForPerfil(l, user.perfil)) as LeadRow[];
+  const slaSet = await activeSlaLeadIds(rows.map((r) => r.id));
+  const data = rows.map((l) => ({
+    ...maskLeadForPerfil(l, user.perfil),
+    slaAtrasado: slaSet.has(l.id),
+  })) as LeadRow[];
   return {
     data,
     pagination: {
@@ -126,7 +151,11 @@ export async function listLeadsForKanban(
   user: AppUser,
 ): Promise<LeadRow[]> {
   const rows = await rawQuery(filters, user, { unbounded: true });
-  return rows.map((l) => maskLeadForPerfil(l, user.perfil)) as LeadRow[];
+  const slaSet = await activeSlaLeadIds(rows.map((r) => r.id));
+  return rows.map((l) => ({
+    ...maskLeadForPerfil(l, user.perfil),
+    slaAtrasado: slaSet.has(l.id),
+  })) as LeadRow[];
 }
 
 function buildCountWhere(filters: ListLeadsQuery, user: AppUser) {

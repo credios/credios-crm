@@ -168,7 +168,14 @@ function FilterSelect({
         onValueChange={(v) => onChange(v === "__all__" ? null : (v ?? null))}
       >
         <SelectTrigger>
-          <SelectValue placeholder="Todos" />
+          <SelectValue>
+            {(v: unknown) => {
+              if (typeof v !== "string" || !v || v === "__all__") {
+                return <span className="text-muted-foreground">Todos</span>;
+              }
+              return options.find((o) => o.value === v)?.label ?? v;
+            }}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="__all__">Todos</SelectItem>

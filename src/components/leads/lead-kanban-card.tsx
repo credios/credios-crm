@@ -2,7 +2,7 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Snowflake } from "lucide-react";
+import { AlertTriangle, Snowflake } from "lucide-react";
 import Link from "next/link";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -38,6 +38,7 @@ export function LeadKanbanCard({ lead }: { lead: LeadRow }) {
       className={cn(
         "rounded-md border bg-card p-3 shadow-sm hover:shadow-md transition-shadow space-y-2",
         cold && "border-blue-300/60",
+        lead.slaAtrasado && "border-destructive/60 ring-1 ring-destructive/20",
       )}
       {...attributes}
       {...listeners}
@@ -51,7 +52,12 @@ export function LeadKanbanCard({ lead }: { lead: LeadRow }) {
         >
           {lead.nome}
         </Link>
-        {cold && <Snowflake className="size-3.5 text-blue-500 shrink-0 mt-0.5" aria-label="Esfriando" />}
+        <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          {lead.slaAtrasado && (
+            <AlertTriangle className="size-3.5 text-destructive" aria-label="SLA: sem 1º contato há mais de 30min" />
+          )}
+          {cold && <Snowflake className="size-3.5 text-blue-500" aria-label="Esfriando" />}
+        </div>
       </div>
 
       <p className="text-sm font-semibold">

@@ -21,6 +21,7 @@ export function ViewToggle({ current }: Props) {
       <Button
         variant={current === "lista" ? "secondary" : "ghost"}
         size="sm"
+        nativeButton={false}
         render={
           <Link
             href={`/leads${suffix}`}
@@ -33,6 +34,7 @@ export function ViewToggle({ current }: Props) {
       <Button
         variant={current === "kanban" ? "secondary" : "ghost"}
         size="sm"
+        nativeButton={false}
         render={
           <Link
             href={`/leads/kanban${suffix}`}

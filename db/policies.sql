@@ -69,6 +69,46 @@ CREATE TRIGGER set_atualizado_em
   FOR EACH ROW EXECUTE FUNCTION public.trigger_set_atualizado_em();
 
 -- ----------------------------------------------------------------
+-- Auto-provisionamento de public.users em novo auth.users
+-- ----------------------------------------------------------------
+-- Quando alguém loga via Google (ou outro provider) com email novo, o
+-- Supabase cria a row em auth.users. Sem provisionamento, getAppUser
+-- retorna null e o app entra em loop de redirect. Trigger insere row
+-- correspondente em public.users com perfil=consultor (default seguro).
+-- Admin promove via SQL/UI conforme necessário.
+--
+-- ON CONFLICT (id) DO NOTHING permite que seed manual continue funcionando.
+
+CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.users (id, email, nome, perfil, ativo)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(
+      NEW.raw_user_meta_data->>'full_name',
+      NEW.raw_user_meta_data->>'name',
+      split_part(NEW.email, '@', 1)
+    ),
+    'consultor',
+    true
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
+
+-- ----------------------------------------------------------------
 -- 3. Habilitar RLS em todas as tabelas
 -- ----------------------------------------------------------------
 

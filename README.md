@@ -324,6 +324,46 @@ Hooks em `src/lib/realtime/`:
 
 Mapping em `src/components/leads/status-badge.tsx`. Ajustes na Fase 6 se quiser bater 100% com Notion atual.
 
+### SLA + alertas + sino (Fase 6)
+
+**Engine** em [`src/lib/sla/`](src/lib/sla/):
+- `check.ts` — `checkSlaPrimeiroContato(now?)`: avalia leads candidatos (status `novo`, `consultor_id` setado, `MAX(atribuidoEm, última interação manual) ≤ NOW() - 30min`); skip se `now` fora de 08-18 BRT seg-sex; idempotente
+- `check.ts` — `resolveSlaAlertsForLead(leadId)`: marca todos os SLA ativos do lead como resolvidos
+- `notify.ts` — `sendSlaAlertEmail(novos)` envia 1 email pra todos os admins com a lista agrupada
+
+**Cron** `/api/cron/sla-check` (GET, schedule `*/5 * * * *` em [`vercel.json`](vercel.json)):
+- Em prod valida `Authorization: Bearer ${CRON_SECRET}` (Vercel injeta automaticamente)
+- Em dev (`NODE_ENV != production`) aceita sem auth — testa via `curl http://localhost:3000/api/cron/sla-check`
+
+**`/api/sla/alertas`** (GET): alertas ativos com info do lead. Scope por perfil (admin/gerente todos, consultor só próprios, marketing bloqueado).
+
+**Sino in-app** ([`<NotificationsBell>`](src/components/shared/notifications-bell.tsx)) no header:
+- Badge vermelho com count
+- Dropdown listando alertas com link
+- Subscribe a `sla_alertas` via Realtime → toast no novo + refetch
+
+**Badge SLA na lista e Kanban**: `listLeads` agora retorna `slaAtrasado: boolean`; lista mostra ⚠️ ao lado do nome, kanban borda + ring vermelho no card.
+
+**Auto-resolve**: `POST /api/leads/[id]/interacoes` chama `resolveSlaAlertsForLead` quando interação é manual. Audit log inclui `slaResolved: N`.
+
+**Realtime**: replication habilitada para `public.sla_alertas` via `ALTER PUBLICATION supabase_realtime`.
+
+### Templates de mensagens (Fase 6)
+
+**UI** em [`/configuracoes/mensagens`](src/app/(app)/configuracoes/mensagens/page.tsx) (admin only):
+- Lista ordenada por `ordem`, drag-and-drop pra reordenar (dnd-kit)
+- Toggle ativo, editar, excluir (confirmação inline)
+- Dialog de criar/editar com nome, status aplicáveis (multi-checkbox), conteúdo (textarea), toggle ativa, botão **"Visualizar com lead exemplo"** (preview com Maria Silva, R$ 350k, Blumenau/SC)
+
+**APIs** (admin only):
+- `GET/POST /api/configuracoes/mensagens`
+- `PATCH/DELETE /api/configuracoes/mensagens/[id]`
+- `POST /api/configuracoes/mensagens/reorder`
+
+**`renderTemplate`** extraído pra [`src/lib/templates.ts`](src/lib/templates.ts) — usado tanto no preview do Dialog quanto em `<MensagensSugeridas>` do detalhe.
+
+**Auditoria** novas: `template_criado/editado/excluido/reordenados`, `sla_alertas_disparados`.
+
 ### Tabela auxiliar `webhook_idempotency`
 
 - Schema: `id`, `payload_hash UNIQUE`, `lead_id` (FK leads), `created_at`

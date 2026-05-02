@@ -295,7 +295,15 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
             <div className="space-y-1.5">
               <Label>Atribuir ao consultor</Label>
               <Select value={watch("consultorId") ?? ""} onValueChange={(v) => setValue("consultorId", v ?? "")} disabled={pending}>
-                <SelectTrigger><SelectValue placeholder="Pool não-atribuído" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pool não-atribuído">
+                    {(v: unknown) =>
+                      typeof v === "string" && v
+                        ? consultores.find((c) => c.id === v)?.nome ?? v
+                        : null
+                    }
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {consultores.map((c) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                 </SelectContent>
