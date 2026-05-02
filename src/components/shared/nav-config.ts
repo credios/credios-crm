@@ -1,6 +1,7 @@
 import {
-  Crown,
   ClipboardList,
+  Crown,
+  Inbox,
   KanbanSquare,
   PieChart,
   Settings,
@@ -32,6 +33,12 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Trabalho",
     items: [
+      {
+        href: "/admin/leads-novos",
+        label: "Leads novos",
+        icon: Inbox,
+        adminOnly: true,
+      },
       { href: "/leads", label: "Leads", icon: Users, exact: true },
       { href: "/leads/kanban", label: "Kanban", icon: KanbanSquare },
       { href: "/tarefas", label: "Tarefas", icon: ClipboardList },
@@ -91,6 +98,10 @@ export const ROUTE_META: Record<string, SimpleNavMeta> = {
   "/tarefas": {
     title: "Tarefas",
     description: "Follow-ups e pendências do dia",
+  },
+  "/admin/leads-novos": {
+    title: "Leads novos",
+    description: "Triagem do pool sem consultor",
   },
   "/relatorios": { title: "Relatórios", description: "Visão consolidada" },
   "/admin/painel-executivo": {
