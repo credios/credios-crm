@@ -201,18 +201,33 @@ export function LeadFilters({ consultores, origens }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-        <label className="inline-flex items-center gap-2 cursor-pointer">
-          <Switch
-            checked={params.get("incluirEncerrados") === "1"}
-            onCheckedChange={(v) =>
-              setParam("incluirEncerrados", v ? "1" : null)
-            }
-            aria-label="Mostrar leads perdidos e desqualificados"
-          />
-          <span className="text-xs text-muted-foreground">
-            Mostrar perdidos / desqualificados
-          </span>
-        </label>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <Switch
+              checked={params.get("incluirEncerrados") === "1"}
+              onCheckedChange={(v) =>
+                setParam("incluirEncerrados", v ? "1" : null)
+              }
+              aria-label="Mostrar leads perdidos e desqualificados"
+            />
+            <span className="text-xs text-muted-foreground">
+              Mostrar perdidos / desqualificados
+            </span>
+          </label>
+
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <Switch
+              checked={params.get("incluirFechados") === "1"}
+              onCheckedChange={(v) =>
+                setParam("incluirFechados", v ? "1" : null)
+              }
+              aria-label="Mostrar leads fechados"
+            />
+            <span className="text-xs text-muted-foreground">
+              Mostrar fechados
+            </span>
+          </label>
+        </div>
 
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearAll}>

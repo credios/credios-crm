@@ -13,7 +13,10 @@ import {
 import { extractRequestMeta, logAction } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { foraHorarioComercial } from "@/lib/horario-comercial";
-import { sendNewLeadAlert } from "@/lib/notifications/email";
+import {
+  sendLeadAssignedEmail,
+  sendNewLeadAlert,
+} from "@/lib/notifications/email";
 import { contextFromWebhook } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
 import { aplicarRoteamento } from "@/lib/routing/engine";
@@ -257,6 +260,21 @@ export async function POST(request: NextRequest) {
       const recipients = admins.map((a) => a.email).filter(Boolean);
       if (recipients.length > 0) {
         await sendNewLeadAlert(newLead, recipients);
+      }
+    });
+  }
+
+  // 14. Email pro CONSULTOR atribuído (se routing rule designou um) —
+  // independente do horário comercial. SLA de 30min começa agora.
+  if (newLead.consultorId) {
+    after(async () => {
+      const [consultor] = await db
+        .select({ email: usersTable.email, nome: usersTable.nome })
+        .from(usersTable)
+        .where(eq(usersTable.id, newLead.consultorId!))
+        .limit(1);
+      if (consultor?.email) {
+        await sendLeadAssignedEmail(newLead, consultor.email, consultor.nome);
       }
     });
   }

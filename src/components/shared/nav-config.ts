@@ -60,6 +60,12 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Crown,
         adminOnly: true,
       },
+      {
+        href: "/admin/consultores",
+        label: "Consultores",
+        icon: Users,
+        adminOnly: true,
+      },
     ],
   },
   {
@@ -107,6 +113,10 @@ export const ROUTE_META: Record<string, SimpleNavMeta> = {
   "/admin/painel-executivo": {
     title: "Painel executivo",
     description: "Visão estratégica · admin",
+  },
+  "/admin/consultores": {
+    title: "Consultores",
+    description: "Overview do pipeline por consultor · admin",
   },
   "/configuracoes": { title: "Configurações" },
   "/configuracoes/usuarios": { title: "Usuários" },

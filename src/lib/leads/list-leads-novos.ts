@@ -14,6 +14,7 @@ export type LeadNovoCard = {
   valorCreditoCentavos: number | null;
   valorImovelCentavos: number | null;
   rendaMensalCentavos: number | null;
+  tipoImovel: string | null;
   origem: string | null;
   createdAt: Date;
 };
@@ -37,6 +38,7 @@ export async function listLeadsNovosSemConsultor(): Promise<LeadNovoCard[]> {
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       valorImovelCentavos: leadsTable.valorImovelCentavos,
       rendaMensalCentavos: leadsTable.rendaMensalCentavos,
+      tipoImovel: leadsTable.tipoImovel,
       origem: leadsTable.origem,
       createdAt: leadsTable.createdAt,
     })

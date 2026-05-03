@@ -10,6 +10,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { sendLeadAssignedEmail } from "@/lib/notifications/email";
 import { reassignSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -45,9 +46,20 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   }
   const { consultorId } = parsed.data;
 
+  let targetConsultor: {
+    id: string;
+    nome: string;
+    email: string;
+    ativo: boolean;
+  } | null = null;
   if (consultorId) {
     const [target] = await db
-      .select({ id: usersTable.id, ativo: usersTable.ativo })
+      .select({
+        id: usersTable.id,
+        nome: usersTable.nome,
+        email: usersTable.email,
+        ativo: usersTable.ativo,
+      })
       .from(usersTable)
       .where(eq(usersTable.id, consultorId))
       .limit(1);
@@ -57,6 +69,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
         { status: 400 },
       );
     }
+    targetConsultor = target;
   }
 
   const now = new Date();
@@ -91,6 +104,23 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       extractRequestMeta(request),
     ),
   );
+
+  // Email pro consultor que recebeu o lead — só dispara se houve mudança real
+  // de atribuição (ignora "atribuir pra quem já estava com ele") e só pra
+  // novos consultores (não pra pool=null).
+  if (
+    targetConsultor &&
+    targetConsultor.email &&
+    targetConsultor.id !== existing.consultorId
+  ) {
+    after(async () => {
+      await sendLeadAssignedEmail(
+        updated,
+        targetConsultor.email,
+        targetConsultor.nome,
+      );
+    });
+  }
 
   return NextResponse.json({ data: updated });
 }

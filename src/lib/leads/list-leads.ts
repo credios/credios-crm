@@ -123,18 +123,20 @@ async function rawQuery(
   }
   if (filters.status) {
     conds.push(eq(leadsTable.status, filters.status as StatusLead));
-  } else if (!filters.incluirEncerrados) {
-    // Esconde leads em status terminal (perdido / desqualificado) por default
-    // — replica comportamento do Notion. Pra ver, ativar toggle nos filtros
-    // ou filtrar explicitamente por um desses status.
-    conds.push(
-      not(
-        inArray(leadsTable.status, [
-          "perdido" as StatusLead,
-          "desqualificado" as StatusLead,
-        ]),
-      ),
-    );
+  } else {
+    // Esconde por default status terminais que poluem a lista. Cada categoria
+    // tem seu próprio toggle nos filtros — replica comportamento do Notion.
+    const escondidos: StatusLead[] = [];
+    if (!filters.incluirEncerrados) {
+      escondidos.push("perdido" as StatusLead);
+      escondidos.push("desqualificado" as StatusLead);
+    }
+    if (!filters.incluirFechados) {
+      escondidos.push("fechado" as StatusLead);
+    }
+    if (escondidos.length > 0) {
+      conds.push(not(inArray(leadsTable.status, escondidos)));
+    }
   }
   // "__none__" é sentinela do filtro pra leads sem consultor (pool não-
   // atribuído). Qualquer outro valor é tratado como UUID de consultor real.
@@ -260,18 +262,20 @@ function buildCountWhere(filters: ListLeadsQuery, user: AppUser) {
   }
   if (filters.status) {
     conds.push(eq(leadsTable.status, filters.status as StatusLead));
-  } else if (!filters.incluirEncerrados) {
-    // Esconde leads em status terminal (perdido / desqualificado) por default
-    // — replica comportamento do Notion. Pra ver, ativar toggle nos filtros
-    // ou filtrar explicitamente por um desses status.
-    conds.push(
-      not(
-        inArray(leadsTable.status, [
-          "perdido" as StatusLead,
-          "desqualificado" as StatusLead,
-        ]),
-      ),
-    );
+  } else {
+    // Esconde por default status terminais que poluem a lista. Cada categoria
+    // tem seu próprio toggle nos filtros — replica comportamento do Notion.
+    const escondidos: StatusLead[] = [];
+    if (!filters.incluirEncerrados) {
+      escondidos.push("perdido" as StatusLead);
+      escondidos.push("desqualificado" as StatusLead);
+    }
+    if (!filters.incluirFechados) {
+      escondidos.push("fechado" as StatusLead);
+    }
+    if (escondidos.length > 0) {
+      conds.push(not(inArray(leadsTable.status, escondidos)));
+    }
   }
   // "__none__" é sentinela do filtro pra leads sem consultor (pool não-
   // atribuído). Qualquer outro valor é tratado como UUID de consultor real.

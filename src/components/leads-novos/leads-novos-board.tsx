@@ -196,6 +196,11 @@ function LeadCardNovo({
           }
         />
         <DataItem
+          icon={Building2}
+          label="Tipo imóvel"
+          value={lead.tipoImovel || "—"}
+        />
+        <DataItem
           icon={MapPin}
           label="Localização"
           value={localizacao || "—"}

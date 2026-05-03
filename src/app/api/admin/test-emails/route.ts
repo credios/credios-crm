@@ -3,7 +3,10 @@ import { Resend } from "resend";
 
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin } from "@/lib/auth/permissions";
-import { renderNewLeadAlertEmail } from "@/lib/notifications/email";
+import {
+  renderLeadAssignedEmail,
+  renderNewLeadAlertEmail,
+} from "@/lib/notifications/email";
 import { renderSlaAlertEmail } from "@/lib/sla/notify";
 import {
   renderDailyTasksEmail,
@@ -86,7 +89,14 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ to, results });
 }
 
-type TestType = "daily" | "manager" | "overdue" | "sla" | "new-lead" | "all";
+type TestType =
+  | "daily"
+  | "manager"
+  | "overdue"
+  | "sla"
+  | "new-lead"
+  | "lead-assigned"
+  | "all";
 
 async function buildSamples(adminNome: string): Promise<
   Record<Exclude<TestType, "all">, { subject: string; html: string }>
@@ -245,6 +255,13 @@ async function buildSamples(adminNome: string): Promise<
     "new-lead": {
       subject: "Novo lead fora do horário: Maria da Silva (TESTE)",
       html: renderNewLeadAlertEmail({ lead: fakeLead }),
+    },
+    "lead-assigned": {
+      subject: "Novo lead pra você: Maria da Silva (TESTE)",
+      html: renderLeadAssignedEmail({
+        lead: fakeLead,
+        consultorNome: adminNome,
+      }),
     },
   };
 }

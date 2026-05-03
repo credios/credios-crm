@@ -194,6 +194,17 @@ export const listLeadsQuerySchema = z.object({
     .union([z.literal("1"), z.literal("0"), z.boolean()])
     .transform((v) => v === true || v === "1")
     .default(false),
+
+  /**
+   * Por default leads "fechado" também ficam ocultos — após a venda concluída,
+   * não precisamos mais gastar energia neles. Pra vê-los, passar
+   * `incluirFechados=1`. Se o user filtrou explicitamente por status='fechado',
+   * o filtro vence.
+   */
+  incluirFechados: z
+    .union([z.literal("1"), z.literal("0"), z.boolean()])
+    .transform((v) => v === true || v === "1")
+    .default(false),
 });
 export type ListLeadsQuery = z.infer<typeof listLeadsQuerySchema>;
 
