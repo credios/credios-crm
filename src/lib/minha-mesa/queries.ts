@@ -41,6 +41,8 @@ export type FilaItem = {
   whatsapp: string | null;
   status: string;
   origem: string | null;
+  cidade: string | null;
+  estado: string | null;
   valorCreditoCentavos: number | null;
   motivo: string;
   motivoTipo: FilaItemTipo;
@@ -117,6 +119,8 @@ async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
       whatsapp: leadsTable.whatsapp,
       status: leadsTable.status,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       atribuidoEm: leadsTable.atribuidoEm,
     })
@@ -140,6 +144,8 @@ async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
       whatsapp: r.whatsapp,
       status: r.status,
       origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
       valorCreditoCentavos: r.valorCreditoCentavos,
       motivo:
         min != null
@@ -162,6 +168,8 @@ async function qTarefasAtrasadas(consultorId: string): Promise<FilaItem[]> {
       whatsapp: leadsTable.whatsapp,
       status: leadsTable.status,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
     })
     .from(tarefas)
@@ -180,6 +188,8 @@ async function qTarefasAtrasadas(consultorId: string): Promise<FilaItem[]> {
     whatsapp: r.whatsapp,
     status: r.status,
     origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
     valorCreditoCentavos: r.valorCreditoCentavos,
     motivo: `Tarefa atrasada · ${r.titulo}`,
     motivoTipo: "tarefa_atrasada",
@@ -197,6 +207,8 @@ async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
       whatsapp: leadsTable.whatsapp,
       status: leadsTable.status,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       atribuidoEm: leadsTable.atribuidoEm,
     })
@@ -216,6 +228,8 @@ async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
     whatsapp: r.whatsapp,
     status: r.status,
     origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
     valorCreditoCentavos: r.valorCreditoCentavos,
     motivo: r.atribuidoEm
       ? `Novo · atribuído ${formatTempoDecorrido(Math.round((Date.now() - r.atribuidoEm.getTime()) / 60_000))} atrás`
@@ -234,6 +248,8 @@ async function qDocsParadas(consultorId: string): Promise<FilaItem[]> {
       whatsapp: leadsTable.whatsapp,
       status: leadsTable.status,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       ultimoContato: leadsTable.ultimoContato,
     })
@@ -259,6 +275,8 @@ async function qDocsParadas(consultorId: string): Promise<FilaItem[]> {
       whatsapp: r.whatsapp,
       status: r.status,
       origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
       valorCreditoCentavos: r.valorCreditoCentavos,
       motivo:
         dias != null
@@ -279,6 +297,8 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
       whatsapp: leadsTable.whatsapp,
       status: leadsTable.status,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       ultimoContato: leadsTable.ultimoContato,
       updatedAt: leadsTable.updatedAt,
@@ -302,6 +322,8 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
       whatsapp: r.whatsapp,
       status: r.status,
       origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
       valorCreditoCentavos: r.valorCreditoCentavos,
       motivo: `Em negociação parada há ${dias}d`,
       motivoTipo: "negociacao_parada",
@@ -320,6 +342,8 @@ async function qEsfriando(consultorId: string): Promise<FilaItem[]> {
       whatsapp: leadsTable.whatsapp,
       status: leadsTable.status,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       ultimoContato: leadsTable.ultimoContato,
     })
@@ -351,6 +375,8 @@ async function qEsfriando(consultorId: string): Promise<FilaItem[]> {
       whatsapp: r.whatsapp,
       status: r.status,
       origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
       valorCreditoCentavos: r.valorCreditoCentavos,
       motivo:
         dias != null
@@ -371,6 +397,8 @@ async function qAltoValorParado(consultorId: string): Promise<FilaItem[]> {
       whatsapp: leadsTable.whatsapp,
       status: leadsTable.status,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       ultimoContato: leadsTable.ultimoContato,
       atribuidoEm: leadsTable.atribuidoEm,
@@ -401,6 +429,8 @@ async function qAltoValorParado(consultorId: string): Promise<FilaItem[]> {
       whatsapp: r.whatsapp,
       status: r.status,
       origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
       valorCreditoCentavos: r.valorCreditoCentavos,
       motivo: `Alto valor parado (R$ ${valorMi} mi)`,
       motivoTipo: "alto_valor_parado",
@@ -420,6 +450,8 @@ export type NovoParaMim = {
   valorCreditoCentavos: number | null;
   whatsapp: string | null;
   origem: string | null;
+  cidade: string | null;
+  estado: string | null;
   atribuidoEm: Date;
   /** Minutos desde a atribuição. */
   minutosDesdeAtribuicao: number;
@@ -438,6 +470,8 @@ export async function getNovosParaMim(
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       whatsapp: leadsTable.whatsapp,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       atribuidoEm: leadsTable.atribuidoEm,
     })
     .from(leadsTable)
@@ -461,6 +495,8 @@ export async function getNovosParaMim(
         valorCreditoCentavos: r.valorCreditoCentavos,
         whatsapp: r.whatsapp,
         origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
         atribuidoEm: r.atribuidoEm,
         minutosDesdeAtribuicao: min,
         slaPercentDecorrido: Math.min(200, Math.round((min / 30) * 100)),
@@ -478,6 +514,8 @@ export type CarteiraEmRisco = {
   valorCreditoCentavos: number | null;
   status: string;
   origem: string | null;
+  cidade: string | null;
+  estado: string | null;
   ultimoContato: Date | null;
   diasSemContato: number;
   motivo: string;
@@ -494,6 +532,8 @@ export async function getCarteiraEmRisco(
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       status: leadsTable.status,
       origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
       ultimoContato: leadsTable.ultimoContato,
       atribuidoEm: leadsTable.atribuidoEm,
     })
@@ -536,6 +576,8 @@ export async function getCarteiraEmRisco(
       valorCreditoCentavos: r.valorCreditoCentavos,
       status: r.status,
       origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
       ultimoContato: r.ultimoContato,
       diasSemContato: dias,
       motivo,

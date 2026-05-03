@@ -50,6 +50,13 @@ export function BlocoCarteiraEmRisco({ items }: Props) {
                   <div className="font-mono text-xs tabular-nums font-medium">
                     {formatBrlFromCents(l.valorCreditoCentavos)}
                   </div>
+                  {(l.cidade || l.estado) && (
+                    <div className="text-[10px] text-fg-subtle font-mono mt-0.5">
+                      {l.cidade && l.estado
+                        ? `${l.cidade}, ${l.estado}`
+                        : l.cidade ?? l.estado}
+                    </div>
+                  )}
                   {l.origem && (
                     <div className="text-[10px] text-fg-subtle font-mono mt-0.5">
                       {l.origem}

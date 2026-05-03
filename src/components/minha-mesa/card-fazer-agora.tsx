@@ -39,6 +39,14 @@ const PILL_VARIANT: Record<
   secondary: "outline",
 };
 
+function formatLocalizacao(
+  cidade: string | null,
+  estado: string | null,
+): string {
+  if (cidade && estado) return `${cidade}, ${estado}`;
+  return cidade ?? estado ?? "";
+}
+
 export function CardFazerAgora({ item, onResolved }: Props) {
   const tone = MOTIVO_TONE[item.motivoTipo];
 
@@ -65,6 +73,12 @@ export function CardFazerAgora({ item, onResolved }: Props) {
             <span className="font-mono tabular-nums font-medium text-foreground">
               {formatBrlFromCents(item.valorCreditoCentavos)}
             </span>
+            {(item.cidade || item.estado) && (
+              <>
+                <span className="text-foreground/20">·</span>
+                <span>{formatLocalizacao(item.cidade, item.estado)}</span>
+              </>
+            )}
             {item.origem && (
               <>
                 <span className="text-foreground/20">·</span>

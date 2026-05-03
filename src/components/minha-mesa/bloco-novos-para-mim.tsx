@@ -51,6 +51,16 @@ export function BlocoNovosParaMim({ items }: Props) {
                       <span className="font-mono tabular-nums font-medium text-foreground">
                         {formatBrlFromCents(l.valorCreditoCentavos)}
                       </span>
+                      {(l.cidade || l.estado) && (
+                        <>
+                          <span className="text-foreground/20">·</span>
+                          <span>
+                            {l.cidade && l.estado
+                              ? `${l.cidade}, ${l.estado}`
+                              : l.cidade ?? l.estado}
+                          </span>
+                        </>
+                      )}
                       {l.origem && (
                         <>
                           <span className="text-foreground/20">·</span>

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   Copy,
   Loader2,
   MessageCircle,
@@ -9,12 +8,12 @@ import {
   Trash2,
   UserPlus,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { StatusBadge } from "./status-badge";
+import { BackButton } from "@/components/shared/back-button";
 import {
   DesqualificacaoDialog,
   FechamentoDialog,
@@ -156,16 +155,7 @@ export function LeadDetailHeader({
 
   return (
     <div className="space-y-4">
-      <Button
-        variant="ghost"
-        size="sm"
-        nativeButton={false}
-        render={
-          <Link href="/leads">
-            <ArrowLeft className="size-4" /> Voltar
-          </Link>
-        }
-      />
+      <BackButton />
 
       <div
         className="surface-solid relative overflow-hidden rounded-2xl px-6 py-6"

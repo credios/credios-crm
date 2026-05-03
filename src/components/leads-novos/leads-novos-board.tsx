@@ -138,7 +138,12 @@ function LeadCardNovo({
   onQualificar: () => void;
   onDesqualificar: () => void;
 }) {
-  const localizacao = [lead.cidade, lead.estado].filter(Boolean).join(" / ");
+  // Formato BR: "Cidade, UF". Se faltar UF, mostra só a cidade; se faltar
+  // cidade mas tiver UF, mostra a UF. Se ambos faltam, vira "—" no DataItem.
+  const localizacao = (() => {
+    if (lead.cidade && lead.estado) return `${lead.cidade}, ${lead.estado}`;
+    return lead.cidade ?? lead.estado ?? "";
+  })();
   const wpUrl = whatsappUrl(lead.whatsapp);
 
   return (
