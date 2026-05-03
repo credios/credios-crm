@@ -45,6 +45,13 @@ export const webhookLeadPayloadSchema = z
     utm_term: z.string().trim().optional().or(z.literal("")),
     utm_content: z.string().trim().optional().or(z.literal("")),
     gclid: z.string().trim().optional().or(z.literal("")),
+    // Novos click IDs — Meta (orgânico/pago), Microsoft Ads, TikTok Ads,
+    // Google App Tracking Transparency (iOS).
+    fbclid: z.string().trim().optional().or(z.literal("")),
+    msclkid: z.string().trim().optional().or(z.literal("")),
+    ttclid: z.string().trim().optional().or(z.literal("")),
+    wbraid: z.string().trim().optional().or(z.literal("")),
+    gbraid: z.string().trim().optional().or(z.literal("")),
     rede: z.string().trim().optional().or(z.literal("")),
     dispositivo: z.string().trim().optional().or(z.literal("")),
     palavra_chave: z.string().trim().optional().or(z.literal("")),
