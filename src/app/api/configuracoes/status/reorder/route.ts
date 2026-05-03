@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { updateTag } from "next/cache";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { statusLeadConfig } from "../../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -41,14 +42,17 @@ export async function PATCH(request: NextRequest) {
     }
   });
 
-  void logAction(
-    null,
-    user.id,
-    "status_reordenado",
-    "status_lead_config",
-    null,
-    { count: parsed.data.ordem.length },
-    extractRequestMeta(request),
+  updateTag("status:config");
+  after(() =>
+    logAction(
+      null,
+      user.id,
+      "status_reordenado",
+      "status_lead_config",
+      null,
+      { count: parsed.data.ordem.length },
+      extractRequestMeta(request),
+    ),
   );
 
   return NextResponse.json({ ok: true });

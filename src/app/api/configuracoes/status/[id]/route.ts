@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { updateTag } from "next/cache";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { statusLeadConfig } from "../../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -76,18 +77,21 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     .where(eq(statusLeadConfig.id, id))
     .returning();
 
-  void logAction(
-    null,
-    user.id,
-    isDeactivating ? "status_desativado" : "status_editado",
-    "status_lead_config",
-    id,
-    {
-      key: existing.key,
-      changes: Object.keys(updates).filter((k) => k !== "updatedAt"),
-      cascade: cascadeResult,
-    },
-    extractRequestMeta(request),
+  updateTag("status:config");
+  after(() =>
+    logAction(
+      null,
+      user.id,
+      isDeactivating ? "status_desativado" : "status_editado",
+      "status_lead_config",
+      id,
+      {
+        key: existing.key,
+        changes: Object.keys(updates).filter((k) => k !== "updatedAt"),
+        cascade: cascadeResult,
+      },
+      extractRequestMeta(request),
+    ),
   );
 
   return NextResponse.json({
@@ -127,6 +131,20 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     .limit(1);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  // Status sistema (`eSistema=true`) é referenciado em código pra modais e
+  // permissões especiais (fechado, desqualificado, em_negociacao, etc).
+  // Excluir torna esses fluxos inertes e quebra o app silenciosamente —
+  // bloqueamos delete e instruímos a desativar (ativo=false) via PATCH.
+  if (existing.eSistema) {
+    return NextResponse.json(
+      {
+        error:
+          "Status sistema não pode ser excluído. Use desativar (ativo=false) pra removê-lo do funil sem quebrar fluxos do app.",
+      },
+      { status: 400 },
+    );
+  }
+
   const url = new URL(request.url);
   const cascadeToParam = url.searchParams.get("cascadeTo");
 
@@ -144,19 +162,22 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
 
   await db.delete(statusLeadConfig).where(eq(statusLeadConfig.id, id));
 
-  void logAction(
-    null,
-    user.id,
-    "status_excluido",
-    "status_lead_config",
-    id,
-    {
-      key: existing.key,
-      label: existing.label,
-      eSistema: existing.eSistema,
-      cascade,
-    },
-    extractRequestMeta(request),
+  updateTag("status:config");
+  after(() =>
+    logAction(
+      null,
+      user.id,
+      "status_excluido",
+      "status_lead_config",
+      id,
+      {
+        key: existing.key,
+        label: existing.label,
+        eSistema: existing.eSistema,
+        cascade,
+      },
+      extractRequestMeta(request),
+    ),
   );
 
   return NextResponse.json({ ok: true, cascade });

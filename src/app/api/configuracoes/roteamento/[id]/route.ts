@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { regrasRoteamento } from "../../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -52,7 +52,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     .where(eq(regrasRoteamento.id, id))
     .returning();
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "regra_editada",
@@ -60,6 +61,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     id,
     { nome: data.nome, acao: data.acao },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ data: updated });
@@ -80,7 +82,8 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
 
   await db.delete(regrasRoteamento).where(eq(regrasRoteamento.id, id));
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "regra_excluida",
@@ -88,6 +91,7 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     id,
     { nome: existing.nome },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ ok: true });

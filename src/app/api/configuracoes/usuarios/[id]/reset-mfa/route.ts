@@ -1,5 +1,5 @@
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
@@ -36,7 +36,8 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     if (!delErr) removed++;
   }
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "usuario_mfa_reset",
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     id,
     { factoresRemovidos: removed },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ ok: true, removed });

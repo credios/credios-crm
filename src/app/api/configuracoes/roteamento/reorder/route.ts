@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { regrasRoteamento } from "../../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -53,7 +53,8 @@ export async function POST(request: NextRequest) {
     }
   });
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "regras_reordenadas",
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
     null,
     { ordem: ids },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ ok: true, updates });

@@ -1,5 +1,6 @@
 import { asc, sql } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { updateTag } from "next/cache";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { statusLeadConfig } from "../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -73,14 +74,19 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    void logAction(
-      null,
-      user.id,
-      "status_criado",
-      "status_lead_config",
-      created.id,
-      { key: data.key, label: data.label },
-      extractRequestMeta(request),
+    // Invalida cache do unstable_cache em listAllStatuses/listActiveStatuses
+    // — sem isso, Kanban/dropdowns ficam com a lista antiga até 5 min.
+    updateTag("status:config");
+    after(() =>
+      logAction(
+        null,
+        user.id,
+        "status_criado",
+        "status_lead_config",
+        created.id,
+        { key: data.key, label: data.label },
+        extractRequestMeta(request),
+      ),
     );
 
     return NextResponse.json({ data: created }, { status: 201 });

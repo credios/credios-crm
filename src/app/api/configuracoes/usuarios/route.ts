@@ -1,6 +1,6 @@
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { eq, sql } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { users as usersTable } from "../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -103,7 +103,8 @@ export async function POST(request: NextRequest) {
     .set({ nome, perfil, ativo: true })
     .where(eq(usersTable.id, data.user.id));
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "usuario_convidado",
@@ -111,6 +112,7 @@ export async function POST(request: NextRequest) {
     data.user.id,
     { email, nome, perfil },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json(

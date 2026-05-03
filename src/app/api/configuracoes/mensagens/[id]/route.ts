@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { mensagensTemplate } from "../../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -50,7 +50,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     .where(eq(mensagensTemplate.id, id))
     .returning();
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "template_editado",
@@ -58,6 +59,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     id,
     { nome: data.nome },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ data: updated });
@@ -78,7 +80,8 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
 
   await db.delete(mensagensTemplate).where(eq(mensagensTemplate.id, id));
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "template_excluido",
@@ -86,6 +89,7 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     id,
     { nome: existing.nome },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ ok: true });

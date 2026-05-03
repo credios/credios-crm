@@ -105,8 +105,11 @@ CREATE INDEX IF NOT EXISTS mv_fechados_diarios_dia
 --> statement-breakpoint
 
 -- ----------------------------------------------------------------------------
--- Permissões: app role autenticado precisa de SELECT pras queries lerem.
+-- Permissões: apenas service_role. App lê via Drizzle como user `postgres`
+-- (superuser) que não precisa de GRANT. anon/authenticated foram REVOKED em
+-- 0011 — exporta agregados de negócio via PostgREST seria vazamento de
+-- inteligência comercial.
 -- ----------------------------------------------------------------------------
-GRANT SELECT ON public.mv_leads_diarios TO authenticated, anon, service_role;
+GRANT SELECT ON public.mv_leads_diarios TO service_role;
 --> statement-breakpoint
-GRANT SELECT ON public.mv_fechados_diarios TO authenticated, anon, service_role;
+GRANT SELECT ON public.mv_fechados_diarios TO service_role;

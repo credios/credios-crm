@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { extractRequestMeta, logAudit } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
@@ -11,13 +11,15 @@ export async function POST(request: NextRequest) {
 
   if (user) {
     const meta = extractRequestMeta(request);
-    void logAudit({
+    after(() =>
+    logAudit({
       usuarioId: user.id,
       acao: "logout",
       recursoTipo: "sessao",
       ip: meta.ip,
       userAgent: meta.userAgent,
-    });
+    })
+  );
   }
 
   await supabase.auth.signOut();

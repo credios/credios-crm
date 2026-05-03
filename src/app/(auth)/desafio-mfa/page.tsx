@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { safeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/server";
 
 type Props = {
@@ -15,7 +16,11 @@ type Props = {
 };
 
 export default async function DesafioMfaPage({ searchParams }: Props) {
-  const { next } = await searchParams;
+  const { next: rawNext } = await searchParams;
+  // Sanitiza ANTES de usar — login/callback já fazem isso, MFA estava
+  // pegando direto. Bloqueia open redirect via "//evil.com" ou absolutos.
+  const next = safeNext(rawNext);
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -25,7 +30,7 @@ export default async function DesafioMfaPage({ searchParams }: Props) {
   // Se já está em AAL2, não precisa do desafio.
   const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (aalData?.currentLevel === "aal2") {
-    redirect(next ?? "/leads");
+    redirect(next);
   }
 
   return (
@@ -37,7 +42,7 @@ export default async function DesafioMfaPage({ searchParams }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <MfaChallengeForm redirectTo={next ?? "/leads"} />
+        <MfaChallengeForm redirectTo={next} />
       </CardContent>
     </Card>
   );

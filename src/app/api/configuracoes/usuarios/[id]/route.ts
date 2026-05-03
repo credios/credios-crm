@@ -1,6 +1,6 @@
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import {
   leads as leadsTable,
@@ -81,7 +81,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     .where(eq(usersTable.id, id))
     .returning();
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "usuario_editado",
@@ -89,6 +90,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     id,
     { fields: Object.keys(updates), antes: { nome: existing.nome, perfil: existing.perfil, ativo: existing.ativo }, depois: updates },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ data: updated });

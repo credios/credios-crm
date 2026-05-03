@@ -1,5 +1,5 @@
 import { asc } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { taskConfigPorStatus } from "../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
     })
     .returning();
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "task_config_upsert",
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
     row.id,
     { statusKey: data.statusKey, ativo: data.ativo, frequencia: data.frequenciaDias },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ data: row });

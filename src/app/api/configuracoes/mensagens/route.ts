@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { mensagensTemplate } from "../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
     })
     .returning();
 
-  void logAction(
+  after(() =>
+    logAction(
     null,
     user.id,
     "template_criado",
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
     created.id,
     { nome: data.nome },
     extractRequestMeta(request),
+  )
   );
 
   return NextResponse.json({ data: created }, { status: 201 });
