@@ -118,6 +118,7 @@ async function buildSamples(adminNome: string): Promise<
     situacaoImovel: "Quitado",
     tipoPessoa: "Pessoa Física",
     valorImovelCentavos: 90000000,
+    saldoDevedorCentavos: null,
     valorCreditoCentavos: 35000000,
     status: "novo",
     motivoDesqualificacao: null,

@@ -92,6 +92,13 @@
       "when": 1777753200000,
       "tag": "0012_click_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777753800000,
+      "tag": "0013_saldo_devedor",
+      "breakpoints": true
     }
   ]
 }

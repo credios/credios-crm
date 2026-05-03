@@ -47,6 +47,7 @@ export type LeadDetailData = {
   situacaoImovel: string | null;
   tipoPessoa: string | null;
   valorImovelCentavos: number | null;
+  saldoDevedorCentavos: number | null;
   valorCreditoCentavos: number | null;
   bancoAprovador: string | null;
   valorLiberadoCentavos: number | null;
@@ -241,6 +242,7 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
   const [situacao, setSituacao] = useState(lead.situacaoImovel ?? "");
   const [tipoPessoa, setTipoPessoa] = useState(lead.tipoPessoa ?? "");
   const [valorImovel, setValorImovel] = useState(centsToReaisStr(lead.valorImovelCentavos));
+  const [saldoDevedor, setSaldoDevedor] = useState(centsToReaisStr(lead.saldoDevedorCentavos));
   const [valorCredito, setValorCredito] = useState(centsToReaisStr(lead.valorCreditoCentavos));
 
   function reset() {
@@ -249,6 +251,7 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
     setSituacao(lead.situacaoImovel ?? "");
     setTipoPessoa(lead.tipoPessoa ?? "");
     setValorImovel(centsToReaisStr(lead.valorImovelCentavos));
+    setSaldoDevedor(centsToReaisStr(lead.saldoDevedorCentavos));
     setValorCredito(centsToReaisStr(lead.valorCreditoCentavos));
   }
 
@@ -259,6 +262,9 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
     { label: "Situação do imóvel", value: lead.situacaoImovel },
     { label: "Tipo de pessoa", value: lead.tipoPessoa },
     { label: "Valor do imóvel", value: lead.valorImovelCentavos != null ? formatBrlFromCents(lead.valorImovelCentavos) : null },
+    // Saldo devedor só aparece quando preenchido (imóvel financiado).
+    // Para imóveis quitados ele fica null e a row é ocultada pelo viewer.
+    { label: "Saldo devedor", value: lead.saldoDevedorCentavos != null ? formatBrlFromCents(lead.saldoDevedorCentavos) : null },
     { label: "Valor buscado", value: lead.valorCreditoCentavos != null ? formatBrlFromCents(lead.valorCreditoCentavos) : null },
   ];
 
@@ -314,6 +320,20 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
           <FormField label="Valor do imóvel (R$)" htmlFor="ed-vimovel">
             <Input id="ed-vimovel" type="number" step="0.01" min="0" value={valorImovel} onChange={(e) => setValorImovel(e.currentTarget.value)} />
           </FormField>
+          {/* Saldo devedor: campo aparece sempre no edit, mas o consultor
+              só preenche quando situação = "Financiado". Se o lead muda de
+              "Financiado" pra "Quitado", o admin pode zerar o saldo aqui. */}
+          <FormField label="Saldo devedor (R$)" htmlFor="ed-saldo">
+            <Input
+              id="ed-saldo"
+              type="number"
+              step="0.01"
+              min="0"
+              value={saldoDevedor}
+              onChange={(e) => setSaldoDevedor(e.currentTarget.value)}
+              placeholder={situacao === "Financiado" ? "Obrigatório quando financiado" : "Apenas se financiado"}
+            />
+          </FormField>
           <FormField label="Valor buscado (R$)" htmlFor="ed-vcred">
             <Input id="ed-vcred" type="number" step="0.01" min="0" value={valorCredito} onChange={(e) => setValorCredito(e.currentTarget.value)} />
           </FormField>
@@ -325,6 +345,10 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
         situacaoImovel: situacao || null,
         tipoPessoa: tipoPessoa || null,
         valorImovelCentavos: reaisToCents(valorImovel),
+        // Quando situação ≠ "Financiado", força null no saldo devedor pra evitar
+        // dado órfão (ex: lead muda de Financiado pra Quitado e saldo antigo
+        // permaneceria por inércia).
+        saldoDevedorCentavos: situacao === "Financiado" ? reaisToCents(saldoDevedor) : null,
         valorCreditoCentavos: reaisToCents(valorCredito),
       })}
       onSavedReset={reset}

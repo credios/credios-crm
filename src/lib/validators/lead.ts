@@ -67,6 +67,7 @@ export const createLeadSchema = z.object({
   situacaoImovel: optionalString,
   tipoPessoa: optionalString,
   valorImovelCentavos: cents.nullable().optional(),
+  saldoDevedorCentavos: cents.nullable().optional(),
   valorCreditoCentavos: cents.nullable().optional(),
 
   consultorId: z.uuid().nullable().optional(),

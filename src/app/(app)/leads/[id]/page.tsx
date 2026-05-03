@@ -77,6 +77,7 @@ export default async function LeadDetailPage({ params }: Props) {
     situacaoImovel: masked.situacaoImovel,
     tipoPessoa: masked.tipoPessoa,
     valorImovelCentavos: masked.valorImovelCentavos,
+    saldoDevedorCentavos: masked.saldoDevedorCentavos,
     valorCreditoCentavos: masked.valorCreditoCentavos,
     bancoAprovador: masked.bancoAprovador ?? null,
     valorLiberadoCentavos: masked.valorLiberadoCentavos ?? null,

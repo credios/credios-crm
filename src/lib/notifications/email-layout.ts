@@ -201,3 +201,58 @@ export function escape(s: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+
+// ============================================================================
+// Helpers de detalhamento (usados pelos emails de novo lead)
+// ============================================================================
+
+/** Formata CPF cru (11 dígitos) como 000.000.000-00. Falha graceful: devolve o input se o tamanho não bater. */
+export function formatCpf(cpf: string | null | undefined): string {
+  if (!cpf) return "";
+  const digits = String(cpf).replace(/\D/g, "");
+  if (digits.length !== 11) return String(cpf);
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
+/** Calcula LTV (loan-to-value) a partir dos valores em centavos. Retorna null se faltar dado. */
+export function calcLtv(
+  creditoCentavos: number | null | undefined,
+  imovelCentavos: number | null | undefined,
+): string | null {
+  if (!creditoCentavos || !imovelCentavos || imovelCentavos === 0) return null;
+  const pct = (creditoCentavos / imovelCentavos) * 100;
+  return `${pct.toFixed(1)}%`;
+}
+
+/**
+ * Renderiza uma linha de detalhe (label : value) numa <table>. Use só dentro
+ * de detailsSection / detailsTable. value vazio/nulo é renderizado como "—".
+ */
+function detailRowHtml(label: string, value: string): string {
+  return `<tr>
+    <td style="padding:8px 0;font-family:Inter,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:${COLORS.textMuted};font-weight:700;width:160px;vertical-align:top">${escape(label)}</td>
+    <td style="padding:8px 0;font-family:Inter,Arial,sans-serif;font-size:14px;color:${COLORS.charcoal};vertical-align:top;word-break:break-word">${escape(value || "—")}</td>
+  </tr>`;
+}
+
+type DetailRow = [label: string, value: string | null | undefined];
+
+/**
+ * Renderiza uma seção de detalhes com título e linhas chave→valor.
+ *
+ * - Linhas com value vazio/nulo são automaticamente omitidas (e-mail enxuto).
+ * - Se TODAS as linhas estiverem vazias, a seção inteira é omitida.
+ * - O `title` é renderizado como um cabeçalho mono uppercase pequeno.
+ */
+export function detailsSection(title: string, rows: DetailRow[]): string {
+  const validRows = rows.filter(([, value]) => value != null && value !== "" && value !== "—");
+  if (validRows.length === 0) return "";
+
+  const heading = `<div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:${COLORS.textMuted};font-family:Inter,Arial,sans-serif;font-weight:700;margin:18px 0 6px">${escape(title)}</div>`;
+
+  const tableRows = validRows.map(([label, value]) => detailRowHtml(label, String(value))).join("");
+
+  return `${heading}<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${COLORS.ivory};border:1px solid ${COLORS.border};border-radius:10px;padding:8px 16px">
+    <tbody>${tableRows}</tbody>
+  </table>`;
+}

@@ -73,6 +73,7 @@ const formSchema = z.object({
   situacaoImovel: z.string().optional(),
   tipoPessoa: z.string().optional(),
   valorImovelReais: z.string().optional(),
+  saldoDevedorReais: z.string().optional(),
   valorCreditoReais: z.string().optional(),
   consultorId: z.string().optional(),
   origem: z.string().default("Manual"),
@@ -129,6 +130,12 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
       situacaoImovel: values.situacaoImovel || null,
       tipoPessoa: values.tipoPessoa || null,
       valorImovelCentavos: reaisToCents(values.valorImovelReais),
+      // Saldo devedor só faz sentido quando o imóvel está financiado;
+      // para "Quitado" envia null para evitar dado órfão.
+      saldoDevedorCentavos:
+        values.situacaoImovel === "Financiado"
+          ? reaisToCents(values.saldoDevedorReais)
+          : null,
       valorCreditoCentavos: reaisToCents(values.valorCreditoReais),
       consultorId: values.consultorId || null,
       origem: values.origem || "Manual",
@@ -303,6 +310,25 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
             <Label htmlFor="valorImovelReais">Valor do imóvel (R$)</Label>
             <Input id="valorImovelReais" type="number" step="0.01" min="0" placeholder="500000" disabled={pending} {...register("valorImovelReais")} />
           </div>
+          {/* Saldo devedor só aparece se "Financiado" — para imóveis quitados
+              o campo é irrelevante e some pra simplificar o form. */}
+          {watch("situacaoImovel") === "Financiado" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="saldoDevedorReais">Saldo devedor (R$)</Label>
+              <Input
+                id="saldoDevedorReais"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="150000"
+                disabled={pending}
+                {...register("saldoDevedorReais")}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Quanto ainda falta pagar do financiamento atual do imóvel.
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="valorCreditoReais">Valor do crédito buscado (R$)</Label>
             <Input id="valorCreditoReais" type="number" step="0.01" min="0" placeholder="200000" disabled={pending} {...register("valorCreditoReais")} />

@@ -175,6 +175,7 @@ export async function POST(request: NextRequest) {
       situacaoImovel: data.situacaoImovel ?? null,
       tipoPessoa: data.tipoPessoa ?? null,
       valorImovelCentavos: data.valorImovelCentavos ?? null,
+      saldoDevedorCentavos: data.saldoDevedorCentavos ?? null,
       valorCreditoCentavos: data.valorCreditoCentavos ?? null,
       consultorId,
       atribuidoEm: consultorId ? new Date() : null,

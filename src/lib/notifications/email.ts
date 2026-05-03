@@ -6,8 +6,11 @@ import type { InferSelectModel } from "drizzle-orm";
 import type { leads as leadsTable } from "../../../db/schema";
 import {
   appUrl,
-  escape,
+  calcLtv,
+  detailsSection,
+  formatCpf,
   kpiRow,
+  pill,
   renderEmailLayout,
 } from "@/lib/notifications/email-layout";
 
@@ -98,6 +101,113 @@ export async function sendLeadAssignedEmail(
   }
 }
 
+// ============================================================================
+// Construção do bloco de detalhes do lead (compartilhado entre emails)
+// ============================================================================
+
+/** Detecta o primeiro click ID disponível e devolve label legível.  */
+function describeClickId(lead: Lead): string | null {
+  if (lead.gclid) return `Google Ads (gclid)`;
+  if (lead.wbraid) return `Google Ads iOS (wbraid)`;
+  if (lead.gbraid) return `Google Ads iOS (gbraid)`;
+  if (lead.fbclid) return `Meta (fbclid)`;
+  if (lead.msclkid) return `Microsoft Ads (msclkid)`;
+  if (lead.ttclid) return `TikTok Ads (ttclid)`;
+  return null;
+}
+
+/**
+ * Formata o saldo devedor do imóvel quando aplicável (situacaoImovel =
+ * "Financiado" e valor > 0). Imóveis quitados ficam null por design.
+ */
+function formatSaldoDevedor(lead: Lead): string | null {
+  if (!lead.saldoDevedorCentavos || lead.saldoDevedorCentavos <= 0) return null;
+  return formatBrl(lead.saldoDevedorCentavos);
+}
+
+/**
+ * Monta o HTML completo de detalhes do lead, agrupado em 4 seções:
+ *   1. Contato — WhatsApp, email, localização
+ *   2. Dados pessoais — CPF, estado civil, ocupação, renda, PF/PJ
+ *   3. Operação — produto, objetivo, imóvel, valores, LTV
+ *   4. Origem & tracking — origem, UTM, click ID, página de entrada
+ *
+ * Seções com todos os campos vazios são automaticamente omitidas, pra que
+ * leads enxutos (ex: vindo de form simples) não gerem blocos com tudo "—".
+ */
+function buildLeadDetailsHtml(lead: Lead): string {
+  const cidadeUf = [lead.cidade, lead.estado].filter(Boolean).join(" / ");
+  const horario = lead.createdAt.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+  const ltv = calcLtv(lead.valorCreditoCentavos, lead.valorImovelCentavos);
+  const clickIdLabel = describeClickId(lead);
+
+  const contato = detailsSection("Contato", [
+    ["WhatsApp", lead.whatsapp],
+    ["E-mail", lead.email],
+    ["Cidade / UF", cidadeUf],
+  ]);
+
+  const pessoais = detailsSection("Dados pessoais", [
+    ["CPF", formatCpf(lead.cpf)],
+    ["Estado civil", lead.estadoCivil],
+    ["Ocupação", lead.ocupacao],
+    ["Renda mensal", lead.rendaMensalCentavos != null ? formatBrl(lead.rendaMensalCentavos) : null],
+    ["Tipo de pessoa", lead.tipoPessoa],
+  ]);
+
+  const operacao = detailsSection("Operação", [
+    ["Produto", lead.produto],
+    ["Objetivo do crédito", lead.objetivoCredito],
+    ["Tipo de imóvel", lead.tipoImovel],
+    ["Situação do imóvel", lead.situacaoImovel],
+    ["Valor do imóvel", lead.valorImovelCentavos != null ? formatBrl(lead.valorImovelCentavos) : null],
+    ["Saldo devedor", formatSaldoDevedor(lead)],
+    ["Crédito buscado", lead.valorCreditoCentavos != null ? formatBrl(lead.valorCreditoCentavos) : null],
+    ["LTV", ltv],
+  ]);
+
+  const tracking = detailsSection("Origem & tracking", [
+    ["Origem", lead.origem],
+    ["Click ID", clickIdLabel],
+    ["Campanha (utm_campaign)", lead.utmCampaign],
+    ["Mídia (utm_source / medium)", [lead.utmSource, lead.utmMedium].filter(Boolean).join(" / ")],
+    ["Palavra-chave", lead.palavraChave ?? lead.utmTerm],
+    ["Grupo de anúncios", lead.grupoAnuncios],
+    ["Criativo", lead.criativo ?? lead.utmContent],
+    ["Tipo de correspondência", lead.tipoCorrespondencia],
+    ["Rede", lead.rede],
+    ["Dispositivo", lead.dispositivo],
+    ["Página de entrada", lead.paginaEntrada],
+    ["Referrer", lead.referrer],
+    ["Recebido em", `${horario} (BRT)`],
+  ]);
+
+  return `${contato}${pessoais}${operacao}${tracking}`;
+}
+
+/** Linha de KPIs padrão (Valor buscado + LTV se houver + Renda se houver). */
+function buildLeadKpis(lead: Lead) {
+  const items: Array<{ label: string; value: string; tone?: "info" | "warning" | "success" }> = [
+    {
+      label: "Valor buscado",
+      value: formatBrl(lead.valorCreditoCentavos),
+      tone: "info",
+    },
+  ];
+  const ltv = calcLtv(lead.valorCreditoCentavos, lead.valorImovelCentavos);
+  if (ltv) items.push({ label: "LTV", value: ltv, tone: "warning" });
+  if (lead.rendaMensalCentavos != null) {
+    items.push({
+      label: "Renda mensal",
+      value: formatBrl(lead.rendaMensalCentavos),
+      tone: "success",
+    });
+  }
+  return kpiRow(items);
+}
+
 export function renderLeadAssignedEmail(params: {
   lead: Lead;
   consultorNome: string;
@@ -109,28 +219,6 @@ export function renderLeadAssignedEmail(params: {
     ? `https://wa.me/${lead.whatsapp.replace(/\D/g, "")}`
     : null;
 
-  const detail = (label: string, value: string) =>
-    `<tr>
-      <td style="padding:8px 0;font-family:Inter,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#6b6f7e;font-weight:700;width:140px;vertical-align:top">${escape(label)}</td>
-      <td style="padding:8px 0;font-family:Inter,Arial,sans-serif;font-size:14px;color:#141e30;vertical-align:top">${escape(value || "—")}</td>
-    </tr>`;
-
-  const detailsHtml = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8f6f0;border:1px solid #e1ddcf;border-radius:10px;padding:8px 16px">
-    <tbody>
-      ${detail("WhatsApp", lead.whatsapp ?? "—")}
-      ${detail("Email", lead.email ?? "—")}
-      ${detail("Cidade / UF", cidadeUf)}
-      ${detail("Estado civil", lead.estadoCivil ?? "—")}
-      ${detail("Profissão", lead.ocupacao ?? "—")}
-      ${detail("Renda", formatBrl(lead.rendaMensalCentavos))}
-      ${detail("Tipo de imóvel", lead.tipoImovel ?? "—")}
-      ${detail("Situação imóvel", lead.situacaoImovel ?? "—")}
-      ${detail("Valor imóvel", formatBrl(lead.valorImovelCentavos))}
-      ${detail("Objetivo do crédito", lead.objetivoCredito ?? "—")}
-      ${detail("Origem", lead.origem ?? "—")}
-    </tbody>
-  </table>`;
-
   const ctas: Array<{ href: string; label: string; tone?: "primary" | "secondary" }> = [
     { href: appUrl(`/leads/${lead.id}`), label: "Abrir lead no CRM" },
   ];
@@ -138,63 +226,40 @@ export function renderLeadAssignedEmail(params: {
 
   const primeiroNome = consultorNome.split(" ")[0] || consultorNome;
 
+  // Badge especial pra leads de Google Ads — replicando comportamento do
+  // antigo email do site (era "[GADS]" no subject).
+  const isGoogleAds = lead.origem === "Google Ads" || !!lead.gclid;
+  const eyebrowExtra = isGoogleAds
+    ? `<div style="margin:0 0 8px">${pill("Google Ads", "warning")}</div>`
+    : "";
+
   return renderEmailLayout({
     preheader: `${lead.nome} — ${formatBrl(lead.valorCreditoCentavos)} buscado, ${cidadeUf}`,
     eyebrow: "Lead atribuído a você",
     eyebrowTone: "info",
     title: lead.nome,
     intro: `Olá, ${primeiroNome}. Você acabou de receber este lead. SLA de 30min começa agora — entre em contato pelo WhatsApp ou ligue assim que possível.`,
-    contentHtml: `${kpiRow([
-      {
-        label: "Valor buscado",
-        value: formatBrl(lead.valorCreditoCentavos),
-        tone: "info",
-      },
-    ])}${detailsHtml}`,
+    contentHtml: `${eyebrowExtra}${buildLeadKpis(lead)}${buildLeadDetailsHtml(lead)}`,
     ctas,
   });
 }
 
 export function renderNewLeadAlertEmail(params: { lead: Lead }): string {
   const { lead } = params;
-  const horario = lead.createdAt.toLocaleString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-  });
-
-  // Linha de detalhes em definition list (cabe em mobile e desktop).
-  const detail = (label: string, value: string) =>
-    `<tr>
-      <td style="padding:8px 0;font-family:Inter,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#6b6f7e;font-weight:700;width:140px;vertical-align:top">${escape(label)}</td>
-      <td style="padding:8px 0;font-family:Inter,Arial,sans-serif;font-size:14px;color:#141e30;vertical-align:top">${escape(value || "—")}</td>
-    </tr>`;
-
   const cidadeUf = [lead.cidade, lead.estado].filter(Boolean).join(" / ") || "—";
   const wpHref = lead.whatsapp
     ? `https://wa.me/${lead.whatsapp.replace(/\D/g, "")}`
     : null;
 
-  const detailsHtml = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8f6f0;border:1px solid #e1ddcf;border-radius:10px;padding:8px 16px">
-    <tbody>
-      ${detail("WhatsApp", lead.whatsapp ?? "—")}
-      ${detail("Email", lead.email ?? "—")}
-      ${detail("Cidade / UF", cidadeUf)}
-      ${detail("Estado civil", lead.estadoCivil ?? "—")}
-      ${detail("Profissão", lead.ocupacao ?? "—")}
-      ${detail("Renda", formatBrl(lead.rendaMensalCentavos))}
-      ${detail("Tipo de imóvel", lead.tipoImovel ?? "—")}
-      ${detail("Situação imóvel", lead.situacaoImovel ?? "—")}
-      ${detail("Valor imóvel", formatBrl(lead.valorImovelCentavos))}
-      ${detail("Objetivo do crédito", lead.objetivoCredito ?? "—")}
-      ${detail("Origem", lead.origem ?? "—")}
-      ${detail("Campanha", lead.utmCampaign ?? "—")}
-      ${detail("Recebido em", `${horario} (BRT)`)}
-    </tbody>
-  </table>`;
-
   const ctas: Array<{ href: string; label: string; tone?: "primary" | "secondary" }> = [
     { href: appUrl(`/leads/${lead.id}`), label: "Abrir lead no CRM" },
   ];
   if (wpHref) ctas.push({ href: wpHref, label: "Abrir WhatsApp", tone: "secondary" });
+
+  const isGoogleAds = lead.origem === "Google Ads" || !!lead.gclid;
+  const eyebrowExtra = isGoogleAds
+    ? `<div style="margin:0 0 8px">${pill("Google Ads", "warning")}</div>`
+    : "";
 
   return renderEmailLayout({
     preheader: `${lead.nome} — ${formatBrl(lead.valorCreditoCentavos)} buscado, ${cidadeUf}`,
@@ -203,13 +268,7 @@ export function renderNewLeadAlertEmail(params: { lead: Lead }): string {
     title: lead.nome,
     intro:
       "Lead chegou agora pelo site. Como está fora do horário comercial, não foi atribuído automaticamente — atribua manualmente quando voltar a operar, ou avalie qualidade pra triagem.",
-    contentHtml: `${kpiRow([
-      {
-        label: "Valor buscado",
-        value: formatBrl(lead.valorCreditoCentavos),
-        tone: "info",
-      },
-    ])}${detailsHtml}`,
+    contentHtml: `${eyebrowExtra}${buildLeadKpis(lead)}${buildLeadDetailsHtml(lead)}`,
     ctas,
   });
 }

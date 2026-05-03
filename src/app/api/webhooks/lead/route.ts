@@ -163,6 +163,7 @@ export async function POST(request: NextRequest) {
       situacaoImovel: emptyToNull(payload.situacao_imovel ?? null),
       tipoPessoa: emptyToNull(payload.tipo_pessoa ?? null),
       valorImovelCentavos: reaisParaCentavos(payload.valor_imovel),
+      saldoDevedorCentavos: reaisParaCentavos(payload.saldo_devedor),
       valorCreditoCentavos: reaisParaCentavos(payload.valor_credito),
       consultorId: routing.consultorId,
       atribuidoEm: routing.consultorId ? new Date() : null,

@@ -131,6 +131,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   if ("tipoPessoa" in patch) updates.tipoPessoa = patch.tipoPessoa ?? null;
   if ("valorImovelCentavos" in patch)
     updates.valorImovelCentavos = patch.valorImovelCentavos ?? null;
+  if ("saldoDevedorCentavos" in patch)
+    updates.saldoDevedorCentavos = patch.saldoDevedorCentavos ?? null;
   if ("valorCreditoCentavos" in patch)
     updates.valorCreditoCentavos = patch.valorCreditoCentavos ?? null;
   if ("origem" in patch) updates.origem = patch.origem ?? null;

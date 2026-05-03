@@ -35,6 +35,9 @@ export const webhookLeadPayloadSchema = z
     situacao_imovel: z.string().trim().optional().or(z.literal("")),
     tipo_pessoa: tipoPessoaEnum.optional().or(z.literal("")),
     valor_imovel: z.coerce.number().nonnegative().optional(),
+    // Saldo devedor — relevante apenas quando situacao_imovel = "Financiado".
+    // Para imóveis quitados o site envia 0 ou omite; em ambos os casos vira NULL.
+    saldo_devedor: z.coerce.number().nonnegative().optional(),
     valor_credito: z.coerce.number().nonnegative().optional(),
 
     // Tracking

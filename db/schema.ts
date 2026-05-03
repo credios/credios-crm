@@ -147,6 +147,10 @@ export const leads = pgTable(
     situacaoImovel: text("situacao_imovel"),
     tipoPessoa: text("tipo_pessoa"),
     valorImovelCentavos: bigint("valor_imovel_centavos", { mode: "number" }),
+    // Saldo devedor — preenchido apenas quando situacaoImovel = "Financiado".
+    // Para imóveis quitados, fica null. Crítico no processo de venda: define
+    // viabilidade da operação e valor líquido que vai pro cliente após quitação.
+    saldoDevedorCentavos: bigint("saldo_devedor_centavos", { mode: "number" }),
     valorCreditoCentavos: bigint("valor_credito_centavos", { mode: "number" }),
 
     // --- Pipeline ---
