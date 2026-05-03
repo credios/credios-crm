@@ -16,11 +16,16 @@ type Props = {
 export function Header({ user }: Props) {
   const isAdmin = user.perfil === "admin";
   const isConsultor = user.perfil === "consultor";
-  const showPalette = user.perfil !== "marketing";
+  const isMarketing = user.perfil === "marketing";
+  const showPalette = !isMarketing;
   return (
     <header className="surface-frosted sticky top-0 z-30 rounded-none border-x-0 border-t-0 border-b">
       <div className="flex h-14 items-center gap-2 px-4 lg:px-6">
-        <MobileNav isAdmin={isAdmin} isConsultor={isConsultor} />
+        <MobileNav
+          isAdmin={isAdmin}
+          isConsultor={isConsultor}
+          isMarketing={isMarketing}
+        />
         <div className="md:hidden flex items-center gap-1.5">
           <CrediosLogo size="sm" />
           <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-gold-700 dark:text-gold-400">

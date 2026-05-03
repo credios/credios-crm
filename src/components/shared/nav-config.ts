@@ -1,6 +1,7 @@
 import {
   ClipboardList,
   Crown,
+  Flame,
   Inbox,
   KanbanSquare,
   PieChart,
@@ -20,6 +21,8 @@ export type NavItem = {
   adminOnly?: boolean;
   /** Oculto pra perfil 'consultor' (ex: relatórios gerenciais). */
   hideForConsultor?: boolean;
+  /** Oculto pra perfil 'marketing' (ex: minha mesa, que assume operação). */
+  hideForMarketing?: boolean;
   /** Se true, ativa quando pathname === href (não startsWith). */
   exact?: boolean;
 };
@@ -33,6 +36,14 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Trabalho",
     items: [
+      // Minha mesa é a home — fila priorizada do dia. Marketing não atende
+      // leads, então não tem mesa.
+      {
+        href: "/minha-mesa",
+        label: "Minha mesa",
+        icon: Flame,
+        hideForMarketing: true,
+      },
       {
         href: "/admin/leads-novos",
         label: "Leads novos",
@@ -92,6 +103,10 @@ export type SimpleNavMeta = {
 };
 
 export const ROUTE_META: Record<string, SimpleNavMeta> = {
+  "/minha-mesa": {
+    title: "Minha mesa",
+    description: "Fila priorizada do dia",
+  },
   "/leads": { title: "Leads", description: "Lista de leads" },
   "/leads/kanban": {
     title: "Kanban",

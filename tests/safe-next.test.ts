@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { safeNext } from "@/lib/auth/safe-next";
 
 describe("safeNext — bloqueia open redirect", () => {
-  describe("rejeita (vira fallback /leads)", () => {
+  describe("rejeita (vira fallback /minha-mesa)", () => {
     const cases: Array<[string | null | undefined, string]> = [
       [null, "null"],
       [undefined, "undefined"],
@@ -24,7 +24,7 @@ describe("safeNext — bloqueia open redirect", () => {
 
     for (const [input, label] of cases) {
       it(`rejeita: ${label}`, () => {
-        expect(safeNext(input)).toBe("/leads");
+        expect(safeNext(input)).toBe("/minha-mesa");
       });
     }
   });

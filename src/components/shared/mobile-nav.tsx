@@ -12,9 +12,11 @@ import { Sidebar } from "./sidebar";
 export function MobileNav({
   isAdmin,
   isConsultor,
+  isMarketing,
 }: {
   isAdmin: boolean;
   isConsultor?: boolean;
+  isMarketing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -43,6 +45,7 @@ export function MobileNav({
         <Sidebar
           isAdmin={isAdmin}
           isConsultor={isConsultor}
+          isMarketing={isMarketing}
           onNavigate={() => setOpen(false)}
         />
       </SheetContent>

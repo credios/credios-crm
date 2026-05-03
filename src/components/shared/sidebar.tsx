@@ -10,6 +10,7 @@ import { NAV_GROUPS } from "./nav-config";
 type Props = {
   isAdmin: boolean;
   isConsultor?: boolean;
+  isMarketing?: boolean;
   /** Quando renderizada dentro do Sheet mobile, callback para fechar ao clicar. */
   onNavigate?: () => void;
   className?: string;
@@ -23,6 +24,7 @@ function isActive(pathname: string, href: string, exact?: boolean): boolean {
 export function Sidebar({
   isAdmin,
   isConsultor,
+  isMarketing,
   onNavigate,
   className,
 }: Props) {
@@ -33,7 +35,9 @@ export function Sidebar({
       {NAV_GROUPS.map((group) => {
         const visible = group.items.filter(
           (i) =>
-            (!i.adminOnly || isAdmin) && !(isConsultor && i.hideForConsultor),
+            (!i.adminOnly || isAdmin) &&
+            !(isConsultor && i.hideForConsultor) &&
+            !(isMarketing && i.hideForMarketing),
         );
         if (visible.length === 0) return null;
         return (

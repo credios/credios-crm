@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  // Sanitiza next contra open redirect — qualquer URL externa vira "/leads".
+  // Sanitiza next contra open redirect — qualquer URL externa cai pro
+  // fallback default do safeNext (/minha-mesa).
   const next = safeNext(url.searchParams.get("next"));
   const error = url.searchParams.get("error");
   const errorDescription = url.searchParams.get("error_description");

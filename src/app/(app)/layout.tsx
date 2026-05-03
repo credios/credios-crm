@@ -47,6 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Sidebar
           isAdmin={isAdmin(appUser)}
           isConsultor={appUser.perfil === "consultor"}
+          isMarketing={appUser.perfil === "marketing"}
           className="flex-1"
         />
       </aside>

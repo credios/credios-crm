@@ -23,7 +23,7 @@
  */
 export function safeNext(
   value: string | null | undefined,
-  fallback: string = "/leads",
+  fallback: string = "/minha-mesa",
 ): string {
   if (!value || typeof value !== "string") return fallback;
   const trimmed = value.trim();
