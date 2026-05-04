@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, notInArray, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 
 import {
@@ -61,10 +61,14 @@ async function loadActiveTaskConfigs(): Promise<Map<string, TaskConfigRow>> {
 }
 
 export async function markOverdueTasks(now: Date = new Date()): Promise<number> {
+  // `lt(tarefas.venceEm, now)` em vez de sql template literal — o postgres-js
+  // não converte Date pra parâmetro automaticamente quando vem via raw template
+  // (joga TypeError ERR_INVALID_ARG_TYPE em runtime). A função `lt` do Drizzle
+  // serializa o Date corretamente como timestamp.
   const updated = await db
     .update(tarefas)
     .set({ status: "atrasada" })
-    .where(and(eq(tarefas.status, "aberta"), sql`${tarefas.venceEm} < ${now}`))
+    .where(and(eq(tarefas.status, "aberta"), lt(tarefas.venceEm, now)))
     .returning({ id: tarefas.id });
   return updated.length;
 }
