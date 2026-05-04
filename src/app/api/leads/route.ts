@@ -7,6 +7,7 @@ import { getAppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { formatProperName } from "@/lib/formatters/proper-name";
 import { contextFromCreateLead } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
 import { aplicarRoteamento } from "@/lib/routing/engine";
@@ -160,7 +161,9 @@ export async function POST(request: NextRequest) {
   const [newLead] = await db
     .insert(leadsTable)
     .values({
-      nome: data.nome,
+      // Title Case PT-BR — uniformiza com os leads que vêm do webhook.
+      // Detalhes em src/lib/formatters/proper-name.ts.
+      nome: formatProperName(data.nome),
       cpf: cpfClean,
       estadoCivil: data.estadoCivil ?? null,
       ocupacao: data.ocupacao ?? null,

@@ -11,6 +11,7 @@ import { getAppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { formatProperName } from "@/lib/formatters/proper-name";
 import { updateLeadSchema } from "@/lib/validators/lead";
 import { normalizarCpf, normalizarWhatsapp } from "@/lib/validators/webhook";
 
@@ -113,7 +114,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   const patch = parsed.data;
 
   const updates: Record<string, unknown> = {};
-  if (patch.nome != null) updates.nome = patch.nome;
+  // Title Case PT-BR — uniformiza com webhook + criação manual.
+  if (patch.nome != null) updates.nome = formatProperName(patch.nome);
   if ("cpf" in patch) updates.cpf = patch.cpf ? normalizarCpf(patch.cpf) : null;
   if ("estadoCivil" in patch) updates.estadoCivil = patch.estadoCivil ?? null;
   if ("ocupacao" in patch) updates.ocupacao = patch.ocupacao ?? null;

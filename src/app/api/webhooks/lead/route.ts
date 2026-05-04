@@ -12,6 +12,7 @@ import {
 } from "../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { formatProperName } from "@/lib/formatters/proper-name";
 import { foraHorarioComercial } from "@/lib/horario-comercial";
 import {
   sendLeadAssignedEmail,
@@ -148,7 +149,11 @@ export async function POST(request: NextRequest) {
     const inserted = await db
       .insert(leads)
       .values({
-      nome: payload.nome,
+      // Nome normalizado para Title Case PT-BR — cliente preenche em qualquer
+      // caixa ("FABIANA", "fabiana") mas o lead fica salvo na forma canônica
+      // ("Fabiana"). Uniformiza títulos no kanban/lista e evita "Olá, FABIANA"
+      // nas mensagens prontas.
+      nome: formatProperName(payload.nome),
       cpf: cpfClean,
       estadoCivil: emptyToNull(payload.estado_civil ?? null),
       ocupacao: emptyToNull(payload.ocupacao ?? null),
