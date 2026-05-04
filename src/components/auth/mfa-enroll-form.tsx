@@ -130,11 +130,23 @@ export function MfaEnrollForm({ redirectTo = "/leads" }: Props) {
         escaneie o QR code abaixo. Depois digite o código de 6 dígitos.
       </p>
 
-      <div className="flex justify-center bg-white p-4 rounded-lg border">
-        {/* qr_code do Supabase vem como SVG inline */}
-        <div
-          dangerouslySetInnerHTML={{ __html: enroll.qrCode }}
-          className="size-48 [&_svg]:size-48"
+      {/* qr_code vem do Supabase como data URL (`data:image/svg+xml;base64,...`).
+          Renderizar via <img> garante leitura por qualquer app autenticador.
+          Antes usávamos dangerouslySetInnerHTML com a string da data URL — o que
+          fazia o navegador exibir parte da string ("data:image/png;base64,...")
+          como texto sobreposto ao QR e atrapalhava a leitura por câmera.
+          O wrapper força bg branco + padding (margem clara obrigatória pra
+          códigos QR escaneáveis em qualquer condição de luz). */}
+      <div className="flex justify-center rounded-lg border bg-white p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element -- QR code é data URL,
+            next/image não otimiza data URL e adiciona overhead desnecessário. */}
+        <img
+          src={enroll.qrCode}
+          alt="QR code para configuração da autenticação em duas etapas"
+          width={192}
+          height={192}
+          className="size-48"
+          draggable={false}
         />
       </div>
 
