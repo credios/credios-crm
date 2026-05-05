@@ -44,6 +44,7 @@ export type LeadDetailData = {
   produto: string;
   objetivoCredito: string | null;
   tipoImovel: string | null;
+  tipoImovelDetalhes: string | null;
   situacaoImovel: string | null;
   tipoPessoa: string | null;
   valorImovelCentavos: number | null;
@@ -239,6 +240,7 @@ export function LeadContatoCard({ lead, canEdit }: { lead: LeadDetailData; canEd
 export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canEdit: boolean }) {
   const [objetivo, setObjetivo] = useState(lead.objetivoCredito ?? "");
   const [tipoImovel, setTipoImovel] = useState(lead.tipoImovel ?? "");
+  const [tipoImovelDetalhes, setTipoImovelDetalhes] = useState(lead.tipoImovelDetalhes ?? "");
   const [situacao, setSituacao] = useState(lead.situacaoImovel ?? "");
   const [tipoPessoa, setTipoPessoa] = useState(lead.tipoPessoa ?? "");
   const [valorImovel, setValorImovel] = useState(centsToReaisStr(lead.valorImovelCentavos));
@@ -248,6 +250,7 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
   function reset() {
     setObjetivo(lead.objetivoCredito ?? "");
     setTipoImovel(lead.tipoImovel ?? "");
+    setTipoImovelDetalhes(lead.tipoImovelDetalhes ?? "");
     setSituacao(lead.situacaoImovel ?? "");
     setTipoPessoa(lead.tipoPessoa ?? "");
     setValorImovel(centsToReaisStr(lead.valorImovelCentavos));
@@ -255,10 +258,18 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
     setValorCredito(centsToReaisStr(lead.valorCreditoCentavos));
   }
 
+  // Esclarecimento sobre o tipo de imóvel — só faz sentido pra Terreno/Outro
+  // (é onde o consultor precisa de mais contexto pra triagem). Para os demais
+  // tipos (Casa, Apartamento, Sala Comercial), o campo é ocultado.
+  const showImovelDetalhes = tipoImovel === "Terreno" || tipoImovel === "Outro";
+
   const view = [
     { label: "Produto", value: lead.produto },
     { label: "Objetivo", value: lead.objetivoCredito },
     { label: "Tipo de imóvel", value: lead.tipoImovel },
+    // View: linha aparece só quando há esclarecimento (não polui o card pra
+    // leads de Casa/Apartamento, que não precisam dele).
+    { label: "Esclarecimento sobre o imóvel", value: lead.tipoImovelDetalhes },
     { label: "Situação do imóvel", value: lead.situacaoImovel },
     { label: "Tipo de pessoa", value: lead.tipoPessoa },
     { label: "Valor do imóvel", value: lead.valorImovelCentavos != null ? formatBrlFromCents(lead.valorImovelCentavos) : null },
@@ -301,6 +312,25 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
               </SelectContent>
             </Select>
           </FormField>
+          {showImovelDetalhes && (
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label htmlFor="ed-imovel-detalhes">Esclarecimento sobre o imóvel</Label>
+              <textarea
+                id="ed-imovel-detalhes"
+                value={tipoImovelDetalhes}
+                onChange={(e) => setTipoImovelDetalhes(e.currentTarget.value)}
+                rows={3}
+                maxLength={2000}
+                placeholder={tipoImovel === "Terreno"
+                  ? "Localização, tamanho, se é em condomínio, benfeitorias..."
+                  : "Tipo do imóvel (galpão, fazenda etc.), localização e principais características..."}
+                className="w-full rounded-md border border-border-soft bg-card px-3 py-2 text-sm text-foreground placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              />
+              <p className="text-[11px] text-fg-subtle leading-relaxed">
+                Preenchido pelo cliente quando seleciona Terreno ou Outro no simulador.
+              </p>
+            </div>
+          )}
           <FormField label="Situação do imóvel">
             <Select value={situacao} onValueChange={(v) => setSituacao(v ?? "")}>
               <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
@@ -342,6 +372,9 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
       buildPayload={() => ({
         objetivoCredito: objetivo || null,
         tipoImovel: tipoImovel || null,
+        // Esclarecimento só faz sentido pra Terreno/Outro — se admin trocar
+        // pra Casa/Apartamento, força null pra evitar dado órfão.
+        tipoImovelDetalhes: showImovelDetalhes ? (tipoImovelDetalhes.trim() || null) : null,
         situacaoImovel: situacao || null,
         tipoPessoa: tipoPessoa || null,
         valorImovelCentavos: reaisToCents(valorImovel),

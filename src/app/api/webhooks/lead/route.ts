@@ -164,6 +164,7 @@ export async function POST(request: NextRequest) {
       produto: payload.produto ?? "CGI",
       objetivoCredito: emptyToNull(payload.objetivo_credito ?? null),
       tipoImovel: emptyToNull(payload.tipo_imovel ?? null),
+      tipoImovelDetalhes: emptyToNull(payload.tipo_imovel_detalhes ?? null),
       situacaoImovel: emptyToNull(payload.situacao_imovel ?? null),
       tipoPessoa: emptyToNull(payload.tipo_pessoa ?? null),
       valorImovelCentavos: reaisParaCentavos(payload.valor_imovel),

@@ -115,6 +115,7 @@ async function buildSamples(adminNome: string): Promise<
     produto: "CGI",
     objetivoCredito: "Capital de Giro",
     tipoImovel: "Casa",
+    tipoImovelDetalhes: null,
     situacaoImovel: "Quitado",
     tipoPessoa: "Pessoa Física",
     valorImovelCentavos: 90000000,

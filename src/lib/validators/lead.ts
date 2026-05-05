@@ -64,6 +64,7 @@ export const createLeadSchema = z.object({
   produto: z.string().default("CGI"),
   objetivoCredito: optionalString,
   tipoImovel: optionalString,
+  tipoImovelDetalhes: optionalString,
   situacaoImovel: optionalString,
   tipoPessoa: optionalString,
   valorImovelCentavos: cents.nullable().optional(),

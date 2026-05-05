@@ -129,6 +129,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   if ("objetivoCredito" in patch)
     updates.objetivoCredito = patch.objetivoCredito ?? null;
   if ("tipoImovel" in patch) updates.tipoImovel = patch.tipoImovel ?? null;
+  if ("tipoImovelDetalhes" in patch)
+    updates.tipoImovelDetalhes = patch.tipoImovelDetalhes ?? null;
   if ("situacaoImovel" in patch) updates.situacaoImovel = patch.situacaoImovel ?? null;
   if ("tipoPessoa" in patch) updates.tipoPessoa = patch.tipoPessoa ?? null;
   if ("valorImovelCentavos" in patch)

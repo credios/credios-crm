@@ -99,6 +99,13 @@
       "when": 1777753800000,
       "tag": "0013_saldo_devedor",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1777920000000,
+      "tag": "0014_tipo_imovel_detalhes",
+      "breakpoints": true
     }
   ]
 }

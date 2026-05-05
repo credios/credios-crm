@@ -70,6 +70,7 @@ const formSchema = z.object({
   estado: z.string().optional(),
   objetivoCredito: z.string().optional(),
   tipoImovel: z.string().optional(),
+  tipoImovelDetalhes: z.string().optional(),
   situacaoImovel: z.string().optional(),
   tipoPessoa: z.string().optional(),
   valorImovelReais: z.string().optional(),
@@ -127,6 +128,11 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
       estado: values.estado || null,
       objetivoCredito: values.objetivoCredito || null,
       tipoImovel: values.tipoImovel || null,
+      // Esclarecimento só vai junto se o tipo for Terreno/Outro.
+      tipoImovelDetalhes:
+        values.tipoImovel === "Terreno" || values.tipoImovel === "Outro"
+          ? (values.tipoImovelDetalhes?.trim() || null)
+          : null,
       situacaoImovel: values.situacaoImovel || null,
       tipoPessoa: values.tipoPessoa || null,
       valorImovelCentavos: reaisToCents(values.valorImovelReais),
@@ -288,6 +294,29 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
               </SelectContent>
             </Select>
           </div>
+          {/* Esclarecimento condicional — Terreno e Outro exigem mais
+              contexto pois têm aceitação restrita por banco. */}
+          {(watch("tipoImovel") === "Terreno" || watch("tipoImovel") === "Outro") && (
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label htmlFor="tipoImovelDetalhes">
+                Esclarecimento sobre o imóvel
+              </Label>
+              <textarea
+                id="tipoImovelDetalhes"
+                disabled={pending}
+                rows={3}
+                maxLength={2000}
+                placeholder={watch("tipoImovel") === "Terreno"
+                  ? "Localização, tamanho, se é em condomínio, benfeitorias..."
+                  : "Tipo do imóvel (galpão, fazenda etc.), localização e principais características..."}
+                className="w-full rounded-md border border-border-soft bg-card px-3 py-2 text-sm text-foreground placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                {...register("tipoImovelDetalhes")}
+              />
+              <p className="text-[11px] text-fg-subtle leading-relaxed">
+                Detalhe necessário para triagem — Terreno e Outro têm aceitação restrita.
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Situação do imóvel</Label>
             <Select value={watch("situacaoImovel") ?? ""} onValueChange={(v) => setValue("situacaoImovel", v ?? "")} disabled={pending}>

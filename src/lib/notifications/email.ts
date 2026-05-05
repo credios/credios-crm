@@ -165,6 +165,9 @@ function buildLeadDetailsHtml(lead: Lead): string {
     ["Produto", lead.produto],
     ["Objetivo do crédito", lead.objetivoCredito],
     ["Tipo de imóvel", lead.tipoImovel],
+    // Aparece só pra Terreno/Outro — categorias de aceitação restrita,
+    // onde o esclarecimento é crítico pra triagem do consultor.
+    ["Esclarecimento sobre o imóvel", lead.tipoImovelDetalhes],
     ["Situação do imóvel", lead.situacaoImovel],
     ["Valor do imóvel", lead.valorImovelCentavos != null ? formatBrl(lead.valorImovelCentavos) : null],
     ["Saldo devedor", formatSaldoDevedor(lead)],

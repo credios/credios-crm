@@ -74,6 +74,7 @@ export default async function LeadDetailPage({ params }: Props) {
     produto: masked.produto,
     objetivoCredito: masked.objetivoCredito,
     tipoImovel: masked.tipoImovel,
+    tipoImovelDetalhes: masked.tipoImovelDetalhes,
     situacaoImovel: masked.situacaoImovel,
     tipoPessoa: masked.tipoPessoa,
     valorImovelCentavos: masked.valorImovelCentavos,

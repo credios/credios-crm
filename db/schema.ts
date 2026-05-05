@@ -144,6 +144,11 @@ export const leads = pgTable(
     produto: text("produto").notNull().default("CGI"),
     objetivoCredito: text("objetivo_credito"),
     tipoImovel: text("tipo_imovel"),
+    // Esclarecimento livre sobre o tipo de imóvel — preenchido apenas
+    // quando o cliente seleciona "Terreno" ou "Outro" no simulador (essas
+    // categorias têm aceitação restrita por banco e exigem triagem manual).
+    // Para os demais tipos (Casa, Apartamento, Comercial), fica null.
+    tipoImovelDetalhes: text("tipo_imovel_detalhes"),
     situacaoImovel: text("situacao_imovel"),
     tipoPessoa: text("tipo_pessoa"),
     valorImovelCentavos: bigint("valor_imovel_centavos", { mode: "number" }),

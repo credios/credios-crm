@@ -175,6 +175,7 @@ export async function POST(request: NextRequest) {
       produto: data.produto ?? "CGI",
       objetivoCredito: data.objetivoCredito ?? null,
       tipoImovel: data.tipoImovel ?? null,
+      tipoImovelDetalhes: data.tipoImovelDetalhes ?? null,
       situacaoImovel: data.situacaoImovel ?? null,
       tipoPessoa: data.tipoPessoa ?? null,
       valorImovelCentavos: data.valorImovelCentavos ?? null,

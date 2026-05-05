@@ -32,6 +32,7 @@ export const webhookLeadPayloadSchema = z
     produto: z.string().default("CGI"),
     objetivo_credito: z.string().trim().optional().or(z.literal("")),
     tipo_imovel: z.string().trim().optional().or(z.literal("")),
+    tipo_imovel_detalhes: z.string().trim().max(2000).optional().or(z.literal("")),
     situacao_imovel: z.string().trim().optional().or(z.literal("")),
     tipo_pessoa: tipoPessoaEnum.optional().or(z.literal("")),
     valor_imovel: z.coerce.number().nonnegative().optional(),
