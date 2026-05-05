@@ -13,10 +13,9 @@ import {
 import { extractRequestMeta, logAction } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
-import { foraHorarioComercial } from "@/lib/horario-comercial";
 import {
   sendLeadAssignedEmail,
-  sendNewLeadAlert,
+  sendNewLeadEmail,
 } from "@/lib/notifications/email";
 import { contextFromWebhook } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
@@ -261,19 +260,22 @@ export async function POST(request: NextRequest) {
     ),
   );
 
-  // 13. Email para admins se fora do horário comercial.
-  if (foraHorarioComercial()) {
-    after(async () => {
-      const admins = await db
-        .select({ email: usersTable.email })
-        .from(usersTable)
-        .where(sql`${usersTable.perfil} = 'admin' AND ${usersTable.ativo} = true`);
-      const recipients = admins.map((a) => a.email).filter(Boolean);
-      if (recipients.length > 0) {
-        await sendNewLeadAlert(newLead, recipients);
-      }
-    });
-  }
+  // 13. E-mail "Novo lead" pros admins — disparado SEMPRE, independente do
+  // horário comercial. Visão de pipeline em tempo real pro time gerencial,
+  // sem depender de abrir o CRM. O consultor atribuído tem o e-mail dele
+  // separado (bloco 14) com SLA. Admins de plantão fora do horário também
+  // recebem o mesmo e-mail — usavam um template "alerta fora do horário"
+  // antes, foi unificado pra reduzir ruído.
+  after(async () => {
+    const admins = await db
+      .select({ email: usersTable.email })
+      .from(usersTable)
+      .where(sql`${usersTable.perfil} = 'admin' AND ${usersTable.ativo} = true`);
+    const recipients = admins.map((a) => a.email).filter(Boolean);
+    if (recipients.length > 0) {
+      await sendNewLeadEmail(newLead, recipients);
+    }
+  });
 
   // 14. Email pro CONSULTOR atribuído (se routing rule designou um) —
   // independente do horário comercial. SLA de 30min começa agora.

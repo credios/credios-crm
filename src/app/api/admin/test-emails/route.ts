@@ -5,7 +5,7 @@ import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import {
   renderLeadAssignedEmail,
-  renderNewLeadAlertEmail,
+  renderNewLeadEmail,
 } from "@/lib/notifications/email";
 import { renderSlaAlertEmail } from "@/lib/sla/notify";
 import {
@@ -259,8 +259,8 @@ async function buildSamples(adminNome: string): Promise<
       html: renderSlaAlertEmail({ novos: slaAlerts }),
     },
     "new-lead": {
-      subject: "Novo lead fora do horário: Maria da Silva (TESTE)",
-      html: renderNewLeadAlertEmail({ lead: fakeLead }),
+      subject: "Novo lead: Maria da Silva (TESTE)",
+      html: renderNewLeadEmail({ lead: fakeLead }),
     },
     "lead-assigned": {
       subject: "Novo lead pra você: Maria da Silva (TESTE)",

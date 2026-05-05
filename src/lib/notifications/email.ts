@@ -31,11 +31,15 @@ function formatBrl(centavos: number | null | undefined): string {
 }
 
 /**
- * Envia alerta para os emails dados quando chega lead fora do horário
- * comercial. Falha silenciosamente (apenas loga) — webhook não pode quebrar
- * por causa de email.
+ * Notifica admins por e-mail sobre cada novo lead que entra no CRM,
+ * independente do horário comercial. Falha silenciosamente (apenas loga) —
+ * webhook não pode quebrar por causa de e-mail.
+ *
+ * Envio paralelo ao sendLeadAssignedEmail: o consultor atribuído recebe
+ * a notificação dele (com SLA de 30min); admins recebem ESTE e-mail
+ * pra ter visão de pipeline em tempo real.
  */
-export async function sendNewLeadAlert(
+export async function sendNewLeadEmail(
   lead: Lead,
   recipients: string[],
 ): Promise<{ ok: boolean; reason?: string }> {
@@ -44,8 +48,8 @@ export async function sendNewLeadAlert(
     return { ok: false, reason: "nenhum destinatário" };
 
   const valor = formatBrl(lead.valorCreditoCentavos);
-  const subject = `Novo lead fora do horário: ${lead.nome} — ${valor}`;
-  const html = renderNewLeadAlertEmail({ lead });
+  const subject = `Novo lead: ${lead.nome} — ${valor}`;
+  const html = renderNewLeadEmail({ lead });
 
   try {
     const result = await resend.emails.send({
@@ -244,7 +248,7 @@ export function renderLeadAssignedEmail(params: {
   });
 }
 
-export function renderNewLeadAlertEmail(params: { lead: Lead }): string {
+export function renderNewLeadEmail(params: { lead: Lead }): string {
   const { lead } = params;
   const cidadeUf = [lead.cidade, lead.estado].filter(Boolean).join(" / ") || "—";
   const wpHref = lead.whatsapp
@@ -263,11 +267,11 @@ export function renderNewLeadAlertEmail(params: { lead: Lead }): string {
 
   return renderEmailLayout({
     preheader: `${lead.nome} — ${formatBrl(lead.valorCreditoCentavos)} buscado, ${cidadeUf}`,
-    eyebrow: "Novo lead · fora do horário",
-    eyebrowTone: "warning",
+    eyebrow: "Novo lead",
+    eyebrowTone: "info",
     title: lead.nome,
     intro:
-      "Lead chegou agora pelo site. Como está fora do horário comercial, não foi atribuído automaticamente — atribua manualmente quando voltar a operar, ou avalie qualidade pra triagem.",
+      "Lead acabou de entrar no CRM via site. Confira os detalhes abaixo e abra o lead pra acompanhar o atendimento.",
     contentHtml: `${eyebrowExtra}${buildLeadKpis(lead)}${buildLeadDetailsHtml(lead)}`,
     ctas,
   });
