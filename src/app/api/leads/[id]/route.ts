@@ -113,33 +113,54 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   }
   const patch = parsed.data;
 
+  // BUG histórico (corrigido em 2026-05-06): usávamos `"chave" in patch` pra
+  // decidir o que atualizar, mas `patch` é o resultado do `updateLeadSchema`
+  // (= `createLeadSchema.partial()`). O createLeadSchema tem dois booby traps
+  // pra updates parciais:
+  //   1. `optionalString` é `z.string().nullish().transform(v => v ?? null)`.
+  //      O nullish() aceita undefined e o transform RODA, então campos não
+  //      enviados saem do parse como `null`.
+  //   2. `origem: optionalString.default("Manual")` — sempre vira "Manual"
+  //      quando o cliente não envia `origem`.
+  // Resultado: editar Contato (whatsapp/email/cidade/estado) limpava CPF,
+  // estado civil, ocupação etc. e mudava origem pra "Manual".
+  // Fix: usar o corpo bruto da requisição pra detectar O QUE foi enviado e
+  // o `patch` (validado/normalizado) só pra valores. Validação Zod continua
+  // ativa pra rejeitar tipos errados.
+  const rawBody =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+
   const updates: Record<string, unknown> = {};
   // Title Case PT-BR — uniformiza com webhook + criação manual.
-  if (patch.nome != null) updates.nome = formatProperName(patch.nome);
-  if ("cpf" in patch) updates.cpf = patch.cpf ? normalizarCpf(patch.cpf) : null;
-  if ("estadoCivil" in patch) updates.estadoCivil = patch.estadoCivil ?? null;
-  if ("ocupacao" in patch) updates.ocupacao = patch.ocupacao ?? null;
-  if ("rendaMensalCentavos" in patch)
+  if ("nome" in rawBody && patch.nome != null)
+    updates.nome = formatProperName(patch.nome);
+  if ("cpf" in rawBody) updates.cpf = patch.cpf ? normalizarCpf(patch.cpf) : null;
+  if ("estadoCivil" in rawBody) updates.estadoCivil = patch.estadoCivil ?? null;
+  if ("ocupacao" in rawBody) updates.ocupacao = patch.ocupacao ?? null;
+  if ("rendaMensalCentavos" in rawBody)
     updates.rendaMensalCentavos = patch.rendaMensalCentavos ?? null;
-  if ("whatsapp" in patch && patch.whatsapp)
+  if ("whatsapp" in rawBody && patch.whatsapp)
     updates.whatsapp = normalizarWhatsapp(patch.whatsapp);
-  if ("email" in patch) updates.email = patch.email ?? null;
-  if ("cidade" in patch) updates.cidade = patch.cidade ?? null;
-  if ("estado" in patch) updates.estado = patch.estado?.toUpperCase() ?? null;
-  if ("objetivoCredito" in patch)
+  if ("email" in rawBody) updates.email = patch.email ?? null;
+  if ("cidade" in rawBody) updates.cidade = patch.cidade ?? null;
+  if ("estado" in rawBody) updates.estado = patch.estado?.toUpperCase() ?? null;
+  if ("objetivoCredito" in rawBody)
     updates.objetivoCredito = patch.objetivoCredito ?? null;
-  if ("tipoImovel" in patch) updates.tipoImovel = patch.tipoImovel ?? null;
-  if ("tipoImovelDetalhes" in patch)
+  if ("tipoImovel" in rawBody) updates.tipoImovel = patch.tipoImovel ?? null;
+  if ("tipoImovelDetalhes" in rawBody)
     updates.tipoImovelDetalhes = patch.tipoImovelDetalhes ?? null;
-  if ("situacaoImovel" in patch) updates.situacaoImovel = patch.situacaoImovel ?? null;
-  if ("tipoPessoa" in patch) updates.tipoPessoa = patch.tipoPessoa ?? null;
-  if ("valorImovelCentavos" in patch)
+  if ("situacaoImovel" in rawBody)
+    updates.situacaoImovel = patch.situacaoImovel ?? null;
+  if ("tipoPessoa" in rawBody) updates.tipoPessoa = patch.tipoPessoa ?? null;
+  if ("valorImovelCentavos" in rawBody)
     updates.valorImovelCentavos = patch.valorImovelCentavos ?? null;
-  if ("saldoDevedorCentavos" in patch)
+  if ("saldoDevedorCentavos" in rawBody)
     updates.saldoDevedorCentavos = patch.saldoDevedorCentavos ?? null;
-  if ("valorCreditoCentavos" in patch)
+  if ("valorCreditoCentavos" in rawBody)
     updates.valorCreditoCentavos = patch.valorCreditoCentavos ?? null;
-  if ("origem" in patch) updates.origem = patch.origem ?? null;
+  if ("origem" in rawBody) updates.origem = patch.origem ?? null;
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "no fields to update" }, { status: 400 });
