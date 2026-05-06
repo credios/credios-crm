@@ -106,6 +106,13 @@
       "when": 1777920000000,
       "tag": "0014_tipo_imovel_detalhes",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1778100000000,
+      "tag": "0015_templates_status_iniciais",
+      "breakpoints": true
     }
   ]
 }
