@@ -1,5 +1,5 @@
 import { asc, sql } from "drizzle-orm";
-import { updateTag } from "next/cache";
+import { revalidateTag } from "next/cache";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import { statusLeadConfig } from "../../../../../db/schema";
@@ -76,7 +76,10 @@ export async function POST(request: NextRequest) {
 
     // Invalida cache do unstable_cache em listAllStatuses/listActiveStatuses
     // — sem isso, Kanban/dropdowns ficam com a lista antiga até 5 min.
-    updateTag("status:config");
+    // `revalidateTag` em Next 16 exige `profile` no 2º arg — `"max"` força
+    // expiração imediata. (Antes era `updateTag`, que só funciona em Server
+    // Actions e crashava 500 em Route Handler — bug E872.)
+    revalidateTag("status:config", "max");
     after(() =>
       logAction(
         null,

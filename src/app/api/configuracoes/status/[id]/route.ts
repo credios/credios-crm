@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { updateTag } from "next/cache";
+import { revalidateTag } from "next/cache";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import { statusLeadConfig } from "../../../../../../db/schema";
@@ -77,7 +77,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     .where(eq(statusLeadConfig.id, id))
     .returning();
 
-  updateTag("status:config");
+  // `revalidateTag` em Next 16 exige `profile` no 2º arg — `"max"` força
+  // expiração imediata. (Antes era `updateTag`, que só funciona em Server
+  // Actions e crashava 500 em Route Handler — bug E872.)
+  revalidateTag("status:config", "max");
   after(() =>
     logAction(
       null,
@@ -162,7 +165,10 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
 
   await db.delete(statusLeadConfig).where(eq(statusLeadConfig.id, id));
 
-  updateTag("status:config");
+  // `revalidateTag` em Next 16 exige `profile` no 2º arg — `"max"` força
+  // expiração imediata. (Antes era `updateTag`, que só funciona em Server
+  // Actions e crashava 500 em Route Handler — bug E872.)
+  revalidateTag("status:config", "max");
   after(() =>
     logAction(
       null,

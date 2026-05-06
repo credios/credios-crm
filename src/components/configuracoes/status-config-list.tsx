@@ -286,19 +286,22 @@ function Row({
         )}
       </Button>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onDelete}
-        className="text-destructive hover:bg-destructive/10"
-        title={
-          status.eSistema
-            ? "Excluir (status sistema — atenção)"
-            : "Excluir"
-        }
-      >
-        <Trash2 className="size-3.5" />
-      </Button>
+      {/* Status sistema só pode ser desativado (botão olho acima) — o backend
+          rejeita DELETE com 400. Esconder o botão evita o caminho frustrante
+          de "clica excluir → confirma chave → recebe erro". Pra remover do
+          funil, o admin usa Desativar; pra ocultar permanentemente, pode
+          deixar desativado pra sempre. */}
+      {!status.eSistema && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          className="text-destructive hover:bg-destructive/10"
+          title="Excluir"
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      )}
     </div>
   );
 }
