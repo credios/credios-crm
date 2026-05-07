@@ -18,6 +18,7 @@ import {
   LeadOrigemCard,
   LeadPessoaisCard,
 } from "@/components/leads/lead-detail-sections";
+import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
 import { LeadTimeline } from "@/components/leads/lead-timeline";
 import { MensagensSugeridas } from "@/components/leads/mensagens-sugeridas";
 import {
@@ -147,6 +148,22 @@ export default async function LeadDetailPage({ params }: Props) {
           )}
 
           <LeadOrigemCard lead={lead} />
+
+          {/* Card de simulação — só pra perfis que veem dados não-mascarados.
+              Marketing vê CPF/valores mascarados, então a simulação seria
+              inválida. Demais perfis (admin, gerente, consultor c/ acesso)
+              podem gerar PDF a qualquer momento. */}
+          {!isMarketing && (
+            <LeadSimulacaoCard
+              leadId={lead.id}
+              defaults={{
+                nome: lead.nome,
+                cpf: lead.cpf,
+                valorCreditoCentavos: lead.valorCreditoCentavos,
+                valorImovelCentavos: lead.valorImovelCentavos,
+              }}
+            />
+          )}
 
           <Suspense fallback={<MensagensSkeleton />}>
             <MensagensBlock
