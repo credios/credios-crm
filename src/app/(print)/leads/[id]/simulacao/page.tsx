@@ -111,5 +111,5 @@ export default async function SimulacaoPage({ params, searchParams }: Props) {
     simulationId: generateSimulationId(),
   });
 
-  return <SimulacaoRenderer result={result} />;
+  return <SimulacaoRenderer result={result} leadId={id} />;
 }

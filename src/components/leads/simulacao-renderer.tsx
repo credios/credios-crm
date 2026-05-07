@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Copy, Download } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -27,9 +28,11 @@ import { SimpleSimulationPDF } from "./simple-simulation-pdf";
 
 type Props = {
   result: SimpleSimulationResult;
+  /** ID do lead — usado pra montar o link de "Voltar pro lead". */
+  leadId: string;
 };
 
-export function SimulacaoRenderer({ result }: Props) {
+export function SimulacaoRenderer({ result, leadId }: Props) {
   const [copied, setCopied] = useState(false);
   // Ref pra garantir que o auto-print só dispare 1 vez mesmo com Strict Mode
   // remontando o componente (em dev/test) ou re-renders.
@@ -76,8 +79,29 @@ export function SimulacaoRenderer({ result }: Props) {
 
   return (
     <div className="max-w-5xl mx-auto p-6">
-      {/* Toolbar de tela — escondida na impressão. */}
-      <div className="flex items-center justify-between gap-3 mb-4 print:hidden">
+      {/* Toolbar de tela — escondida na impressão.
+          Layout: [Voltar] | [ID + Copiar] | [Imprimir]. O botão Voltar é a
+          saída garantida para o consultor que abriu a simulação dentro do
+          PWA (onde a setinha do topo só funciona se houver histórico). */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 print:hidden">
+        {/* `nativeButton={false}` + `render={<Link>}` é o padrão do Button
+            shadcn neste projeto pra renderizar como link (mesmo padrão
+            usado em /configuracoes/status). Mantém Link do Next pra evitar
+            reload desnecessário; se o consultor abriu em nova aba, este
+            Link traz pra ficha do lead na mesma aba (que já é descartável).
+            Se abriu same-window (PWA), volta exatamente igual. */}
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={
+            <Link href={`/leads/${leadId}`}>
+              <ArrowLeft className="size-4" />
+              Voltar pro lead
+            </Link>
+          }
+        />
+
+
         <div className="flex items-center gap-3 text-sm">
           <span className="text-gray-500">Nº da simulação:</span>
           <code className="font-mono text-base font-medium text-[#1E4FD6]">
@@ -101,6 +125,7 @@ export function SimulacaoRenderer({ result }: Props) {
             )}
           </button>
         </div>
+
         <Button onClick={triggerPrint} variant="default">
           <Download className="size-4" />
           Imprimir / Salvar PDF

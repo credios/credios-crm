@@ -103,6 +103,34 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
     return `/leads/${leadId}/simulacao?${params.toString()}`;
   }
 
+  /**
+   * Decide o modo de abertura do PDF a partir do contexto do navegador:
+   *
+   *   - Browser comum: abre em nova aba (`_blank`). O consultor mantém o
+   *     lead aberto numa aba e a simulação noutra, alterna como quiser.
+   *
+   *   - PWA / aplicativo instalado (Chrome → "Instalar app", Safari "Add to
+   *     Home Screen", Edge PWA): a janela não tem barra de abas, então
+   *     `window.open(_blank)` dispara uma janela ÓRFÃ sem botão de voltar
+   *     ativo (histórico vazio). Solução: navegar na MESMA janela. O botão
+   *     de voltar do topo do PWA fica ativo (porque agora tem histórico) e
+   *     o consultor consegue voltar pro lead com 1 clique.
+   *
+   * Também suportamos `display-mode: minimal-ui` (Chrome iOS quando o app
+   * é "fixado" na tela de início).
+   */
+  function isStandalonePwa(): boolean {
+    if (typeof window === "undefined") return false;
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      window.matchMedia?.("(display-mode: minimal-ui)").matches;
+    // iOS Safari home-screen — exposto em `navigator.standalone` (não-padrão).
+    const iosStandalone =
+      typeof navigator !== "undefined" &&
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    return Boolean(standalone || iosStandalone);
+  }
+
   function handleGenerate() {
     // Validação de UX antes de abrir a aba — o servidor revalida tudo,
     // mas dá pra dar feedback instantâneo aqui sem ida-e-volta.
@@ -134,9 +162,15 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
       return;
     }
 
-    // Abre nova aba — a página standalone faz o cálculo e dispara o print.
     const url = buildUrl();
-    window.open(url, "_blank", "noopener,noreferrer");
+    if (isStandalonePwa()) {
+      // Mesmo window — o botão "Voltar pro lead" da própria página da
+      // simulação (e a setinha do PWA, agora com histórico) traz de volta.
+      window.location.href = url;
+    } else {
+      // Aba nova — usuário mantém o lead aberto na aba original.
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
   }
 
   // Pequeno helper de exibição do valor — labels mostram o que está
