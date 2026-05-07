@@ -24,7 +24,6 @@ const TABS: { key: string; label: string; statuses: string[] | null }[] = [
   { key: "documentacao_enviada", label: "Documentação Enviada", statuses: ["documentacao_enviada"] },
   { key: "fechados", label: "Fechados", statuses: ["fechado"] },
   { key: "perdidos", label: "Perdidos", statuses: ["perdido"] },
-  { key: "sem_resposta", label: "Sem Resposta", statuses: ["sem_resposta"] },
   { key: "desqualificados", label: "Desqualificados", statuses: ["desqualificado"] },
 ];
 

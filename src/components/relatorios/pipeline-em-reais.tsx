@@ -18,7 +18,6 @@ const STAGE_ORDER = [
   "aguardando_documentacao",
   "documentacao_enviada",
   "em_negociacao",
-  "sem_resposta",
 ];
 
 type Props = { rows: PipelineEmReaisRow[] };

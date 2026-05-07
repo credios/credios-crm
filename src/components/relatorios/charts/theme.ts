@@ -25,7 +25,6 @@ export const STATUS_COLOR: Record<string, string> = {
   em_negociacao: "#8b5cf6",         // violet-500 — fechando
   fechado: "#10b981",               // emerald-500 — sucesso
   perdido: "#f43f5e",               // rose-500
-  sem_resposta: "#94a3b8",          // slate-400
   desqualificado: "#dc2626",        // red-600
 };
 

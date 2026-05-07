@@ -24,8 +24,8 @@ export type LeadNovoCard = {
  * triagem pra admin atribuir manualmente. Ordena por mais antigos
  * primeiro (FIFO de chegada — o mais antigo é o mais urgente).
  *
- * Status terminais (fechado/perdido/desqualificado/sem_resposta) são
- * excluídos: já saíram do funil ativo.
+ * Status terminais (fechado/perdido/desqualificado) são excluídos:
+ * já saíram do funil ativo.
  */
 export async function listLeadsNovosSemConsultor(): Promise<LeadNovoCard[]> {
   const rows = await db
@@ -50,7 +50,6 @@ export async function listLeadsNovosSemConsultor(): Promise<LeadNovoCard[]> {
           "fechado",
           "perdido",
           "desqualificado",
-          "sem_resposta",
         ]),
       ),
     )

@@ -30,7 +30,7 @@ import {
 
 // Status NÃO-terminais que devem aparecer SEMPRE no chart, mesmo sem dado
 // (mostra "0h sem transições registradas" em vez de sumir).
-// Excluído: fechado, perdido, desqualificado, sem_resposta (são finais).
+// Excluído: fechado, perdido, desqualificado (são finais).
 const NON_TERMINAL_STATUSES = [
   "novo",
   "conversa_inicial",

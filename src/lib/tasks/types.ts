@@ -2,7 +2,6 @@ export const TASK_ACTIVE_STATUS_EXCLUDED = [
   "fechado",
   "perdido",
   "desqualificado",
-  "sem_resposta",
 ] as const;
 
 export type TaskStatus = "aberta" | "concluida" | "atrasada";

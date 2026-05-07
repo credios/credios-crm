@@ -287,7 +287,6 @@ const STATUS_ORDER = [
   "aguardando_documentacao",
   "documentacao_enviada",
   "em_negociacao",
-  "sem_resposta",
 ];
 function statusOrdem(s: string): number {
   const i = STATUS_ORDER.indexOf(s);

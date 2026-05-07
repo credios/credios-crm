@@ -210,7 +210,6 @@ async function fetchKpisFromMV(
             "fechado",
             "perdido",
             "desqualificado",
-            "sem_resposta",
           ]),
           ...cbLeads,
         ),
@@ -305,7 +304,7 @@ async function fetchKpisFromTable(
         and(
           notInArray(
             leads.status,
-            ["fechado", "perdido", "desqualificado", "sem_resposta"],
+            ["fechado", "perdido", "desqualificado"],
           ),
           ...cb,
         ),
@@ -656,7 +655,6 @@ export async function fetchPipelineAtivoPorStatus(
               "fechado",
               "perdido",
               "desqualificado",
-              "sem_resposta",
             ]),
             ...mvLeadsConds(filters),
           ),
@@ -675,7 +673,6 @@ export async function fetchPipelineAtivoPorStatus(
               "fechado",
               "perdido",
               "desqualificado",
-              "sem_resposta",
             ]),
             ...baseConds(filters),
           ),
@@ -885,7 +882,6 @@ async function fetchSalesMetricsUncached(
                   "fechado",
                   "perdido",
                   "desqualificado",
-                  "sem_resposta",
                 ]),
                 ...mvLeadsConds(filters),
               ),
@@ -941,7 +937,6 @@ async function fetchSalesMetricsUncached(
                   "fechado",
                   "perdido",
                   "desqualificado",
-                  "sem_resposta",
                 ]),
                 ...baseConds(filters),
               ),
@@ -1423,7 +1418,7 @@ export async function fetchPerformancePorUf(
         .select({
           uf: mvLeadsDiarios.estado,
           total: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
-          pipeline: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}) filter (where ${mvLeadsDiarios.status} not in ('fechado','perdido','desqualificado','sem_resposta')), 0)::int`,
+          pipeline: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}) filter (where ${mvLeadsDiarios.status} not in ('fechado','perdido','desqualificado')), 0)::int`,
           fechados: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}) filter (where ${mvLeadsDiarios.status} = 'fechado'), 0)::int`,
           buscado: sql<string>`coalesce(sum(${mvLeadsDiarios.somaValorCredito}), 0)::text`,
           liberado: sql<string>`coalesce(sum(${mvLeadsDiarios.somaValorLiberado}) filter (where ${mvLeadsDiarios.status} = 'fechado'), 0)::text`,
@@ -1443,7 +1438,7 @@ export async function fetchPerformancePorUf(
         .select({
           uf: sql<string>`coalesce(${leads.estado}, '—')`,
           total: sql<number>`count(*)::int`,
-          pipeline: sql<number>`count(*) filter (where ${leads.status} not in ('fechado','perdido','desqualificado','sem_resposta'))::int`,
+          pipeline: sql<number>`count(*) filter (where ${leads.status} not in ('fechado','perdido','desqualificado'))::int`,
           fechados: sql<number>`count(*) filter (where ${leads.status} = 'fechado')::int`,
           buscado: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
           liberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}) filter (where ${leads.status} = 'fechado'), 0)::text`,
@@ -2149,7 +2144,7 @@ export async function fetchEsfriandoGlobal(): Promise<{ count: number }> {
       ORDER BY i.criado_em DESC
       LIMIT 1
     ) ult ON true
-    WHERE l.status NOT IN ('fechado', 'perdido', 'desqualificado', 'sem_resposta')
+    WHERE l.status NOT IN ('fechado', 'perdido', 'desqualificado')
       AND (
         (ult.criado_em IS NULL AND l.atribuido_em < NOW() - INTERVAL '5 days')
         OR ult.criado_em < NOW() - INTERVAL '5 days'
@@ -2217,7 +2212,6 @@ export async function fetchKpisConsultor(
           "fechado",
           "perdido",
           "desqualificado",
-          "sem_resposta",
         ]),
       ),
     );

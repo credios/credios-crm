@@ -13,7 +13,7 @@ import postgres from "postgres";
 
 config({ path: ".env.local" });
 
-const STATUS_EXCLUDED = ["fechado", "perdido", "desqualificado", "sem_resposta"];
+const STATUS_EXCLUDED = ["fechado", "perdido", "desqualificado"];
 
 function todayYmdBrt(now: Date = new Date()): string {
   // Equivalente a `formatInTimeZone(now, "America/Sao_Paulo", "yyyy-MM-dd")`.

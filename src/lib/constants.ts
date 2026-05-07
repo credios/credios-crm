@@ -68,7 +68,6 @@ export const STATUS_LEAD_LABEL: Record<string, string> = {
   em_negociacao: "Em negociação",
   fechado: "Fechado",
   perdido: "Perdido",
-  sem_resposta: "Sem resposta",
   desqualificado: "Desqualificado",
 };
 
@@ -95,6 +94,7 @@ export const MOTIVOS_PERDIDO = [
   "Taxa não competitiva",
   "Já fechou com concorrente",
   "Sem retorno após várias tentativas",
+  "Sem resposta",
   "Mudou de planos",
   "Outro",
 ] as const;

@@ -32,7 +32,6 @@ const STATUS_SIMPLES = [
   "aguardando_documentacao",
   "documentacao_enviada",
   "em_negociacao",
-  "sem_resposta",
 ] as const;
 
 type Props = {

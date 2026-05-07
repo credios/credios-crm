@@ -19,8 +19,6 @@ const STATUS_CLASSNAMES: Record<string, string> = {
   fechado:
     "bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-300",
   perdido: "bg-rose-500/15 text-rose-700 border-rose-500/30 dark:text-rose-300",
-  sem_resposta:
-    "bg-slate-400/15 text-slate-700 border-slate-400/30 dark:bg-slate-300/15 dark:text-slate-200",
   desqualificado: "bg-red-500/15 text-red-700 border-red-500/30 dark:text-red-300",
 };
 

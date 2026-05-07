@@ -417,7 +417,7 @@ export async function activeLeadsWithoutOpenTaskCount(): Promise<number> {
     .from(leads)
     .where(sql`
       ${leads.consultorId} IS NOT NULL
-      AND ${leads.status} NOT IN ('fechado','perdido','desqualificado','sem_resposta')
+      AND ${leads.status} NOT IN ('fechado','perdido','desqualificado')
       AND NOT EXISTS (
         SELECT 1 FROM public.tarefas t
         WHERE t.lead_id = ${leads.id}

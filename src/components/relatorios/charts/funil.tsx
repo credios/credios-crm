@@ -39,7 +39,6 @@ const STATUS_ORDER = [
   "em_negociacao",
   "fechado",
   "perdido",
-  "sem_resposta",
   "desqualificado",
 ];
 

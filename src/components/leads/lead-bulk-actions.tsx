@@ -9,7 +9,7 @@ import {
   UserX,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   MOTIVOS_DESQUALIFICACAO,
+  MOTIVOS_PERDIDO,
   STATUS_LEAD_LABEL,
 } from "@/lib/constants";
 import type { LeadRow } from "@/lib/leads/list-leads";
@@ -44,13 +45,17 @@ const NON_TERMINAL_STATUSES = [
   "aguardando_documentacao",
   "documentacao_enviada",
   "em_negociacao",
-  "sem_resposta",
 ];
 
 type Props = {
   selectedLeads: LeadRow[];
   consultores: { id: string; nome: string }[];
-  /** Habilita ações destrutivas em massa (desqualificar/excluir). */
+  /**
+   * Admin tem acesso a ações irreversíveis (excluir permanentemente).
+   * Encerrar (perdido/desqualificado) e demais ações ficam disponíveis pra
+   * todos os perfis com acesso à seleção (consultor mexe nos próprios leads
+   * via RLS, admin/gerente em todos).
+   */
   isAdmin: boolean;
   onDone: () => void;
   onClear: () => void;
@@ -65,7 +70,7 @@ export function LeadBulkActions({
 }: Props) {
   const [openReassign, setOpenReassign] = useState(false);
   const [openStatus, setOpenStatus] = useState(false);
-  const [openDesqualificar, setOpenDesqualificar] = useState(false);
+  const [openEncerrar, setOpenEncerrar] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
 
   function handleExport() {
@@ -81,14 +86,16 @@ export function LeadBulkActions({
         <div className="flex-1" />
         <BulkButton icon={UserCheck} label="Reatribuir" onClick={() => setOpenReassign(true)} />
         <BulkButton icon={UserCheck} label="Mudar status" onClick={() => setOpenStatus(true)} />
-        {isAdmin && (
-          <BulkButton
-            icon={UserX}
-            label="Desqualificar"
-            onClick={() => setOpenDesqualificar(true)}
-            tone="warning"
-          />
-        )}
+        {/* Encerrar agora é pra todos (admin + consultor) — consultor só
+            consegue encerrar os leads próprios, mas a UX do bulk é a mesma.
+            O backend rejeita silenciosamente leads que não pertencem ao
+            consultor (contamos sucesso/falha no toast). */}
+        <BulkButton
+          icon={UserX}
+          label="Encerrar"
+          onClick={() => setOpenEncerrar(true)}
+          tone="warning"
+        />
         <BulkButton icon={Download} label="Exportar CSV" onClick={handleExport} />
         {isAdmin && (
           <BulkButton
@@ -122,27 +129,25 @@ export function LeadBulkActions({
           onDone();
         }}
       />
+      <BulkEncerrarDialog
+        open={openEncerrar}
+        onOpenChange={setOpenEncerrar}
+        leads={selectedLeads}
+        onDone={() => {
+          setOpenEncerrar(false);
+          onDone();
+        }}
+      />
       {isAdmin && (
-        <>
-          <BulkDesqualificarDialog
-            open={openDesqualificar}
-            onOpenChange={setOpenDesqualificar}
-            leads={selectedLeads}
-            onDone={() => {
-              setOpenDesqualificar(false);
-              onDone();
-            }}
-          />
-          <BulkDeleteDialog
-            open={openDelete}
-            onOpenChange={setOpenDelete}
-            leads={selectedLeads}
-            onDone={() => {
-              setOpenDelete(false);
-              onDone();
-            }}
-          />
-        </>
+        <BulkDeleteDialog
+          open={openDelete}
+          onOpenChange={setOpenDelete}
+          leads={selectedLeads}
+          onDone={() => {
+            setOpenDelete(false);
+            onDone();
+          }}
+        />
       )}
     </>
   );
@@ -325,10 +330,24 @@ function BulkStatusDialog({
 }
 
 // ============================================================================
-// Bulk: Desqualificar (motivo único pra todos os leads selecionados)
+// Bulk: Encerrar (marcar N leads como perdido OU desqualificado com motivo único)
 // ============================================================================
+//
+// Combina o que era "Bulk Desqualificar" (admin only) com a opção de marcar
+// como Perdido. Ambos os caminhos exigem motivo, e ambos ficam disponíveis
+// para admin E consultor.
+//
+// Diferença Perdido vs Desqualificado:
+//   - desqualificado: lead que entra fora da política (renda/imóvel/restrição)
+//     ou virou inviável a priori. Lista MOTIVOS_DESQUALIFICACAO.
+//   - perdido: lead já qualificado que entrou no funil mas não fechou
+//     (cliente desistiu, taxa não bateu, sem retorno, etc.). Lista
+//     MOTIVOS_PERDIDO.
+//
+// O motivo escolhido (ou texto livre em "Outro") vai pra
+// `motivo_desqualificacao` em todos os leads selecionados.
 
-function BulkDesqualificarDialog({
+function BulkEncerrarDialog({
   open,
   onOpenChange,
   leads,
@@ -339,13 +358,30 @@ function BulkDesqualificarDialog({
   leads: LeadRow[];
   onDone: () => void;
 }) {
+  const [statusAlvo, setStatusAlvo] =
+    useState<"perdido" | "desqualificado">("perdido");
   const [motivo, setMotivo] = useState<string>("");
   const [outroMotivo, setOutroMotivo] = useState("");
   const [pending, setPending] = useState(false);
 
+  // Lista de motivos muda conforme o status alvo. Quando o usuário troca
+  // o status, resetamos o motivo selecionado pra evitar manter um motivo
+  // que não faz sentido na nova lista.
+  const motivosDisponiveis = useMemo(
+    () =>
+      statusAlvo === "perdido" ? MOTIVOS_PERDIDO : MOTIVOS_DESQUALIFICACAO,
+    [statusAlvo],
+  );
   const isOutro = motivo === "Outro";
 
   function reset() {
+    setMotivo("");
+    setOutroMotivo("");
+    setStatusAlvo("perdido");
+  }
+
+  function handleStatusChange(novo: "perdido" | "desqualificado") {
+    setStatusAlvo(novo);
     setMotivo("");
     setOutroMotivo("");
   }
@@ -359,12 +395,15 @@ function BulkDesqualificarDialog({
     setPending(true);
     let success = 0;
     let failed = 0;
+    // Sequencial pra preservar a ordem do audit log e evitar saturar o
+    // backend. Pra 50 leads a UX já é OK; bulks maiores podem virar fila
+    // server-side numa v2.
     for (const lead of leads) {
       const res = await fetch(`/api/leads/${lead.id}/status`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          status: "desqualificado",
+          status: statusAlvo,
           motivoDesqualificacao: motivoFinal,
         }),
       });
@@ -372,8 +411,9 @@ function BulkDesqualificarDialog({
       else failed++;
     }
     setPending(false);
-    if (failed === 0) toast.success(`${success} leads desqualificados`);
-    else toast.error(`${success} desqualificados, ${failed} falharam`);
+    const labelStatus = statusAlvo === "perdido" ? "perdidos" : "desqualificados";
+    if (failed === 0) toast.success(`${success} leads marcados como ${labelStatus}`);
+    else toast.error(`${success} ${labelStatus}, ${failed} falharam`);
     reset();
     onDone();
   }
@@ -392,13 +432,53 @@ function BulkDesqualificarDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Desqualificar {leads.length} leads</DialogTitle>
+          <DialogTitle>Encerrar {leads.length} leads</DialogTitle>
           <DialogDescription>
-            O mesmo motivo será aplicado a todos os leads selecionados. Eles
-            serão movidos para o status &ldquo;Desqualificado&rdquo;.
+            Marque os leads selecionados como{" "}
+            <strong>perdido</strong> ou <strong>desqualificado</strong>.
+            O mesmo motivo será aplicado a todos.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Status final</Label>
+            <Select
+              value={statusAlvo}
+              onValueChange={(v) =>
+                handleStatusChange((v ?? "perdido") as "perdido" | "desqualificado")
+              }
+              disabled={pending}
+            >
+              <SelectTrigger>
+                <SelectValue>
+                  {(v: unknown) => {
+                    if (v === "perdido") return "Perdido — entrou no funil, não fechou";
+                    if (v === "desqualificado")
+                      return "Desqualificado — fora da política";
+                    return "";
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="perdido">
+                  <div className="flex flex-col">
+                    <span>Perdido</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Lead entrou no funil mas não fechou
+                    </span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="desqualificado">
+                  <div className="flex flex-col">
+                    <span>Desqualificado</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Lead fora da política (renda/imóvel/restrição)
+                    </span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1.5">
             <Label>Motivo</Label>
             <Select
@@ -410,7 +490,7 @@ function BulkDesqualificarDialog({
                 <SelectValue placeholder="Escolha um motivo" />
               </SelectTrigger>
               <SelectContent>
-                {MOTIVOS_DESQUALIFICACAO.map((m) => (
+                {motivosDisponiveis.map((m) => (
                   <SelectItem key={m} value={m}>
                     {m}
                   </SelectItem>
@@ -426,6 +506,7 @@ function BulkDesqualificarDialog({
                 rows={3}
                 value={outroMotivo}
                 onChange={(e) => setOutroMotivo(e.currentTarget.value)}
+                placeholder="Ex: Sem retorno após 5 tentativas em 14 dias."
                 disabled={pending}
               />
             </div>
@@ -447,7 +528,7 @@ function BulkDesqualificarDialog({
             disabled={pending || !motivo || (isOutro && !outroMotivo.trim())}
           >
             {pending && <Loader2 className="size-4 animate-spin" />}
-            Desqualificar {leads.length}
+            {statusAlvo === "perdido" ? "Marcar como perdido" : "Desqualificar"} {leads.length}
           </Button>
         </DialogFooter>
       </DialogContent>

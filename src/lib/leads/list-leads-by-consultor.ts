@@ -22,8 +22,7 @@ export type LeadAtivoConsultor = {
  * Lista leads ATIVOS (não terminais) atribuídos a um consultor específico.
  * Usado pelo overview admin de cada consultor.
  *
- * Inclui sem_resposta (consultor pode tentar reativar) mas exclui
- * fechado/perdido/desqualificado (já saíram do funil).
+ * Exclui fechado/perdido/desqualificado (já saíram do funil).
  */
 export async function listLeadsAtivosByConsultor(
   consultorId: string,

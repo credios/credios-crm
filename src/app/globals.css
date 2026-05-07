@@ -64,8 +64,7 @@
    *   novo (blue) → conversa_inicial (sky) → aguardando_resposta (yellow)
    *   → aguardando_documentacao (orange) → documentacao_enviada (indigo)
    *   → em_negociacao (violet) → fechado (emerald)
-   * Fora do fluxo ativo: sem_resposta (slate neutro), perdido (rose),
-   * desqualificado (red).
+   * Fora do fluxo ativo: perdido (rose), desqualificado (red).
    */
   --color-status-novo: #4b7be5;            /* blue-500   — entrada, frio */
   --color-status-conversa: #38bdf8;        /* sky-400    — esquentando */
@@ -75,7 +74,6 @@
   --color-status-em-negociacao: #8b5cf6;   /* violet-500 — fechando */
   --color-status-fechado: #10b981;         /* emerald-500 — sucesso */
   --color-status-perdido: #f43f5e;         /* rose-500   — perda ativa */
-  --color-status-sem-resposta: #94a3b8;    /* slate-400  — passivo */
   --color-status-desqualificado: #dc2626;  /* red-600    — bloqueado */
 
   /* === Fonts (5 fontes Credios via next/font) === */

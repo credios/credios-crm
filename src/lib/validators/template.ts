@@ -9,7 +9,6 @@ const STATUS_LEAD_VALUES = [
   "em_negociacao",
   "fechado",
   "perdido",
-  "sem_resposta",
   "desqualificado",
 ] as const;
 

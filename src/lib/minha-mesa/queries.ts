@@ -353,7 +353,6 @@ async function qEsfriando(consultorId: string): Promise<FilaItem[]> {
         eq(leadsTable.consultorId, consultorId),
         notInArray(leadsTable.status, [
           ...STATUS_TERMINAIS,
-          "sem_resposta",
           "novo",
           "aguardando_documentacao",
           "em_negociacao",
@@ -524,7 +523,7 @@ export type CarteiraEmRisco = {
 export async function getCarteiraEmRisco(
   consultorId: string,
 ): Promise<CarteiraEmRisco[]> {
-  // Status ativos sem contato há 7+ dias OU sem_resposta. Limita 30.
+  // Status ativos sem contato há 7+ dias. Limita 30.
   const rows = await db
     .select({
       leadId: leadsTable.id,
@@ -543,16 +542,11 @@ export async function getCarteiraEmRisco(
         eq(leadsTable.consultorId, consultorId),
         notInArray(leadsTable.status, STATUS_TERMINAIS),
         or(
-          eq(leadsTable.status, "sem_resposta"),
-          and(
-            or(
-              isNull(leadsTable.ultimoContato),
-              lt(leadsTable.ultimoContato, sql`now() - interval '7 days'`),
-            ),
-            // Não mostrar leads novos sem contato — eles vão pra "novos pra mim"
-            sql`${leadsTable.status} != 'novo'`,
-          ),
+          isNull(leadsTable.ultimoContato),
+          lt(leadsTable.ultimoContato, sql`now() - interval '7 days'`),
         ),
+        // Não mostrar leads novos sem contato — eles vão pra "novos pra mim"
+        sql`${leadsTable.status} != 'novo'`,
       ),
     )
     .orderBy(desc(leadsTable.valorCreditoCentavos))
@@ -564,8 +558,7 @@ export async function getCarteiraEmRisco(
       ? Math.round((Date.now() - ref.getTime()) / (24 * 60 * 60 * 1000))
       : 999;
     let motivo: string;
-    if (r.status === "sem_resposta") motivo = "Sem resposta — tentar reativar";
-    else if (r.status === "aguardando_documentacao")
+    if (r.status === "aguardando_documentacao")
       motivo = `Aguardando docs · ${dias}d sem contato`;
     else if (r.status === "em_negociacao")
       motivo = `Negociação parada · ${dias}d`;
@@ -674,7 +667,7 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
       .where(
         and(
           eq(leadsTable.consultorId, consultorId),
-          notInArray(leadsTable.status, [...STATUS_TERMINAIS, "sem_resposta"]),
+          notInArray(leadsTable.status, STATUS_TERMINAIS),
         ),
       ),
   ]);

@@ -113,7 +113,6 @@ const STATUS_DIST: Array<{ status: string; weight: number }> = [
   { status: "em_negociacao", weight: 4 },
   { status: "fechado", weight: 5 },
   { status: "perdido", weight: 2 },
-  { status: "sem_resposta", weight: 1 },
   { status: "desqualificado", weight: 1 },
 ];
 
@@ -264,7 +263,6 @@ async function main() {
       | "em_negociacao"
       | "fechado"
       | "perdido"
-      | "sem_resposta"
       | "desqualificado";
 
     // Distribuição: ~34% Gabriel, ~34% Rodrigo, ~32% pool
