@@ -11,7 +11,10 @@ import {
   type AmortizationType,
   type Indexation,
 } from "@/lib/simulador/simple-simulator";
-import { generateSimulationId } from "@/lib/simulador/simulation-id";
+import {
+  generateSimulationId,
+  isValidSimulationId,
+} from "@/lib/simulador/simulation-id";
 import { simpleSimulatorSchema } from "@/lib/simulador/validator";
 
 // Página standalone (route group `(print)`) sem sidebar/nav. Aberta em uma
@@ -107,9 +110,16 @@ export default async function SimulacaoPage({ params, searchParams }: Props) {
     );
   }
 
-  const result = buildSimulationResult(parsed.data, {
-    simulationId: generateSimulationId(),
-  });
+  // O ID vem do POST /api/leads/[id]/simulacao (que gera, registra na
+  // timeline e retorna pra UI). Se faltar (acesso direto à URL ou
+  // retrocompat), gera um aqui — sem registrar interação, pra evitar
+  // dupla contagem ou eventos zumbi.
+  const sidParam = asString(sp.sid);
+  const simulationId = isValidSimulationId(sidParam)
+    ? sidParam
+    : generateSimulationId();
+
+  const result = buildSimulationResult(parsed.data, { simulationId });
 
   return <SimulacaoRenderer result={result} leadId={id} />;
 }

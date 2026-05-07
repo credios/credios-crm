@@ -1,6 +1,7 @@
 "use client";
 
-import { Calculator, ExternalLink, Info } from "lucide-react";
+import { Calculator, ExternalLink, Info, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -59,6 +60,9 @@ type AmortizationType = "price" | "sac";
 type Indexation = "pre" | "pos";
 
 export function LeadSimulacaoCard({ leadId, defaults }: Props) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+
   // Pré-preenchimento dos valores em REAIS (não centavos — o simulador
   // trabalha em reais). Se o lead não tem valor, fica vazio e o consultor
   // preenche manualmente.
@@ -89,8 +93,9 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
   const ltvMax = LTV_MAX * 100;
   const ltvExceeded = ltv > ltvMax;
 
-  function buildUrl(): string {
+  function buildUrl(simulationId: string): string {
     const params = new URLSearchParams({
+      sid: simulationId,
       nome: clientName,
       cpf: clientCPF,
       credito: String(creditAmount),
@@ -131,7 +136,7 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
     return Boolean(standalone || iosStandalone);
   }
 
-  function handleGenerate() {
+  async function handleGenerate() {
     // Validação de UX antes de abrir a aba — o servidor revalida tudo,
     // mas dá pra dar feedback instantâneo aqui sem ida-e-volta.
     if (clientName.trim().length < 3) {
@@ -162,7 +167,57 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
       return;
     }
 
-    const url = buildUrl();
+    // Endpoint POST /api/leads/[id]/simulacao registra a simulação na
+    // timeline (interacao tipo evento_sistema) e devolve o ID. Garante
+    // que 1 click = 1 evento, mesmo que o consultor recarregue a aba do
+    // PDF. Se a chamada falha por permissão/rede, abortamos antes de
+    // abrir a aba — assim o evento e o PDF são consistentes.
+    setPending(true);
+    let simulationId: string;
+    try {
+      const res = await fetch(`/api/leads/${leadId}/simulacao`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientName,
+          clientCPF,
+          creditAmount,
+          propertyValue,
+          interestRate: taxaNum,
+          installments,
+          amortizationType,
+          indexation,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        simulationId?: string;
+        error?: string;
+      };
+      if (!res.ok || !json.simulationId) {
+        toast.error("Falha ao registrar simulação", {
+          description:
+            typeof json.error === "string"
+              ? json.error
+              : "Tente novamente em instantes.",
+        });
+        return;
+      }
+      simulationId = json.simulationId;
+    } catch (err) {
+      console.error("[simulacao] erro ao registrar:", err);
+      toast.error("Erro de rede ao gerar simulação");
+      return;
+    } finally {
+      setPending(false);
+    }
+
+    // Refresca a página do lead em background pra que a nova entrada da
+    // timeline apareça quando o consultor voltar (no PWA, navegando same
+    // window, o /leads/[id] já refaz o fetch sozinho — mas o refresh
+    // garante o caso de aba nova com a timeline já aberta atrás).
+    router.refresh();
+
+    const url = buildUrl(simulationId);
     if (isStandalonePwa()) {
       // Mesmo window — o botão "Voltar pro lead" da própria página da
       // simulação (e a setinha do PWA, agora com histórico) traz de volta.
@@ -358,9 +413,13 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
 
         {/* ── CTA ── */}
         <div className="flex justify-end pt-1">
-          <Button onClick={handleGenerate} disabled={ltvExceeded}>
-            <ExternalLink className="size-4" />
-            Gerar PDF
+          <Button onClick={handleGenerate} disabled={ltvExceeded || pending}>
+            {pending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ExternalLink className="size-4" />
+            )}
+            {pending ? "Gerando…" : "Gerar PDF"}
           </Button>
         </div>
       </CardContent>
