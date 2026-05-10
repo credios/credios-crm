@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useState } from "react";
 
 import { LeadEditableCard } from "./lead-editable-card";
 import {
@@ -403,7 +403,7 @@ export function LeadOrigemCard({ lead }: { lead: LeadDetailData }) {
     { label: "Criativo", value: lead.criativo },
     { label: "Palavra-chave", value: lead.palavraChave },
     { label: "Tipo correspondência", value: lead.tipoCorrespondencia },
-    { label: "GCLID", value: lead.gclid ? <code className="text-xs">{lead.gclid}</code> : null },
+    { label: "GCLID", value: lead.gclid ? <code className="block break-all text-xs">{lead.gclid}</code> : null },
     { label: "UTM Source", value: lead.utmSource },
     { label: "UTM Medium", value: lead.utmMedium },
     { label: "UTM Term", value: lead.utmTerm },
@@ -421,12 +421,12 @@ export function LeadOrigemCard({ lead }: { lead: LeadDetailData }) {
         {visible.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">Sem dados de tracking.</p>
         ) : (
-          <dl className="grid grid-cols-[max-content_1fr] gap-y-1.5 gap-x-4 text-sm">
+          <dl className="space-y-2.5 text-sm sm:grid sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-1.5 sm:space-y-0">
             {visible.map((i) => (
-              <Fragment key={i.label}>
-                <dt className="text-muted-foreground">{i.label}</dt>
-                <dd className="break-all">{i.value}</dd>
-              </Fragment>
+              <div key={i.label} className="flex flex-col gap-0.5 sm:contents">
+                <dt className="text-xs text-muted-foreground sm:text-sm">{i.label}</dt>
+                <dd className="min-w-0 break-all">{i.value}</dd>
+              </div>
             ))}
           </dl>
         )}

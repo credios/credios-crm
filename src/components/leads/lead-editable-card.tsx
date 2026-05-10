@@ -2,7 +2,7 @@
 
 import { Loader2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Fragment, useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -85,12 +85,12 @@ export function LeadEditableCard({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <CardTitle className="text-base">{title}</CardTitle>
           {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
         </div>
         {canEdit && !editing && (
-          <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+          <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="shrink-0">
             <Pencil className="size-3.5" /> Editar
           </Button>
         )}
@@ -111,18 +111,18 @@ export function LeadEditableCard({
             </div>
           </div>
         ) : (
-          <dl className="grid grid-cols-[max-content_1fr] gap-y-1.5 gap-x-4 text-sm">
+          <dl className="space-y-2.5 text-sm sm:grid sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-1.5 sm:space-y-0">
             {view.map(({ label, value }) => (
-              <Fragment key={label}>
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="break-words">
+              <div key={label} className="flex flex-col gap-0.5 sm:contents">
+                <dt className="text-xs text-muted-foreground sm:text-sm">{label}</dt>
+                <dd className="min-w-0 break-words">
                   {value === null || value === undefined || value === "" ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
                     value
                   )}
                 </dd>
-              </Fragment>
+              </div>
             ))}
           </dl>
         )}

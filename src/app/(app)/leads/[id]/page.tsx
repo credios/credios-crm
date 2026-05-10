@@ -135,8 +135,10 @@ export default async function LeadDetailPage({ params }: Props) {
       </Suspense>
 
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        {/* Coluna esquerda: cards principais (síncronos, baseados no `lead` já carregado). */}
-        <div className="space-y-6">
+        {/* Coluna esquerda: cards principais (síncronos, baseados no `lead` já carregado).
+            min-w-0 nos filhos do grid evita que conteúdo largo (GCLID, URL) empurre
+            a coluna além da largura do viewport no mobile. */}
+        <div className="min-w-0 space-y-6">
           <LeadPessoaisCard lead={lead} canEdit={canEdit} />
           <LeadContatoCard lead={lead} canEdit={canEdit} />
           <LeadOperacaoCard lead={lead} canEdit={canEdit} />
@@ -180,7 +182,7 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
 
         {/* Coluna direita: timeline (carrega só primeira página). */}
-        <div>
+        <div className="min-w-0">
           {isMarketing ? (
             <TimelineRedacted />
           ) : (
