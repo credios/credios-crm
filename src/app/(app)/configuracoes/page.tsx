@@ -1,4 +1,4 @@
-import { ArrowRight, ListChecks, MessageSquare, Route, Users, Workflow } from "lucide-react";
+import { ArrowRight, Compass, ListChecks, MessageSquare, Route, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -43,6 +43,13 @@ const SECTIONS = [
     description:
       "Definir título, descrição e frequência das tarefas geradas para cada status do funil.",
     icon: ListChecks,
+  },
+  {
+    href: "/configuracoes/tracking",
+    title: "Tracking de origem",
+    description:
+      "Catálogo de fontes (channel × source), aliases e quarantine de leads com origem desconhecida.",
+    icon: Compass,
   },
 ];
 

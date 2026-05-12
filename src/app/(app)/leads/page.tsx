@@ -6,8 +6,8 @@ import { isAdmin } from "@/lib/auth/permissions";
 import {
   listConsultoresAtivos,
   listLeads,
-  listOrigensDistintas,
 } from "@/lib/leads/list-leads";
+import { listActiveSources } from "@/lib/tracking/resolver";
 import { listLeadsQuerySchema } from "@/lib/validators/lead";
 
 type Props = {
@@ -28,12 +28,12 @@ export default async function LeadsPage({ searchParams }: Props) {
   const filters = listLeadsQuerySchema.parse(flat);
 
   // listLeads é crítico — sem ele a página não tem o que mostrar.
-  // consultores/origens são pra dropdowns de filtro: se falharem, não
+  // consultores/sources são pra dropdowns de filtro: se falharem, não
   // vale derrubar a página inteira. Isolamos com .catch().
-  const [result, consultores, origens] = await Promise.all([
+  const [result, consultores, sources] = await Promise.all([
     listLeads(filters, user),
     listConsultoresAtivos().catch(() => []),
-    listOrigensDistintas().catch(() => []),
+    listActiveSources().catch(() => []),
   ]);
 
   return (
@@ -51,7 +51,7 @@ export default async function LeadsPage({ searchParams }: Props) {
       <LeadList
         result={result}
         consultores={consultores}
-        origens={origens}
+        sources={sources}
         isAdmin={isAdmin(user)}
       />
     </div>

@@ -32,7 +32,6 @@ import {
   ESTADOS_CIVIS,
   OBJETIVOS_CREDITO,
   OCUPACOES,
-  ORIGENS,
   SITUACOES_IMOVEL,
   TIPOS_IMOVEL,
   TIPOS_PESSOA,
@@ -91,9 +90,11 @@ function reaisToCents(value: string | undefined): number | null {
 type Props = {
   currentUser: { id: string; perfil: "admin" | "gerente" | "consultor" | "marketing" };
   consultores: { id: string; nome: string }[];
+  /** Sources ativos da tabela tracking_sources (carregado pelo server component pai). */
+  sources: Array<{ source: string; channel: string; displayName: string; ordem: number }>;
 };
 
-export function LeadCreateForm({ currentUser, consultores }: Props) {
+export function LeadCreateForm({ currentUser, consultores, sources }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -375,7 +376,11 @@ export function LeadCreateForm({ currentUser, consultores }: Props) {
             <Select value={watch("origem") ?? "Manual"} onValueChange={(v) => setValue("origem", v ?? "")} disabled={pending}>
               <SelectTrigger><SelectValue placeholder="Manual" /></SelectTrigger>
               <SelectContent>
-                {ORIGENS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                {sources.map((s) => (
+                  <SelectItem key={s.source} value={s.source}>
+                    {s.displayName}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

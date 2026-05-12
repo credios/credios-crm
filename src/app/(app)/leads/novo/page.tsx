@@ -6,6 +6,7 @@ import { LeadCreateForm } from "@/components/leads/lead-create-form";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { listActiveSources } from "@/lib/tracking/resolver";
 
 export default async function NovoLeadPage() {
   const user = await getAppUser();
@@ -28,6 +29,9 @@ export default async function NovoLeadPage() {
       .orderBy(usersTable.nome);
   }
 
+  // Sources ativos da tabela tracking_sources (substitui o enum ORIGENS).
+  const sources = await listActiveSources();
+
   return (
     <div className="space-y-6">
       <div>
@@ -40,7 +44,11 @@ export default async function NovoLeadPage() {
           .
         </p>
       </div>
-      <LeadCreateForm currentUser={user} consultores={consultores} />
+      <LeadCreateForm
+        currentUser={user}
+        consultores={consultores}
+        sources={sources}
+      />
     </div>
   );
 }

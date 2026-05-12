@@ -60,7 +60,8 @@ type StatusMeta = { key: string; label: string; eTerminal: boolean };
 type Props = {
   leads: LeadRow[];
   consultores: { id: string; nome: string }[];
-  origens: string[];
+  /** Sources ativos do DB (tracking_sources). Substitui o array `origens` legado. */
+  sources: Array<{ source: string; channel: string; displayName: string }>;
   /** Apenas admin pode fechar leads ou tirar leads do status fechado. */
   canCloseOrReopen: boolean;
   /** Status ATIVOS, ordenados. Vem de listActiveStatuses(). */
@@ -98,7 +99,7 @@ const collisionDetection: CollisionDetection = (args) => {
 export function LeadKanban({
   leads,
   consultores,
-  origens,
+  sources,
   canCloseOrReopen,
   statuses,
 }: Props) {
@@ -372,7 +373,7 @@ export function LeadKanban({
 
   return (
     <div className="space-y-4">
-      <LeadFilters consultores={consultores} origens={origens} />
+      <LeadFilters consultores={consultores} sources={sources} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ViewToggle current="kanban" />

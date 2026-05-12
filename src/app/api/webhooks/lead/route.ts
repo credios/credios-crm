@@ -7,10 +7,12 @@ import {
   duplicidadesPendentes,
   interacoes,
   leads,
+  trackingUnknowns,
   users as usersTable,
   webhookIdempotency,
 } from "../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
+import { dispatchCapi } from "@/lib/capi/dispatch";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import {
@@ -20,6 +22,7 @@ import {
 import { contextFromWebhook } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
 import { aplicarRoteamento } from "@/lib/routing/engine";
+import { resolveSource } from "@/lib/tracking/resolver";
 import {
   emptyToNull,
   normalizarCpf,
@@ -126,6 +129,38 @@ export async function POST(request: NextRequest) {
   const emailClean = emptyToNull(payload.email ?? null);
   const estadoClean = emptyToNull(payload.estado ?? null)?.toUpperCase() ?? null;
 
+  // 5.1. Resolver classificação de origem (channel/source/paid).
+  // O resolver:
+  //   1. Confia em channel/source vindos do client (se canônicos)
+  //   2. Reclassifica server-side via classifyTouch se ausentes ou inválidos
+  //   3. Valida contra tabela tracking_sources ativos
+  //   4. Marca como "Unknown" o que admin precisar revisar (quarantine)
+  const classification = await resolveSource({
+    clientSource: emptyToNull(payload.source ?? null),
+    clientChannel: emptyToNull(payload.channel ?? null),
+    clientPaid: payload.paid ?? null,
+    gclid: emptyToNull(payload.gclid ?? null),
+    wbraid: emptyToNull(payload.wbraid ?? null),
+    gbraid: emptyToNull(payload.gbraid ?? null),
+    msclkid: emptyToNull(payload.msclkid ?? null),
+    fbclid: emptyToNull(payload.fbclid ?? null),
+    ttclid: emptyToNull(payload.ttclid ?? null),
+    li_fat_id: emptyToNull(payload.li_fat_id ?? null),
+    twclid: emptyToNull(payload.twclid ?? null),
+    rdt_cid: emptyToNull(payload.rdt_cid ?? null),
+    sccid: emptyToNull(payload.sccid ?? null),
+    pin_aid: emptyToNull(payload.pin_aid ?? null),
+    epik: emptyToNull(payload.epik ?? null),
+    irclickid: emptyToNull(payload.irclickid ?? null),
+    cjevent: emptyToNull(payload.cjevent ?? null),
+    utm_source: emptyToNull(payload.utm_source ?? null),
+    utm_medium: emptyToNull(payload.utm_medium ?? null),
+    utm_campaign: emptyToNull(payload.utm_campaign ?? null),
+    network: emptyToNull(payload.network ?? null),
+    referrer: emptyToNull(payload.referrer ?? null),
+    referrer_parsed: emptyToNull(payload.referrer_parsed ?? null),
+  });
+
   // ===== Bloco protegido: se qualquer passo falhar, libera o claim =====
   let newLead: typeof leads.$inferSelect;
   let leadExistenteId: string | null = null;
@@ -172,7 +207,15 @@ export async function POST(request: NextRequest) {
       valorCreditoCentavos: reaisParaCentavos(payload.valor_credito),
       consultorId: routing.consultorId,
       atribuidoEm: routing.consultorId ? new Date() : null,
-      origem: emptyToNull(payload.origem ?? null) ?? "Webhook",
+      // ── Tracking canônico (taxonomia hierárquica, migration 0017) ──────
+      channel: classification.channel,
+      source: classification.source,
+      paid: classification.paid,
+      // Mirror do source pro campo legado `origem` (retrocompatibilidade
+      // com filtros/relatórios que ainda usam `origem`). Será deprecated
+      // depois que toda UI migrar.
+      origem: classification.source,
+      touches: (payload.touches ?? null) as never,
       utmSource: emptyToNull(payload.utm_source ?? null),
       utmMedium: emptyToNull(payload.utm_medium ?? null),
       utmCampaign: emptyToNull(payload.utm_campaign ?? null),
@@ -184,6 +227,14 @@ export async function POST(request: NextRequest) {
       ttclid: emptyToNull(payload.ttclid ?? null),
       wbraid: emptyToNull(payload.wbraid ?? null),
       gbraid: emptyToNull(payload.gbraid ?? null),
+      liFatId: emptyToNull(payload.li_fat_id ?? null),
+      twclid: emptyToNull(payload.twclid ?? null),
+      rdtCid: emptyToNull(payload.rdt_cid ?? null),
+      sccid: emptyToNull(payload.sccid ?? null),
+      pinAid: emptyToNull(payload.pin_aid ?? null),
+      epik: emptyToNull(payload.epik ?? null),
+      irclickid: emptyToNull(payload.irclickid ?? null),
+      cjevent: emptyToNull(payload.cjevent ?? null),
       rede: emptyToNull(payload.rede ?? null),
       dispositivo: emptyToNull(payload.dispositivo ?? null),
       palavraChave: emptyToNull(payload.palavra_chave ?? null),
@@ -196,6 +247,35 @@ export async function POST(request: NextRequest) {
     })
     .returning();
     newLead = inserted[0]!;
+
+    // 8.1. Quarantine: se a classificação resultou em "Unknown" (source
+    // desconhecido apesar de ter algum sinal), salva pra admin revisar
+    // em /configuracoes/tracking. Sem isso, admins descobririam tarde
+    // demais que tem leads com source vazio na UI.
+    if (classification.source === "Unknown" || !classification.active_in_db) {
+      await db.insert(trackingUnknowns).values({
+        leadId: newLead.id,
+        rawOrigem: emptyToNull(payload.origem ?? null),
+        rawReferrer: emptyToNull(payload.referrer ?? null),
+        rawUtmSource: emptyToNull(payload.utm_source ?? null),
+        rawUtmMedium: emptyToNull(payload.utm_medium ?? null),
+        rawUtmCampaign: emptyToNull(payload.utm_campaign ?? null),
+        rawClickIds: {
+          gclid: payload.gclid,
+          fbclid: payload.fbclid,
+          msclkid: payload.msclkid,
+          ttclid: payload.ttclid,
+          li_fat_id: payload.li_fat_id,
+          twclid: payload.twclid,
+          rdt_cid: payload.rdt_cid,
+          sccid: payload.sccid,
+          pin_aid: payload.pin_aid,
+          epik: payload.epik,
+          irclickid: payload.irclickid,
+          cjevent: payload.cjevent,
+        } as never,
+      });
+    }
 
     // 9. Atualiza claim com lead_id (auditoria + endpoint de duplicate
     // poder retornar o leadId do request original).
@@ -222,7 +302,13 @@ export async function POST(request: NextRequest) {
         leadExistenteId ? " — possível duplicidade por CPF" : ""
       }`,
       metadata: {
-        origem: payload.origem ?? "Webhook",
+        channel: classification.channel,
+        source: classification.source,
+        paid: classification.paid,
+        classification_reason: classification.reason,
+        classification_from_client: !classification.active_in_db ? false : undefined,
+        // Mantém origem no metadata pra debug/auditoria.
+        origem_legacy: payload.origem ?? null,
         duplicidade_lead_existente_id: leadExistenteId,
         routing,
       } as never,
@@ -253,7 +339,10 @@ export async function POST(request: NextRequest) {
       "lead",
       newLead.id,
       {
-        origem: payload.origem ?? "Webhook",
+        channel: classification.channel,
+        source: classification.source,
+        paid: classification.paid,
+        origem_legacy: payload.origem ?? null,
         duplicidade_lead_existente_id: leadExistenteId,
         routing,
       },
@@ -292,6 +381,32 @@ export async function POST(request: NextRequest) {
       }
     });
   }
+
+  // 15. CAPI dispatch — Meta, TikTok, LinkedIn em paralelo. Envio "lead_created"
+  // pra cada plataforma configurada com env vars. Plataformas não configuradas
+  // retornam skipped graciosamente.  Eventos de qualificação/fechamento são
+  // disparados em outros pontos do app (status change handlers).
+  after(() =>
+    dispatchCapi({
+      event: "lead_created",
+      eventTime: newLead.createdAt,
+      eventId: `${newLead.id}:lead_created`,
+      email: newLead.email,
+      phone: newLead.whatsapp,
+      valueCents: null,
+      currency: "BRL",
+      clickIds: {
+        fbclid: newLead.fbclid,
+        ttclid: newLead.ttclid,
+        li_fat_id: newLead.liFatId,
+        gclid: newLead.gclid,
+        msclkid: newLead.msclkid,
+      },
+      firstName: newLead.nome?.split(" ")[0] ?? null,
+      city: newLead.cidade,
+      state: newLead.estado,
+    }),
+  );
 
   return NextResponse.json(
     { leadId: newLead.id, duplicate: false, possivelDuplicidadeCpf: leadExistenteId },

@@ -54,7 +54,11 @@ export type LeadDetailData = {
   valorLiberadoCentavos: number | null;
   comissaoCentavos: number | null;
   dataFechamento: string | null;
-  origem: string | null;
+  // Taxonomia hierárquica (migration 0017)
+  channel: string | null;
+  source: string | null;
+  paid: boolean | null;
+  origem: string | null;        // legado, mirror de source
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
@@ -394,8 +398,22 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
 // ============================================================================
 
 export function LeadOrigemCard({ lead }: { lead: LeadDetailData }) {
+  // Source canônico (migration 0017) + fallback pro legado `origem`.
+  const sourceLabel = lead.source ?? lead.origem;
+  const channelLabel = lead.channel;
+
   const items = [
-    { label: "Origem", value: lead.origem },
+    { label: "Canal", value: channelLabel },
+    { label: "Fonte", value: sourceLabel },
+    {
+      label: "Tipo",
+      value:
+        lead.paid === null || lead.paid === undefined
+          ? null
+          : lead.paid
+            ? "Pago"
+            : "Orgânico",
+    },
     { label: "Dispositivo", value: lead.dispositivo },
     { label: "Rede", value: lead.rede },
     { label: "Campanha", value: lead.utmCampaign },

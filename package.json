@@ -15,6 +15,9 @@
     "db:seed": "tsx db/seed.ts",
     "db:seed:leads": "node --env-file=.env.local --import tsx db/seed-leads.ts",
     "db:seed:playbook": "node --env-file=.env.local --import tsx db/seed-playbook.ts",
+    "db:seed:tracking": "tsx db/seed-tracking.ts",
+    "db:reclassify:dry": "tsx db/reclassify-leads.ts --dry-run",
+    "db:reclassify": "tsx db/reclassify-leads.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -41,21 +41,57 @@ export const webhookLeadPayloadSchema = z
     saldo_devedor: z.coerce.number().nonnegative().optional(),
     valor_credito: z.coerce.number().nonnegative().optional(),
 
-    // Tracking
+    // ── Tracking taxonomy (canônica, migration 0017) ─────────────────────
+    // Site classifica e envia channel/source/paid; CRM valida contra
+    // tracking_sources e reclassifica se vier inválido.
+    channel: z.string().trim().optional().or(z.literal("")),
+    source: z.string().trim().optional().or(z.literal("")),
+    paid: z.coerce.boolean().optional(),
+    // Origem legada — mirror de source pra retrocompatibilidade.
     origem: z.string().trim().optional().or(z.literal("")),
+
+    // Multi-touch: array de toques anteriores ao submit.
+    touches: z
+      .array(
+        z
+          .object({
+            timestamp: z.string().optional(),
+            channel: z.string().optional(),
+            source: z.string().optional(),
+            paid: z.boolean().optional(),
+            utm_source: z.string().optional(),
+            utm_medium: z.string().optional(),
+            utm_campaign: z.string().optional(),
+            landing_page: z.string().optional(),
+            referrer: z.string().optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+
     utm_source: z.string().trim().optional().or(z.literal("")),
     utm_medium: z.string().trim().optional().or(z.literal("")),
     utm_campaign: z.string().trim().optional().or(z.literal("")),
     utm_term: z.string().trim().optional().or(z.literal("")),
     utm_content: z.string().trim().optional().or(z.literal("")),
+
+    // ── Click IDs ────────────────────────────────────────────────────────
     gclid: z.string().trim().optional().or(z.literal("")),
-    // Novos click IDs — Meta (orgânico/pago), Microsoft Ads, TikTok Ads,
-    // Google App Tracking Transparency (iOS).
     fbclid: z.string().trim().optional().or(z.literal("")),
     msclkid: z.string().trim().optional().or(z.literal("")),
     ttclid: z.string().trim().optional().or(z.literal("")),
     wbraid: z.string().trim().optional().or(z.literal("")),
     gbraid: z.string().trim().optional().or(z.literal("")),
+    // Novos click IDs (migration 0017).
+    li_fat_id: z.string().trim().optional().or(z.literal("")),
+    twclid: z.string().trim().optional().or(z.literal("")),
+    rdt_cid: z.string().trim().optional().or(z.literal("")),
+    sccid: z.string().trim().optional().or(z.literal("")),
+    pin_aid: z.string().trim().optional().or(z.literal("")),
+    epik: z.string().trim().optional().or(z.literal("")),
+    irclickid: z.string().trim().optional().or(z.literal("")),
+    cjevent: z.string().trim().optional().or(z.literal("")),
+
     rede: z.string().trim().optional().or(z.literal("")),
     dispositivo: z.string().trim().optional().or(z.literal("")),
     palavra_chave: z.string().trim().optional().or(z.literal("")),
@@ -63,7 +99,9 @@ export const webhookLeadPayloadSchema = z
     criativo: z.string().trim().optional().or(z.literal("")),
     tipo_correspondencia: z.string().trim().optional().or(z.literal("")),
     referrer: z.string().trim().optional().or(z.literal("")),
+    referrer_parsed: z.string().trim().optional().or(z.literal("")),
     pagina_entrada: z.string().trim().optional().or(z.literal("")),
+    network: z.string().trim().optional().or(z.literal("")),
   })
   .passthrough();
 

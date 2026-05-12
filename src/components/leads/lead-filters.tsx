@@ -15,17 +15,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ORIGENS, STATUS_LEAD_LABEL, UFS } from "@/lib/constants";
+import { STATUS_LEAD_LABEL, UFS } from "@/lib/constants";
+import { CHANNELS } from "@/lib/tracking/taxonomy";
 
 const STATUS_VALUES = Object.keys(STATUS_LEAD_LABEL);
 const DISPOSITIVOS = ["Mobile", "Desktop", "Tablet"];
 
 type Props = {
   consultores: { id: string; nome: string }[];
-  origens?: string[];
+  /** Sources ativos do DB (vem do server component pai). */
+  sources?: Array<{ source: string; channel: string; displayName: string }>;
 };
 
-export function LeadFilters({ consultores, origens }: Props) {
+export function LeadFilters({ consultores, sources = [] }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -107,7 +109,21 @@ export function LeadFilters({ consultores, origens }: Props) {
     startTransition(() => router.replace(pathname));
   }
 
-  const origensList = origens && origens.length > 0 ? origens : ORIGENS;
+  // Filtro hierárquico: Channel filtra os sources visíveis dentro do dropdown
+  // de Source. Ex.: selecionando "Paid Social" mostra só Meta Ads, TikTok Ads,
+  // etc — não polui o select com Google Ads, ChatGPT, Direct.
+  const selectedChannel = params.get("channel");
+  const sourcesForChannel = selectedChannel
+    ? sources.filter((s) => s.channel === selectedChannel)
+    : sources;
+  // Channels disponíveis: só os que têm pelo menos 1 source ativo.
+  const channelsAvailable = Array.from(
+    new Set(sources.map((s) => s.channel)),
+  ).sort(
+    (a, b) =>
+      (CHANNELS as readonly string[]).indexOf(a) -
+      (CHANNELS as readonly string[]).indexOf(b),
+  );
   const hasFilters = Array.from(params.keys()).some(
     (k) => !["page", "pageSize"].includes(k),
   );
@@ -143,10 +159,29 @@ export function LeadFilters({ consultores, origens }: Props) {
           ]}
         />
         <FilterSelect
-          label="Origem"
-          value={params.get("origem")}
-          onChange={(v) => setParam("origem", v)}
-          options={origensList.map((o) => ({ value: o, label: o }))}
+          label="Canal"
+          value={params.get("channel")}
+          onChange={(v) => {
+            // Mudar de channel reseta o source pra não ficar inconsistente
+            // (ex.: channel "Paid Search" + source "ChatGPT" não fazem sentido).
+            setParam("channel", v);
+            if (v) setParam("source", null);
+          }}
+          options={channelsAvailable.map((c) => ({ value: c, label: c }))}
+        />
+        <FilterSelect
+          label="Fonte"
+          value={params.get("source") ?? params.get("origem")}
+          onChange={(v) => {
+            setParam("source", v);
+            // Mantém `origem` sincronizado por compatibilidade com listagens
+            // legadas que ainda filtram por leads.origem.
+            setParam("origem", v);
+          }}
+          options={sourcesForChannel.map((s) => ({
+            value: s.source,
+            label: s.displayName,
+          }))}
         />
         <FilterSelect
           label="UF"

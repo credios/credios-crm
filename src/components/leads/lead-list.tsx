@@ -34,12 +34,13 @@ import { cn } from "@/lib/utils";
 type Props = {
   result: ListLeadsResult;
   consultores: { id: string; nome: string }[];
-  origens: string[];
+  /** Sources ativos do DB (tracking_sources). Substitui o array `origens` legado. */
+  sources: Array<{ source: string; channel: string; displayName: string }>;
   /** Habilita ações destrutivas em massa (desqualificar/excluir). */
   isAdmin: boolean;
 };
 
-export function LeadList({ result, consultores, origens, isAdmin }: Props) {
+export function LeadList({ result, consultores, sources, isAdmin }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -205,7 +206,7 @@ export function LeadList({ result, consultores, origens, isAdmin }: Props) {
 
   return (
     <div className="space-y-4">
-      <LeadFilters consultores={consultores} origens={origens} />
+      <LeadFilters consultores={consultores} sources={sources} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ViewToggle current="lista" />
