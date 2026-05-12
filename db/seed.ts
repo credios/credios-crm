@@ -78,28 +78,28 @@ const TEMPLATES: TemplateSeed[] = [
     ordem: 1,
     statusAplicavel: ["novo"],
     conteudo:
-      "Olá, {{primeiro_nome}}! Aqui é da Credios. Recebemos sua solicitação de crédito de R$ {{valor_credito}} com garantia de imóvel. Em instantes vamos te chamar para entender melhor o caso. ✅",
+      "{{saudacao}}, {{primeiro_nome}}! Aqui é da Credios. Recebemos sua solicitação de crédito de R$ {{valor_credito}} com garantia de imóvel. Em instantes vamos te chamar para entender melhor o caso. ✅",
   },
   {
     nome: "Follow-up sem resposta",
     ordem: 2,
     statusAplicavel: ["novo", "conversa_inicial"],
     conteudo:
-      "Oi, {{primeiro_nome}}! Tudo bem? Vi que você estava interessado em crédito com garantia de imóvel. Conseguiu olhar minha mensagem anterior? Posso te ajudar a entender melhor as condições. 🙂",
+      "{{saudacao}}, {{primeiro_nome}}! Tudo bem? Vi que você estava interessado em crédito com garantia de imóvel. Conseguiu olhar minha mensagem anterior? Posso te ajudar a entender melhor as condições. 🙂",
   },
   {
     nome: "Solicitando documentação",
     ordem: 3,
     statusAplicavel: ["aguardando_documentacao"],
     conteudo:
-      "Olá, {{primeiro_nome}}! Para avançarmos com a análise da sua operação, preciso dos seguintes documentos: matrícula atualizada do imóvel, IPTU, RG/CNH, comprovante de renda dos últimos 3 meses e certidão de estado civil. Pode me enviar por aqui? 📎",
+      "{{saudacao}}, {{primeiro_nome}}! Para avançarmos com a análise da sua operação, preciso dos seguintes documentos: matrícula atualizada do imóvel, IPTU, RG/CNH, comprovante de renda dos últimos 3 meses e certidão de estado civil. Pode me enviar por aqui? 📎",
   },
   {
     nome: "Após desqualificação",
     ordem: 4,
     statusAplicavel: ["desqualificado", "perdido"],
     conteudo:
-      "Oi, {{primeiro_nome}}, agradeço o contato! Infelizmente, no momento não conseguimos atender o seu caso. Caso a situação mude no futuro, fique à vontade para nos procurar. Abraço!",
+      "{{saudacao}}, {{primeiro_nome}}, agradeço o contato! Infelizmente, no momento não conseguimos atender o seu caso. Caso a situação mude no futuro, fique à vontade para nos procurar. Abraço!",
   },
   {
     nome: "Após fechamento",

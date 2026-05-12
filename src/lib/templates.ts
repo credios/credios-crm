@@ -12,9 +12,27 @@ export type TemplateLeadVars = {
 };
 
 /**
- * Substitui variáveis {{nome}}, {{primeiro_nome}}, {{primeiro_nome_consultor}},
- * {{consultor}}, {{valor_credito}}, {{valor_imovel}}, {{cidade}}, {{estado}}
- * no conteúdo do template.
+ * Retorna saudação adequada ao horário do dia (regra confirmada pelo owner):
+ *   00:00 – 11:59 → "Bom dia"
+ *   12:00 – 17:59 → "Boa tarde"
+ *   18:00 – 23:59 → "Boa noite"
+ *
+ * Aceita Date opcional pra teste; default é "agora no timezone local do caller".
+ * Como renderTemplate é chamada client-side (no momento que o consultor
+ * copia a mensagem ou abre o preview), o timezone é o do browser do
+ * consultor — correto pra BR sem precisar de lib de timezone.
+ */
+export function getSaudacao(now: Date = new Date()): "Bom dia" | "Boa tarde" | "Boa noite" {
+  const h = now.getHours();
+  if (h < 12) return "Bom dia";
+  if (h < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+/**
+ * Substitui variáveis {{saudacao}}, {{nome}}, {{primeiro_nome}},
+ * {{primeiro_nome_consultor}}, {{consultor}}, {{valor_credito}},
+ * {{valor_imovel}}, {{cidade}}, {{estado}} no conteúdo do template.
  *
  * Nomes (lead e consultor) passam por `formatProperName` antes da substituição
  * — o cliente preenche o form em qualquer caixa ("FABIANA", "fabiana") mas a
@@ -26,6 +44,7 @@ export function renderTemplate(content: string, lead: TemplateLeadVars): string 
   const consultorFormatado = formatProperName(lead.consultor);
   const primeiroNomeConsultor = consultorFormatado.split(/\s+/)[0] ?? "";
   return content
+    .replace(/\{\{saudacao\}\}/g, getSaudacao())
     .replace(/\{\{nome\}\}/g, nomeFormatado)
     .replace(/\{\{primeiro_nome\}\}/g, primeiroNome)
     .replace(/\{\{consultor\}\}/g, consultorFormatado || "—")

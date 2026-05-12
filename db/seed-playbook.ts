@@ -23,7 +23,7 @@ const PLAYBOOK_INICIAL: Template[] = [
     nome: "1. Saudação inicial e confirmação de dados",
     ordem: 1,
     statusAplicavel: ["novo", "conversa_inicial", "aguardando_resposta"],
-    conteudo: `Bom dia, {{primeiro_nome}}! Tudo bem?
+    conteudo: `{{saudacao}}, {{primeiro_nome}}! Tudo bem?
 
 Aqui é o {{primeiro_nome_consultor}}, da CREDIOS. Vi que você solicitou uma simulação de crédito com garantia de imóvel.
 
