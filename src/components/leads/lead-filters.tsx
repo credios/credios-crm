@@ -162,10 +162,23 @@ export function LeadFilters({ consultores, sources = [] }: Props) {
           label="Canal"
           value={params.get("channel")}
           onChange={(v) => {
-            // Mudar de channel reseta o source pra não ficar inconsistente
-            // (ex.: channel "Paid Search" + source "ChatGPT" não fazem sentido).
             setParam("channel", v);
-            if (v) setParam("source", null);
+            // Se trocou de canal e a fonte selecionada não pertence ao novo
+            // canal, limpa a fonte (senão fica filtrando "Paid Search +
+            // ChatGPT" que nunca retorna nada). Se a fonte ainda pertence
+            // ao novo canal, mantém. Permite usar canal SEM fonte (que
+            // mostra todos os sources daquele canal) ou COM fonte específica.
+            const currentSource =
+              params.get("source") ?? params.get("origem");
+            if (v && currentSource) {
+              const stillValid = sources.some(
+                (s) => s.source === currentSource && s.channel === v,
+              );
+              if (!stillValid) {
+                setParam("source", null);
+                setParam("origem", null);
+              }
+            }
           }}
           options={channelsAvailable.map((c) => ({ value: c, label: c }))}
         />
@@ -177,6 +190,14 @@ export function LeadFilters({ consultores, sources = [] }: Props) {
             // Mantém `origem` sincronizado por compatibilidade com listagens
             // legadas que ainda filtram por leads.origem.
             setParam("origem", v);
+            // Selecionar uma fonte auto-preenche o canal correspondente
+            // (UX intuitiva: usuário vê o canal sem precisar selecionar de novo).
+            if (v) {
+              const matched = sources.find((s) => s.source === v);
+              if (matched && matched.channel !== params.get("channel")) {
+                setParam("channel", matched.channel);
+              }
+            }
           }}
           options={sourcesForChannel.map((s) => ({
             value: s.source,

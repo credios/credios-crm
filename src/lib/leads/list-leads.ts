@@ -145,7 +145,13 @@ async function rawQuery(
   } else if (filters.consultorId) {
     conds.push(eq(leadsTable.consultorId, filters.consultorId));
   }
-  if (filters.origem) conds.push(eq(leadsTable.origem, filters.origem));
+  // origem (legado) e source (canônico) são mirror — qualquer um filtra
+  // a mesma coluna. UI atual envia ambos sincronizados pra retrocompat.
+  if (filters.source) conds.push(eq(leadsTable.source, filters.source));
+  else if (filters.origem) conds.push(eq(leadsTable.origem, filters.origem));
+  // Channel é filtro independente: ou usado sozinho (todos sources daquele
+  // canal) ou combinado com source pra restringir mais.
+  if (filters.channel) conds.push(eq(leadsTable.channel, filters.channel));
   if (filters.estado) conds.push(eq(leadsTable.estado, filters.estado));
   if (filters.dispositivo) conds.push(eq(leadsTable.dispositivo, filters.dispositivo));
   if (filters.valorMin != null)
@@ -284,7 +290,13 @@ function buildCountWhere(filters: ListLeadsQuery, user: AppUser) {
   } else if (filters.consultorId) {
     conds.push(eq(leadsTable.consultorId, filters.consultorId));
   }
-  if (filters.origem) conds.push(eq(leadsTable.origem, filters.origem));
+  // origem (legado) e source (canônico) são mirror — qualquer um filtra
+  // a mesma coluna. UI atual envia ambos sincronizados pra retrocompat.
+  if (filters.source) conds.push(eq(leadsTable.source, filters.source));
+  else if (filters.origem) conds.push(eq(leadsTable.origem, filters.origem));
+  // Channel é filtro independente: ou usado sozinho (todos sources daquele
+  // canal) ou combinado com source pra restringir mais.
+  if (filters.channel) conds.push(eq(leadsTable.channel, filters.channel));
   if (filters.estado) conds.push(eq(leadsTable.estado, filters.estado));
   if (filters.dispositivo) conds.push(eq(leadsTable.dispositivo, filters.dispositivo));
   if (filters.valorMin != null)
