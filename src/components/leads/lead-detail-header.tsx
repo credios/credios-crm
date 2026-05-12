@@ -134,7 +134,9 @@ export function LeadDetailHeader({
     const res = await fetch(`/api/leads/${lead.id}/interacoes`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tipo: "anotacao", conteudo: "Último contato registrado" }),
+      // Sempre tipo "contato" (genérico) — registra na timeline de contatos
+      // sem precisar especificar canal (WhatsApp/ligação/email).
+      body: JSON.stringify({ tipo: "contato", conteudo: "Último contato registrado" }),
     });
     setPendingMark(false);
     if (!res.ok) {
