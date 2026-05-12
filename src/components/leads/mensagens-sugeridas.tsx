@@ -80,6 +80,25 @@ export function MensagensSugeridas({
 
   async function copyTemplate(t: Template) {
     const rendered = renderTemplate(t.conteudo, lead);
+
+    // Sanity check: se ainda restou algum placeholder {{...}} não resolvido,
+    // bloqueia a cópia e avisa. Pega 3 cenários:
+    //   1. Browser do consultor está com JS antigo cacheado (deploy recente —
+    //      a renderTemplate em memória não conhece a variável adicionada).
+    //   2. Template digitado com typo (ex: {{primero_nome}}).
+    //   3. Variável existe no template mas o lead não tem o dado preenchido
+    //      e a renderTemplate não tem fallback pra ela.
+    // Esse warning é a última linha de defesa antes da mensagem ir pro cliente.
+    const placeholderRegex = /\{\{[\w_]+\}\}/g;
+    const restantes = rendered.match(placeholderRegex);
+    if (restantes && restantes.length > 0) {
+      toast.error("Mensagem com variável não resolvida", {
+        description: `Não substituí: ${restantes.join(", ")}. Recarregue a página (Cmd+Shift+R) e tente de novo.`,
+        duration: 8000,
+      });
+      return;
+    }
+
     try {
       await navigator.clipboard.writeText(rendered);
       setCopiedId(t.id);
