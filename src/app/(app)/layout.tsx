@@ -59,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             perfil: appUser.perfil,
           }}
         />
-        <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-8 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-8 lg:p-8">
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>

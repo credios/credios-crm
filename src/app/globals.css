@@ -295,6 +295,9 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "ss01" 1, "cv11" 1;
+    /* Rede de segurança pra mobile: se algum filho overflow horizontalmente
+       por bug de layout, não cria scroll horizontal indesejado no body. */
+    overflow-x: hidden;
   }
   ::selection {
     background: color-mix(in oklch, #d4a351 32%, transparent);

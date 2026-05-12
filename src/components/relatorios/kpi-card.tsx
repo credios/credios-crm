@@ -59,7 +59,7 @@ export function KpiCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
-        <p className="font-display tabular-nums text-3xl font-semibold tracking-[-0.02em] text-foreground">
+        <p className="font-display tabular-nums text-2xl sm:text-3xl font-semibold tracking-[-0.02em] text-foreground break-words">
           {value}
         </p>
         <div className="flex items-center gap-2 text-xs">

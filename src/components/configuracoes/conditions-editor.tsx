@@ -14,7 +14,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ORIGENS, TIPOS_IMOVEL, UFS } from "@/lib/constants";
+import { TIPOS_IMOVEL, UFS } from "@/lib/constants";
+import { CANONICAL_SOURCES } from "@/lib/tracking/taxonomy";
+
+// Lista de sources usada nas condições de roteamento. Vem da taxonomia
+// canônica em vez do enum ORIGENS legado — alinha com tracking_sources.
+const ORIGENS_AVAILABLE = CANONICAL_SOURCES.map((s) => s.source);
 import type { RuleCondicoes } from "@/lib/routing/types";
 import { cn } from "@/lib/utils";
 
@@ -173,7 +178,7 @@ function renderEditor(
     case "origem_in":
       return (
         <CheckboxList
-          options={ORIGENS as readonly string[]}
+          options={ORIGENS_AVAILABLE}
           value={Array.isArray(value) ? (value as string[]) : []}
           onChange={onChange as (v: string[]) => void}
           disabled={disabled}

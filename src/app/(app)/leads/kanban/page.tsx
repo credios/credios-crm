@@ -6,9 +6,9 @@ import { isAdmin } from "@/lib/auth/permissions";
 import {
   listConsultoresAtivos,
   listLeadsForKanban,
-  listOrigensDistintas,
 } from "@/lib/leads/list-leads";
 import { listActiveStatuses } from "@/lib/status/queries";
+import { listActiveSources } from "@/lib/tracking/resolver";
 import { listLeadsQuerySchema } from "@/lib/validators/lead";
 
 type Props = {
@@ -27,10 +27,10 @@ export default async function KanbanPage({ searchParams }: Props) {
   }
   const filters = listLeadsQuerySchema.parse(flat);
 
-  const [leads, consultores, origens, statuses] = await Promise.all([
+  const [leads, consultores, sources, statuses] = await Promise.all([
     listLeadsForKanban(filters, user),
     listConsultoresAtivos(),
-    listOrigensDistintas(),
+    listActiveSources(),
     listActiveStatuses(),
   ]);
 
@@ -46,7 +46,7 @@ export default async function KanbanPage({ searchParams }: Props) {
       <LeadKanban
         leads={leads}
         consultores={consultores}
-        origens={origens}
+        sources={sources}
         canCloseOrReopen={isAdmin(user)}
         statuses={statuses.map((s) => ({
           key: s.key,

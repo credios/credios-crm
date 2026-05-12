@@ -158,14 +158,14 @@ export function LeadDetailHeader({
       <BackButton />
 
       <div
-        className="surface-solid relative overflow-hidden rounded-2xl px-6 py-6"
+        className="surface-solid relative overflow-hidden rounded-2xl px-4 py-5 sm:px-6 sm:py-6"
         style={{
           backgroundImage: `radial-gradient(120% 120% at 0% 0%, color-mix(in oklch, var(--color-status-${cssVarKey}, var(--primary)) 14%, transparent) 0%, transparent 55%)`,
         }}
       >
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={lead.status} />
               {isFechado && (
                 <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-gold-700 dark:text-gold-400">
@@ -173,10 +173,10 @@ export function LeadDetailHeader({
                 </span>
               )}
             </div>
-            <h1 className="font-display text-3xl font-semibold tracking-[-0.02em] truncate">
+            <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-[-0.02em] break-words">
               {lead.nome}
             </h1>
-            <p className="font-mono tabular-nums text-2xl font-semibold tracking-tight text-foreground">
+            <p className="font-mono tabular-nums text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
               {formatBrlFromCents(lead.valorCreditoCentavos)}
             </p>
           </div>

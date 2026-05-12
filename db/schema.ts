@@ -173,7 +173,19 @@ export const leads = pgTable(
     }),
 
     // --- Tracking de origem ---
+    // Taxonomia hierárquica (migration 0017): channel > source > paid.
+    // `origem` é legada e mantida como mirror de `source` por
+    // compatibilidade durante a transição (UI/relatórios migram aos poucos).
     origem: text("origem"),
+    channel: text("channel"),
+    source: text("source"),
+    paid: boolean("paid").default(false),
+    /**
+     * Multi-touch: array JSON de toques { timestamp, channel, source, paid,
+     * utm_campaign, landing_page, referrer }. Permite computar first-touch,
+     * last-touch e modelos lineares em report-time.
+     */
+    touches: jsonb("touches"),
     utmSource: text("utm_source"),
     utmMedium: text("utm_medium"),
     utmCampaign: text("utm_campaign"),
@@ -185,6 +197,15 @@ export const leads = pgTable(
     ttclid: text("ttclid"),
     wbraid: text("wbraid"),
     gbraid: text("gbraid"),
+    // Click IDs adicionais (migration 0017) — captura preventiva.
+    liFatId: text("li_fat_id"),   // LinkedIn Ads
+    twclid: text("twclid"),       // X/Twitter Ads
+    rdtCid: text("rdt_cid"),      // Reddit Ads
+    sccid: text("sccid"),         // Snapchat Ads
+    pinAid: text("pin_aid"),      // Pinterest Ads
+    epik: text("epik"),           // Pinterest Ads (alt cookie)
+    irclickid: text("irclickid"), // Impact affiliate
+    cjevent: text("cjevent"),     // CJ affiliate
     rede: text("rede"),
     dispositivo: text("dispositivo"),
     palavraChave: text("palavra_chave"),
@@ -225,6 +246,11 @@ export const leads = pgTable(
     index("idx_leads_status").on(table.status),
     index("idx_leads_consultor").on(table.consultorId),
     index("idx_leads_origem").on(table.origem),
+    index("idx_leads_channel").on(table.channel),
+    index("idx_leads_source").on(table.source),
+    index("idx_leads_paid")
+      .on(table.paid)
+      .where(sql`${table.paid} = true`),
     index("idx_leads_criado").on(sql`${table.createdAt} DESC`),
     index("idx_leads_cpf")
       .on(table.cpf)
@@ -571,5 +597,87 @@ export const webhookIdempotency = pgTable(
   },
   (table) => [
     index("idx_webhook_idem_created").on(sql`${table.createdAt} DESC`),
+  ],
+);
+
+// ============================================================================
+// tracking_sources — catálogo canônico de fontes de tráfego (migration 0017)
+// Substitui o enum ORIGENS hardcoded. Admin gerencia pela UI em
+// /configuracoes/tracking. Cada source pertence a um Channel (camada estável
+// alinhada com GA4) — ver src/lib/tracking/taxonomy.ts.
+// ============================================================================
+
+export const trackingSources = pgTable(
+  "tracking_sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    source: text("source").notNull().unique(),
+    channel: text("channel").notNull(),
+    paid: boolean("paid").notNull().default(false),
+    displayName: text("display_name").notNull(),
+    color: text("color"),
+    icon: text("icon"),
+    ordem: integer("ordem").notNull().default(0),
+    ativo: boolean("ativo").notNull().default(true),
+    // patterns: { referrer_hosts?: string[], utm_aliases?: string[], click_ids?: string[] }
+    patterns: jsonb("patterns"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_tracking_sources_channel").on(table.channel),
+    index("idx_tracking_sources_ordem").on(table.ordem),
+  ],
+);
+
+// ============================================================================
+// tracking_source_aliases — utm_source bruto → source canônico
+// PRIMARY KEY na coluna `alias` (já em lowercase) garante upsert simples.
+// ============================================================================
+
+export const trackingSourceAliases = pgTable("tracking_source_aliases", {
+  alias: text("alias").primaryKey(),
+  source: text("source")
+    .notNull()
+    .references(() => trackingSources.source, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// ============================================================================
+// tracking_unknowns — quarantine de leads com origem desconhecida
+// Quando classifyTouch retorna source="Unknown", a row aqui registra o
+// payload bruto pra admin revisar e promover (criar source canônico + alias)
+// ou descartar. Após resolução, leads ligados são reclassificados.
+// ============================================================================
+
+export const trackingUnknowns = pgTable(
+  "tracking_unknowns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+    rawOrigem: text("raw_origem"),
+    rawReferrer: text("raw_referrer"),
+    rawUtmSource: text("raw_utm_source"),
+    rawUtmMedium: text("raw_utm_medium"),
+    rawUtmCampaign: text("raw_utm_campaign"),
+    rawClickIds: jsonb("raw_click_ids"),
+    resolvedToSource: text("resolved_to_source"),
+    resolvedBy: uuid("resolved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_tracking_unknowns_resolved").on(table.resolvedAt),
+    index("idx_tracking_unknowns_created").on(sql`${table.createdAt} DESC`),
   ],
 );

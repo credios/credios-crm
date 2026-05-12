@@ -22,7 +22,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ORIGENS, TIPOS_IMOVEL, UFS } from "@/lib/constants";
+import { TIPOS_IMOVEL, UFS } from "@/lib/constants";
+import { CANONICAL_SOURCES } from "@/lib/tracking/taxonomy";
+
+const ORIGENS_AVAILABLE = CANONICAL_SOURCES.map((s) => s.source);
 
 type Result = {
   consultorId: string | null;
@@ -126,7 +129,7 @@ export function RuleTester() {
                 <SelectValue placeholder="—" />
               </SelectTrigger>
               <SelectContent>
-                {ORIGENS.map((u) => (
+                {ORIGENS_AVAILABLE.map((u) => (
                   <SelectItem key={u} value={u}>
                     {u}
                   </SelectItem>

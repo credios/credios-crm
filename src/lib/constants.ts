@@ -40,18 +40,12 @@ export const SITUACOES_IMOVEL = [
 
 export const TIPOS_PESSOA = ["Pessoa Física", "Pessoa Jurídica"] as const;
 
-export const ORIGENS = [
-  "Manual",
-  "Google",
-  "Instagram",
-  "Facebook",
-  "YouTube",
-  "Orgânico",
-  "Indicação",
-  "LinkedIn",
-  "ChatGPT",
-  "Condomínio",
-] as const;
+// ORIGENS legado removido (migration 0017). Fonte da verdade canônica:
+//   - Runtime: tabela `tracking_sources` (via listActiveSources)
+//   - Compile-time: src/lib/tracking/taxonomy.ts (CANONICAL_SOURCES)
+// Mantém o export vazio caso algum import legado restante quebre o build.
+// @deprecated
+export const ORIGENS: readonly string[] = [];
 
 export const UFS = [
   "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA",
