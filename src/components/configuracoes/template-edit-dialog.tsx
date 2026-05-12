@@ -138,6 +138,7 @@ function TemplateForm({
         <DialogTitle>{template ? "Editar template" : "Novo template"}</DialogTitle>
         <DialogDescription>
           Variáveis suportadas:{" "}
+          <code className="text-xs">{"{{saudacao}}"}</code> (Bom dia / Boa tarde / Boa noite conforme horário),{" "}
           <code className="text-xs">{"{{nome}}"}</code>,{" "}
           <code className="text-xs">{"{{primeiro_nome}}"}</code>,{" "}
           <code className="text-xs">{"{{valor_credito}}"}</code>,{" "}
@@ -210,7 +211,7 @@ function TemplateForm({
             rows={6}
             value={conteudo}
             onChange={(e) => setConteudo(e.currentTarget.value)}
-            placeholder="Olá, {{primeiro_nome}}! …"
+            placeholder="{{saudacao}}, {{primeiro_nome}}! …"
             disabled={pending}
           />
           {showPreview && (

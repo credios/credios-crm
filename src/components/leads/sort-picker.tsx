@@ -41,14 +41,24 @@ const DEFAULT_DIR: Record<SortLeadKey, "asc" | "desc"> = {
   origem: "asc",
 };
 
-export function SortPicker() {
+type SortPickerProps = {
+  /** Sort key padrão quando a URL não traz `sortBy`. Default "criado_em". */
+  defaultSortBy?: SortLeadKey;
+  /** Direção padrão quando a URL não traz `sortDir`. Default "desc". */
+  defaultSortDir?: "asc" | "desc";
+};
+
+export function SortPicker({
+  defaultSortBy = "criado_em",
+  defaultSortDir = "desc",
+}: SortPickerProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
 
-  const sortBy = (params.get("sortBy") as SortLeadKey) ?? "criado_em";
-  const sortDir = (params.get("sortDir") as "asc" | "desc") ?? "desc";
+  const sortBy = (params.get("sortBy") as SortLeadKey) ?? defaultSortBy;
+  const sortDir = (params.get("sortDir") as "asc" | "desc") ?? defaultSortDir;
 
   function setSort(by: SortLeadKey) {
     const next = new URLSearchParams(params.toString());

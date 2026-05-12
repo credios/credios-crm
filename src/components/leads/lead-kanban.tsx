@@ -24,6 +24,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { LeadFilters } from "./lead-filters";
+import { SortPicker } from "./sort-picker";
 import { LeadKanbanCard } from "./lead-kanban-card";
 import {
   DesqualificacaoDialog,
@@ -378,6 +379,9 @@ export function LeadKanban({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ViewToggle current="kanban" />
         <div className="flex items-center gap-3">
+          {/* Default do kanban: ultimo_contato asc (leads sem/com contato
+              mais antigo ficam no topo das colunas — focus em esquecidos). */}
+          <SortPicker defaultSortBy="ultimo_contato" defaultSortDir="asc" />
           {leads.length >= 500 && (
             <p className="text-xs text-amber-600">
               Mostrando 500 leads (limite) — use filtros pra refinar.

@@ -25,6 +25,13 @@ export default async function KanbanPage({ searchParams }: Props) {
     if (typeof v === "string") flat[k] = v;
     else if (Array.isArray(v) && v.length > 0) flat[k] = v[0]!;
   }
+  // Default sort do kanban: último contato ASC NULLS FIRST. Resultado:
+  // leads sem contato (recém-chegados) e leads esquecidos (contato antigo)
+  // bordam pra cima das colunas; leads contatados recentemente ficam embaixo.
+  // Ajuda o consultor a focar primeiro no que pode estar sendo perdido.
+  // URL pode sobrescrever (`?sortBy=criado_em&sortDir=desc` continua funcionando).
+  if (!flat.sortBy) flat.sortBy = "ultimo_contato";
+  if (!flat.sortDir) flat.sortDir = "asc";
   const filters = listLeadsQuerySchema.parse(flat);
 
   const [leads, consultores, sources, statuses] = await Promise.all([
