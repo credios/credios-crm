@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { LeadAnotacoes, type Anotacao } from "./lead-anotacoes";
-import { LeadTimeline, type Interacao } from "./lead-timeline";
+import {
+  countContatosReais,
+  LeadTimeline,
+  type Interacao,
+} from "./lead-timeline";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -39,6 +43,14 @@ export function LeadTimelineTabs({
 }: Props) {
   const [tab, setTab] = useState<"contatos" | "anotacoes">("contatos");
 
+  // Counter de "Contatos" reflete só interações manuais — eventos de sistema
+  // (mudança de status etc) aparecem na timeline com estilo sutil mas NÃO
+  // entram no contador. Refresh quando initialInteracoes muda (server re-fetch).
+  const contatosCount = useMemo(
+    () => countContatosReais(initialInteracoes),
+    [initialInteracoes],
+  );
+
   return (
     <div className="space-y-3">
       <div
@@ -51,7 +63,7 @@ export function LeadTimelineTabs({
           onClick={() => setTab("contatos")}
         >
           Contatos
-          <Count value={initialInteracoes.length} active={tab === "contatos"} />
+          <Count value={contatosCount} active={tab === "contatos"} />
         </TabButton>
         <TabButton
           active={tab === "anotacoes"}

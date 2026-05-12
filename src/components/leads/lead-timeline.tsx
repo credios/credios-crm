@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bell,
   FileText,
   Handshake,
   Loader2,
@@ -8,7 +9,9 @@ import {
   Mail,
   MessageSquare,
   Phone,
+  RefreshCw,
   Users,
+  UserSquare,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -44,9 +47,11 @@ export type Interacao = {
   autorNome: string | null;
 };
 
-// Display: WhatsApp (enviado ou recebido — rows históricas) consolida em
-// uma única label/ícone "WhatsApp". Anotações e eventos de sistema saíram
-// da timeline (anotações vão pra `lead_anotacoes`, eventos pro audit log).
+// Display: WhatsApp (enviado ou recebido) consolida em uma única label.
+// Anotações reais (manuais) vão pra `lead_anotacoes` agora.
+// Eventos de sistema (mudança de status, reatribuição, evento_sistema)
+// CONTINUAM na timeline — refletem mudanças no contato com cliente que
+// o consultor precisa ver. São renderizados com estilo sutil (cinza).
 const TIPO_LABEL: Record<string, string> = {
   ligacao: "Ligação",
   whatsapp_enviado: "WhatsApp",
@@ -55,6 +60,9 @@ const TIPO_LABEL: Record<string, string> = {
   reuniao: "Reunião",
   contato: "Contato",
   documento_recebido: "Documento recebido",
+  mudanca_status: "Mudança de status",
+  mudanca_atribuicao: "Reatribuição",
+  evento_sistema: "Evento do sistema",
 };
 
 const TIPO_ICON: Record<string, LucideIcon> = {
@@ -65,10 +73,12 @@ const TIPO_ICON: Record<string, LucideIcon> = {
   reuniao: Users,
   contato: Handshake,
   documento_recebido: FileText,
+  mudanca_status: RefreshCw,
+  mudanca_atribuicao: UserSquare,
+  evento_sistema: Bell,
 };
 
-// Tipos exibidos na timeline. Outros (anotacao, mudanca_status,
-// mudanca_atribuicao, evento_sistema) são filtrados antes do render.
+// Tipos exibidos na timeline. Anotações ficaram fora (vão pra aba própria).
 const TIPOS_VISIVEIS = new Set([
   "ligacao",
   "whatsapp_enviado",
@@ -77,7 +87,24 @@ const TIPOS_VISIVEIS = new Set([
   "reuniao",
   "contato",
   "documento_recebido",
+  "mudanca_status",
+  "mudanca_atribuicao",
+  "evento_sistema",
 ]);
+
+// Tipos renderizados em estilo "sistema" (cinza, sem destaque) — eventos
+// que aconteceram automaticamente, sem ação direta do consultor.
+// Exportado pra o counter da aba Contatos contar só interações "reais".
+export const SISTEMA_TIPOS = new Set([
+  "mudanca_status",
+  "mudanca_atribuicao",
+  "evento_sistema",
+]);
+
+/** Conta apenas interações manuais (ignora eventos de sistema). */
+export function countContatosReais(interacoes: { tipo: string }[]): number {
+  return interacoes.filter((i) => !SISTEMA_TIPOS.has(i.tipo)).length;
+}
 
 // Sentinela na UI: "whatsapp" (genérico, sem direção) — submetido como
 // `whatsapp_recebido` por convenção histórica (rows antigas do CRM já usam).
@@ -292,7 +319,7 @@ export function LeadTimeline({
         {ordered.length === 0 ? (
           <div className="rounded-lg border border-dashed border-foreground/15 px-4 py-8 text-center space-y-1.5">
             <p className="font-display text-sm font-semibold">
-              Sem contatos registrados
+              Nada registrado ainda
             </p>
             <p className="font-serif italic text-xs text-muted-foreground">
               Use o formulário acima pra registrar ligações, mensagens e
@@ -340,6 +367,7 @@ function TimelineItem({
 }) {
   const Icon = TIPO_ICON[interacao.tipo] ?? Phone;
   const label = TIPO_LABEL[interacao.tipo] ?? interacao.tipo;
+  const sistema = SISTEMA_TIPOS.has(interacao.tipo);
   return (
     <li
       className={cn(
@@ -350,7 +378,10 @@ function TimelineItem({
       <div
         className={cn(
           "relative z-10 size-7 rounded-full flex items-center justify-center shrink-0 ring-2 ring-background transition-transform",
-          "bg-blue-50 text-primary dark:bg-blue-950/40",
+          // Sistema (mudança de status etc) = cinza sutil; manual = azul/primário
+          sistema
+            ? "bg-bg-muted text-muted-foreground"
+            : "bg-blue-50 text-primary dark:bg-blue-950/40",
           flash && "scale-110",
         )}
       >
@@ -358,7 +389,14 @@ function TimelineItem({
       </div>
       <div className="flex-1 min-w-0 space-y-1 pt-0.5">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-sm font-medium">{label}</span>
+          <span
+            className={cn(
+              "text-sm font-medium",
+              sistema && "text-muted-foreground",
+            )}
+          >
+            {label}
+          </span>
           <span
             className="font-mono text-[11px] text-muted-foreground"
             title={formatLong(interacao.criadoEm)}
@@ -377,7 +415,12 @@ function TimelineItem({
           )}
         </div>
         {interacao.conteudo && (
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+          <p
+            className={cn(
+              "text-sm whitespace-pre-wrap leading-relaxed",
+              sistema && "text-muted-foreground",
+            )}
+          >
             {interacao.conteudo}
           </p>
         )}
