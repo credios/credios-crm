@@ -5,6 +5,7 @@ import { CommandPaletteLoader } from "@/components/shared/command-palette-loader
 import { CrediosLogo } from "@/components/shared/credios-logo";
 import { Header } from "@/components/shared/header";
 import { Sidebar } from "@/components/shared/sidebar";
+import { StaleVersionDetector } from "@/components/shared/stale-version-detector";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin, shouldEnforceMfa } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
@@ -69,6 +70,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <BottomNav />
         </>
       )}
+      {/* Detecta deploy novo e mostra banner persistente "Recarregar".
+          Evita o cenário onde consultor está com aba antiga e código novo
+          já foi feito deploy (gerou bug das mensagens com {{saudacao}}
+          literal pro Rodrigo em 2026-05). */}
+      <StaleVersionDetector />
     </div>
   );
 }

@@ -11,6 +11,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/desafio-mfa",
   "/api/webhooks", // gate: x-webhook-secret
   "/api/cron", // gate: Authorization: Bearer ${CRON_SECRET} (Vercel Cron)
+  "/api/version", // só retorna o SHA do commit — info já pública no GitHub
 ];
 
 // Rotas que, se acessadas por usuário já autenticado, devem ser redirecionadas para a app.
