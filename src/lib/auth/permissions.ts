@@ -37,6 +37,9 @@ export type Action =
   | "lead.close_or_reopen"
   | "lead.read_financial"
   | "interacao.create"
+  | "lead_anotacao.create"
+  | "lead_anotacao.update"
+  | "lead_anotacao.delete"
   | "task.list"
   | "task.complete"
   | "lead_bank.manage"
@@ -122,6 +125,24 @@ export function checkPermission(
       }
       return false;
     }
+
+    // Anotações do lead (lead_anotacoes): criar/editar = admin OU consultor
+    // atribuído ao lead. Gerente NÃO edita (anotação é "do consultor", não
+    // pertence à hierarquia de gestão). Marketing nunca.
+    case "lead_anotacao.create":
+    case "lead_anotacao.update": {
+      if (perfil === "admin") return true;
+      if (perfil === "consultor") {
+        if (resource?.type !== "lead") return false;
+        return resource.consultorId === user.id;
+      }
+      return false;
+    }
+
+    // Exclusão de anotação: admin ONLY (irreversível, mexe em registro
+    // criado por outra pessoa). Confirm dialog na UI; audit log obrigatório.
+    case "lead_anotacao.delete":
+      return perfil === "admin";
 
     case "task.list":
       return perfil === "admin" || perfil === "gerente" || perfil === "consultor";

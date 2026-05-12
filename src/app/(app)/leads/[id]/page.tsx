@@ -1,9 +1,10 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { aliasedTable, and, desc, eq, sql } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import {
   interacoes,
+  leadAnotacoes,
   leadBancos,
   leads as leadsTable,
   mensagensTemplate,
@@ -19,7 +20,7 @@ import {
   LeadPessoaisCard,
 } from "@/components/leads/lead-detail-sections";
 import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
-import { LeadTimeline } from "@/components/leads/lead-timeline";
+import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
 import { MensagensSugeridas } from "@/components/leads/mensagens-sugeridas";
 import {
   SkeletonLeadBancos,
@@ -118,6 +119,11 @@ export default async function LeadDetailPage({ params }: Props) {
     type: "lead",
     consultorId: row.consultorId,
   });
+  const canEditAnotacao = checkPermission(user, "lead_anotacao.update", {
+    type: "lead",
+    consultorId: row.consultorId,
+  });
+  const canDeleteAnotacao = checkPermission(user, "lead_anotacao.delete");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -184,7 +190,7 @@ export default async function LeadDetailPage({ params }: Props) {
           </Suspense>
         </div>
 
-        {/* Coluna direita: timeline (carrega só primeira página). */}
+        {/* Coluna direita: tabs Contatos + Anotações (carrega 1a página). */}
         <div className="min-w-0">
           {isMarketing ? (
             <TimelineRedacted />
@@ -193,6 +199,8 @@ export default async function LeadDetailPage({ params }: Props) {
               <TimelineBlock
                 leadId={lead.id}
                 canCreate={canCreateInteracao}
+                canEditAnotacao={canEditAnotacao}
+                canDeleteAnotacao={canDeleteAnotacao}
               />
             </Suspense>
           )}
@@ -364,29 +372,54 @@ async function MensagensBlock(props: {
 async function TimelineBlock({
   leadId,
   canCreate,
+  canEditAnotacao,
+  canDeleteAnotacao,
 }: {
   leadId: string;
   canCreate: boolean;
+  canEditAnotacao: boolean;
+  canDeleteAnotacao: boolean;
 }) {
-  // Primeira página: as N interações MAIS RECENTES. UI exibe em ordem
-  // cronológica reversa (mais nova no topo). "Carregar mais" busca
-  // antigas via cursor de data no /api/leads/[id]/interacoes.
-  const interacoesRows = await db
-    .select({
-      id: interacoes.id,
-      tipo: interacoes.tipo,
-      conteudo: interacoes.conteudo,
-      metadata: interacoes.metadata,
-      criadoEm: interacoes.criadoEm,
-      autorId: interacoes.autorId,
-      autorNome: usersTable.nome,
-    })
-    .from(interacoes)
-    .leftJoin(usersTable, eq(usersTable.id, interacoes.autorId))
-    .where(eq(interacoes.leadId, leadId))
-    .orderBy(desc(interacoes.criadoEm))
-    .limit(TIMELINE_PAGE_SIZE)
-    .catch(() => null);
+  // Carrega Contatos (primeira página) + todas as anotações em paralelo.
+  // Anotações não paginam (típico ter dezenas, não milhares; cap em 200 row
+  // de defesa). Joins com users pra trazer nome do autor em ambas.
+  const usersTableAlias = aliasedTable(usersTable, "u_anot");
+  const [interacoesRows, anotacoesRows] = await Promise.all([
+    db
+      .select({
+        id: interacoes.id,
+        tipo: interacoes.tipo,
+        conteudo: interacoes.conteudo,
+        metadata: interacoes.metadata,
+        criadoEm: interacoes.criadoEm,
+        autorId: interacoes.autorId,
+        autorNome: usersTable.nome,
+      })
+      .from(interacoes)
+      .leftJoin(usersTable, eq(usersTable.id, interacoes.autorId))
+      .where(eq(interacoes.leadId, leadId))
+      .orderBy(desc(interacoes.criadoEm))
+      .limit(TIMELINE_PAGE_SIZE)
+      .catch(() => null),
+    db
+      .select({
+        id: leadAnotacoes.id,
+        titulo: leadAnotacoes.titulo,
+        conteudo: leadAnotacoes.conteudo,
+        autorId: leadAnotacoes.autorId,
+        autorNome: usersTableAlias.nome,
+        editadoEm: leadAnotacoes.editadoEm,
+        editadoPor: leadAnotacoes.editadoPor,
+        createdAt: leadAnotacoes.createdAt,
+        updatedAt: leadAnotacoes.updatedAt,
+      })
+      .from(leadAnotacoes)
+      .leftJoin(usersTableAlias, eq(usersTableAlias.id, leadAnotacoes.autorId))
+      .where(eq(leadAnotacoes.leadId, leadId))
+      .orderBy(desc(leadAnotacoes.createdAt))
+      .limit(200)
+      .catch(() => null),
+  ]);
 
   if (interacoesRows === null) {
     return (
@@ -396,7 +429,7 @@ async function TimelineBlock({
     );
   }
 
-  const initial = interacoesRows.map((i) => ({
+  const initialInteracoes = interacoesRows.map((i) => ({
     id: i.id,
     tipo: i.tipo,
     conteudo: i.conteudo,
@@ -405,15 +438,29 @@ async function TimelineBlock({
     autorId: i.autorId,
     autorNome: i.autorNome,
   }));
-  const mayHaveMore = initial.length === TIMELINE_PAGE_SIZE;
+  const mayHaveMoreInteracoes = initialInteracoes.length === TIMELINE_PAGE_SIZE;
+
+  const initialAnotacoes = (anotacoesRows ?? []).map((a) => ({
+    id: a.id,
+    titulo: a.titulo,
+    conteudo: a.conteudo,
+    autorId: a.autorId,
+    autorNome: a.autorNome,
+    editadoEm: a.editadoEm?.toISOString() ?? null,
+    editadoPor: a.editadoPor,
+    createdAt: a.createdAt.toISOString(),
+    updatedAt: a.updatedAt.toISOString(),
+  }));
 
   return (
-    <LeadTimeline
+    <LeadTimelineTabs
       leadId={leadId}
-      initial={initial}
-      canCreate={canCreate}
-      mayHaveMore={mayHaveMore}
-      pageSize={TIMELINE_PAGE_SIZE}
+      initialInteracoes={initialInteracoes}
+      canCreateInteracao={canCreate}
+      mayHaveMoreInteracoes={mayHaveMoreInteracoes}
+      initialAnotacoes={initialAnotacoes}
+      canEditAnotacao={canEditAnotacao}
+      canDeleteAnotacao={canDeleteAnotacao}
     />
   );
 }
