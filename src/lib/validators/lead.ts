@@ -20,13 +20,21 @@ export const SYSTEM_STATUS_LEAD_KEYS = [
   "desqualificado",
 ] as const;
 
+// Tipos de interação que a UI permite o consultor CRIAR via timeline.
+// Notas:
+//   - `whatsapp_enviado`/`whatsapp_recebido` continuam no enum do DB pra
+//     compat com rows históricas, mas a UI agora oferece só "whatsapp"
+//     (mapeado pra `whatsapp_recebido` no submit, padrão histórico).
+//   - `anotacao` SAIU da timeline na migration 0020 — agora vive em
+//     `lead_anotacoes` (tabela própria, com edit/delete). Removido daqui
+//     pra impedir criação acidental de anotação imutável na timeline.
 const TIPO_INTERACAO_VALUES = [
   "ligacao",
   "whatsapp_enviado",
   "whatsapp_recebido",
   "email",
   "reuniao",
-  "anotacao",
+  "contato",
   "documento_recebido",
 ] as const;
 

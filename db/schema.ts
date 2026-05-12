@@ -46,7 +46,13 @@ export const tipoInteracaoEnum = pgEnum("tipo_interacao", [
   "whatsapp_recebido",
   "email",
   "reuniao",
+  // `anotacao` é mantida por retrocompat (rows antigas) — porém a partir
+  // da migration 0020 anotações vivem na tabela `lead_anotacoes` (editáveis,
+  // deletáveis). Nada novo do tipo `anotacao` deve entrar em `interacoes`.
   "anotacao",
+  // `contato` (genérico) — sem distinguir canal — quando o consultor
+  // só quer registrar que houve contato. Adicionado na migration 0019.
+  "contato",
   "mudanca_status",
   "mudanca_atribuicao",
   "documento_recebido",
@@ -679,5 +685,45 @@ export const trackingUnknowns = pgTable(
   (table) => [
     index("idx_tracking_unknowns_resolved").on(table.resolvedAt),
     index("idx_tracking_unknowns_created").on(sql`${table.createdAt} DESC`),
+  ],
+);
+
+// ============================================================================
+// lead_anotacoes — anotações livres editáveis sobre o cliente (migration 0020)
+// ============================================================================
+// Diferente de `interacoes` (imutáveis, append-only): anotações podem ser
+// editadas pelo admin ou pelo consultor atribuído ao lead, e excluídas
+// apenas pelo admin. Cada operação destrutiva passa por modal de confirmação
+// na UI e gera entry no audit_log no servidor.
+// ============================================================================
+
+export const leadAnotacoes = pgTable(
+  "lead_anotacoes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    /** Opcional — ex.: "Dados do cônjuge", "Pendência cartório". */
+    titulo: text("titulo"),
+    /** Texto puro, preserva quebras de linha via whitespace-pre-wrap na UI. */
+    conteudo: text("conteudo").notNull(),
+    autorId: uuid("autor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** Preenchido apenas quando a anotação foi editada depois de criada. */
+    editadoEm: timestamp("editado_em", { withTimezone: true }),
+    editadoPor: uuid("editado_por").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_lead_anotacoes_lead").on(table.leadId, sql`${table.createdAt} DESC`),
   ],
 );

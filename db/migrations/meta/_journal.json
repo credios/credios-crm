@@ -134,6 +134,27 @@
       "when": 1778900000000,
       "tag": "0018_saudacao_dinamica",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779000000000,
+      "tag": "0019_tipo_contato",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779100000000,
+      "tag": "0020_lead_anotacoes",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779200000000,
+      "tag": "0021_cleanup_anotacoes_interacoes",
+      "breakpoints": true
     }
   ]
 }

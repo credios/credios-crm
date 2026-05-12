@@ -1,18 +1,14 @@
 "use client";
 
 import {
-  Bell,
   FileText,
+  Handshake,
   Loader2,
   type LucideIcon,
   Mail,
   MessageSquare,
   Phone,
-  RefreshCw,
-  Send,
-  StickyNote,
   Users,
-  UserSquare,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -48,43 +44,64 @@ export type Interacao = {
   autorNome: string | null;
 };
 
+// Display: WhatsApp (enviado ou recebido — rows históricas) consolida em
+// uma única label/ícone "WhatsApp". Anotações e eventos de sistema saíram
+// da timeline (anotações vão pra `lead_anotacoes`, eventos pro audit log).
 const TIPO_LABEL: Record<string, string> = {
   ligacao: "Ligação",
-  whatsapp_enviado: "WhatsApp enviado",
-  whatsapp_recebido: "WhatsApp recebido",
+  whatsapp_enviado: "WhatsApp",
+  whatsapp_recebido: "WhatsApp",
   email: "Email",
   reuniao: "Reunião",
-  anotacao: "Anotação",
+  contato: "Contato",
   documento_recebido: "Documento recebido",
-  mudanca_status: "Mudança de status",
-  mudanca_atribuicao: "Reatribuição",
-  evento_sistema: "Evento do sistema",
 };
 
 const TIPO_ICON: Record<string, LucideIcon> = {
   ligacao: Phone,
-  whatsapp_enviado: Send,
+  whatsapp_enviado: MessageSquare,
   whatsapp_recebido: MessageSquare,
   email: Mail,
   reuniao: Users,
-  anotacao: StickyNote,
+  contato: Handshake,
   documento_recebido: FileText,
-  mudanca_status: RefreshCw,
-  mudanca_atribuicao: UserSquare,
-  evento_sistema: Bell,
 };
 
-const SISTEMA_TIPOS = new Set(["mudanca_status", "mudanca_atribuicao", "evento_sistema"]);
-
-const TIPOS_MANUAIS = [
+// Tipos exibidos na timeline. Outros (anotacao, mudanca_status,
+// mudanca_atribuicao, evento_sistema) são filtrados antes do render.
+const TIPOS_VISIVEIS = new Set([
   "ligacao",
   "whatsapp_enviado",
   "whatsapp_recebido",
   "email",
   "reuniao",
-  "anotacao",
+  "contato",
   "documento_recebido",
+]);
+
+// Sentinela na UI: "whatsapp" (genérico, sem direção) — submetido como
+// `whatsapp_recebido` por convenção histórica (rows antigas do CRM já usam).
+const WHATSAPP_UI_VALUE = "whatsapp";
+
+// Opções no dropdown de criar interação. Ordem decidida pela frequência de
+// uso esperada (WhatsApp + Ligação dominam o dia-a-dia do consultor).
+const TIPOS_MANUAIS = [
+  WHATSAPP_UI_VALUE,
+  "ligacao",
+  "email",
+  "reuniao",
+  "documento_recebido",
+  "contato",
 ];
+
+const TIPO_LABEL_DROPDOWN: Record<string, string> = {
+  [WHATSAPP_UI_VALUE]: "WhatsApp",
+  ligacao: "Ligação",
+  email: "Email",
+  reuniao: "Reunião",
+  documento_recebido: "Documento recebido",
+  contato: "Contato (sem especificar)",
+};
 
 function initials(nome: string | null): string {
   if (!nome) return "S";
@@ -116,7 +133,7 @@ export function LeadTimeline({
   const [older, setOlder] = useState<Interacao[]>([]);
   const [hasMore, setHasMore] = useState(mayHaveMore);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [tipo, setTipo] = useState<string>("anotacao");
+  const [tipo, setTipo] = useState<string>(WHATSAPP_UI_VALUE);
   const [conteudo, setConteudo] = useState("");
   const [pending, setPending] = useState(false);
   const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
@@ -128,6 +145,10 @@ export function LeadTimeline({
     for (const i of [...extras, ...initial, ...older]) {
       if (seen.has(i.id)) continue;
       seen.add(i.id);
+      // Filtra tipos que não são contatos: anotacao (foi pra lead_anotacoes),
+      // mudanca_status / mudanca_atribuicao / evento_sistema (vivem só em
+      // audit_log agora). Mantém timeline focada em contatos com cliente.
+      if (!TIPOS_VISIVEIS.has(i.tipo)) continue;
       out.push(i);
     }
     return out;
@@ -163,15 +184,15 @@ export function LeadTimeline({
   useInteracoesRealtime(leadId, onRealtimeNew);
 
   async function handleSubmit() {
-    if (!conteudo.trim() && tipo === "anotacao") {
-      toast.error("Anotação precisa de conteúdo");
-      return;
-    }
+    // "whatsapp" (sentinela da UI) mapeia pra `whatsapp_recebido` ao salvar.
+    // Convenção histórica do CRM — mantém rows antigas e novas consistentes
+    // numa única coluna do enum sem precisar criar tipo novo.
+    const tipoToSave = tipo === WHATSAPP_UI_VALUE ? "whatsapp_recebido" : tipo;
     setPending(true);
     const res = await fetch(`/api/leads/${leadId}/interacoes`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tipo, conteudo: conteudo.trim() || null }),
+      body: JSON.stringify({ tipo: tipoToSave, conteudo: conteudo.trim() || null }),
     });
     setPending(false);
     if (!res.ok) {
@@ -228,28 +249,32 @@ export function LeadTimeline({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Timeline</CardTitle>
+        <CardTitle className="text-base">Contatos</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         {canCreate && (
           <div className="space-y-2 rounded-md border bg-muted/30 p-3">
             <div className="flex items-center gap-2">
               <Label className="text-xs shrink-0">Tipo</Label>
-              <Select value={tipo} onValueChange={(v) => setTipo(v ?? "anotacao")} disabled={pending}>
+              <Select
+                value={tipo}
+                onValueChange={(v) => setTipo(v ?? WHATSAPP_UI_VALUE)}
+                disabled={pending}
+              >
                 <SelectTrigger className="h-8">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {TIPOS_MANUAIS.map((t) => (
                     <SelectItem key={t} value={t}>
-                      {TIPO_LABEL[t]}
+                      {TIPO_LABEL_DROPDOWN[t] ?? t}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <Textarea
-              placeholder="Anotação, descrição da ligação, conteúdo da mensagem…"
+              placeholder="Descrição da ligação, conteúdo da mensagem, retorno do cliente…"
               rows={3}
               value={conteudo}
               onChange={(e) => setConteudo(e.currentTarget.value)}
@@ -267,11 +292,12 @@ export function LeadTimeline({
         {ordered.length === 0 ? (
           <div className="rounded-lg border border-dashed border-foreground/15 px-4 py-8 text-center space-y-1.5">
             <p className="font-display text-sm font-semibold">
-              Nada registrado ainda
+              Sem contatos registrados
             </p>
             <p className="font-serif italic text-xs text-muted-foreground">
-              Use o formulário acima pra registrar a primeira ligação,
-              mensagem ou anotação deste lead.
+              Use o formulário acima pra registrar ligações, mensagens e
+              outros pontos de contato com o cliente. Informações sobre o
+              lead (dados do cônjuge, contexto) ficam na aba Anotações.
             </p>
           </div>
         ) : (
@@ -312,24 +338,19 @@ function TimelineItem({
   interacao: Interacao;
   flash?: boolean;
 }) {
-  const Icon = TIPO_ICON[interacao.tipo] ?? StickyNote;
-  const sistema = SISTEMA_TIPOS.has(interacao.tipo);
+  const Icon = TIPO_ICON[interacao.tipo] ?? Phone;
   const label = TIPO_LABEL[interacao.tipo] ?? interacao.tipo;
   return (
     <li
       className={cn(
         "relative flex gap-3 pl-0 rounded-md transition-colors",
-        // Highlight discreto pra interação recém-criada (via realtime).
-        // Anim suporta `prefers-reduced-motion` via :global no globals.css.
         flash && "animate-timeline-flash",
       )}
     >
       <div
         className={cn(
           "relative z-10 size-7 rounded-full flex items-center justify-center shrink-0 ring-2 ring-background transition-transform",
-          sistema
-            ? "bg-bg-muted text-muted-foreground"
-            : "bg-blue-50 text-primary dark:bg-blue-950/40",
+          "bg-blue-50 text-primary dark:bg-blue-950/40",
           flash && "scale-110",
         )}
       >
@@ -337,14 +358,7 @@ function TimelineItem({
       </div>
       <div className="flex-1 min-w-0 space-y-1 pt-0.5">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span
-            className={cn(
-              "text-sm font-medium",
-              sistema && "text-muted-foreground",
-            )}
-          >
-            {label}
-          </span>
+          <span className="text-sm font-medium">{label}</span>
           <span
             className="font-mono text-[11px] text-muted-foreground"
             title={formatLong(interacao.criadoEm)}
@@ -363,12 +377,7 @@ function TimelineItem({
           )}
         </div>
         {interacao.conteudo && (
-          <p
-            className={cn(
-              "text-sm whitespace-pre-wrap leading-relaxed",
-              sistema && "text-muted-foreground",
-            )}
-          >
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">
             {interacao.conteudo}
           </p>
         )}
