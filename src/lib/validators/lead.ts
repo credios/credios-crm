@@ -175,7 +175,13 @@ export const listLeadsQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().max(100).default(50),
   status: statusLeadEnum.optional(),
   consultorId: z.string().optional(),
+  // origem (legado) e source (taxonomia 0017) — filtro aceita os dois;
+  // semanticamente referem-se à mesma coluna source/origem (são mirror).
   origem: z.string().optional(),
+  source: z.string().optional(),
+  // Channel = camada superior da taxonomia (Paid Search, AI Assistant etc).
+  // Filtro independente: pode combinar com source pra restringir, ou usar sozinho.
+  channel: z.string().optional(),
   estado: z.string().optional(),
   dispositivo: z.string().optional(),
   q: z.string().optional(),
