@@ -94,17 +94,11 @@ const TIPOS_VISIVEIS = new Set([
 
 // Tipos renderizados em estilo "sistema" (cinza, sem destaque) — eventos
 // que aconteceram automaticamente, sem ação direta do consultor.
-// Exportado pra o counter da aba Contatos contar só interações "reais".
-export const SISTEMA_TIPOS = new Set([
+const SISTEMA_TIPOS = new Set([
   "mudanca_status",
   "mudanca_atribuicao",
   "evento_sistema",
 ]);
-
-/** Conta apenas interações manuais (ignora eventos de sistema). */
-export function countContatosReais(interacoes: { tipo: string }[]): number {
-  return interacoes.filter((i) => !SISTEMA_TIPOS.has(i.tipo)).length;
-}
 
 // Sentinela na UI: "whatsapp" (genérico, sem direção) — submetido como
 // `whatsapp_recebido` por convenção histórica (rows antigas do CRM já usam).

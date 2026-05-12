@@ -1,13 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { LeadAnotacoes, type Anotacao } from "./lead-anotacoes";
-import {
-  countContatosReais,
-  LeadTimeline,
-  type Interacao,
-} from "./lead-timeline";
+import { LeadTimeline, type Interacao } from "./lead-timeline";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -43,14 +39,6 @@ export function LeadTimelineTabs({
 }: Props) {
   const [tab, setTab] = useState<"contatos" | "anotacoes">("contatos");
 
-  // Counter de "Contatos" reflete só interações manuais — eventos de sistema
-  // (mudança de status etc) aparecem na timeline com estilo sutil mas NÃO
-  // entram no contador. Refresh quando initialInteracoes muda (server re-fetch).
-  const contatosCount = useMemo(
-    () => countContatosReais(initialInteracoes),
-    [initialInteracoes],
-  );
-
   return (
     <div className="space-y-3">
       <div
@@ -63,14 +51,12 @@ export function LeadTimelineTabs({
           onClick={() => setTab("contatos")}
         >
           Contatos
-          <Count value={contatosCount} active={tab === "contatos"} />
         </TabButton>
         <TabButton
           active={tab === "anotacoes"}
           onClick={() => setTab("anotacoes")}
         >
           Anotações
-          <Count value={initialAnotacoes.length} active={tab === "anotacoes"} />
         </TabButton>
       </div>
 
@@ -117,19 +103,5 @@ function TabButton({
     >
       {children}
     </button>
-  );
-}
-
-function Count({ value, active }: { value: number; active: boolean }) {
-  if (value === 0) return null;
-  return (
-    <span
-      className={cn(
-        "rounded-full px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
-        active ? "bg-primary/20" : "bg-foreground/8",
-      )}
-    >
-      {value}
-    </span>
   );
 }
