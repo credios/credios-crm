@@ -96,6 +96,28 @@ export function classifyTouch(input: ClassifyInput): ClassifyResult {
         reason: "utm_alias",
       };
     }
+
+    // ── 2b. Heurística: utm_source que parece hostname (tem ponto) ───────
+    // ChatGPT/Perplexity/etc às vezes injetam `utm_source=chatgpt.com`
+    // (hostname-completo). Se não bateu no alias direto, tenta como referrer
+    // — isso pega QUALQUER hostname conhecido (REFERRER_MAP) sem precisar
+    // duplicar listas. Cobre o cenário "lead sem referrer HTTP (ex: app
+    // mobile) mas com utm_source=hostname.com".
+    if (utm.includes(".")) {
+      try {
+        const fakeRef = parseReferrer(`https://${utm}`, input.current_hostname);
+        if (fakeRef && CANONICAL_SOURCE_SET.has(fakeRef.source)) {
+          return {
+            source: fakeRef.source,
+            channel: fakeRef.channel,
+            paid: fakeRef.paid,
+            reason: "utm_alias",
+          };
+        }
+      } catch {
+        // URL inválida, ignora — cai pros próximos caminhos
+      }
+    }
   }
 
   // ── 3. Referrer parsed ──────────────────────────────────────────────────

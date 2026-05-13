@@ -259,6 +259,37 @@ describe("classifyTouch", () => {
     expect(r.source).toBe("TikTok Ads");
   });
 
+  // ── utm_source com hostname (ChatGPT, etc) sem referrer ──────────────
+  it("utm_source=chatgpt.com (sem referrer) → ChatGPT via alias hostname", () => {
+    const r = classifyTouch({ utm_source: "chatgpt.com" });
+    expect(r.source).toBe("ChatGPT");
+    expect(r.channel).toBe("AI Assistant");
+    expect(r.reason).toBe("utm_alias");
+  });
+
+  it("utm_source=perplexity.ai (sem referrer) → Perplexity", () => {
+    const r = classifyTouch({ utm_source: "perplexity.ai" });
+    expect(r.source).toBe("Perplexity");
+    expect(r.channel).toBe("AI Assistant");
+  });
+
+  it("utm_source=claude.ai (sem referrer) → Claude", () => {
+    const r = classifyTouch({ utm_source: "claude.ai" });
+    expect(r.source).toBe("Claude");
+    expect(r.channel).toBe("AI Assistant");
+  });
+
+  it("utm_source=instagram.com (sem referrer) → Instagram orgânico", () => {
+    const r = classifyTouch({ utm_source: "instagram.com" });
+    expect(r.source).toBe("Instagram");
+    expect(r.channel).toBe("Organic Social");
+  });
+
+  it("utm_source com domínio desconhecido mesmo assim cai em Unknown", () => {
+    const r = classifyTouch({ utm_source: "plataforma-desconhecida.io" });
+    expect(r.source).toBe("Unknown");
+  });
+
   it("YouTube Ads (gclid + network=u) sobrescreve YouTube orgânico", () => {
     const r = classifyTouch({
       gclid: "abc",
