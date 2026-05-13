@@ -1,4 +1,5 @@
 import {
+  Activity,
   ClipboardList,
   Crown,
   Flame,
@@ -65,6 +66,15 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: PieChart,
         hideForConsultor: true,
       },
+      // Atividades: admin + gerente (esconde de consultor e marketing).
+      // Mesma regra que `admin.view_activities` em permissions.ts.
+      {
+        href: "/atividades",
+        label: "Atividades",
+        icon: Activity,
+        hideForConsultor: true,
+        hideForMarketing: true,
+      },
       {
         href: "/admin/painel-executivo",
         label: "Painel executivo",
@@ -125,6 +135,10 @@ export const ROUTE_META: Record<string, SimpleNavMeta> = {
     description: "Triagem do pool sem consultor",
   },
   "/relatorios": { title: "Relatórios", description: "Visão consolidada" },
+  "/atividades": {
+    title: "Atividades",
+    description: "Histórico de ações por consultor",
+  },
   "/admin/painel-executivo": {
     title: "Painel executivo",
     description: "Visão estratégica · admin",
