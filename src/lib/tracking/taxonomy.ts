@@ -150,9 +150,11 @@ export function isChannel(s: string): s is Channel {
  * (tracking_unknowns) pra admin classificar.
  */
 export const UTM_SOURCE_ALIASES: Record<string, string> = {
-  // Google
+  // Google (incluindo variante hostname)
   "google":        "Google",
   "google.com":    "Google",
+  "google.com.br": "Google",
+  "www.google.com": "Google",
   "google-search": "Google",
   "googleads":     "Google Ads",
   "google_ads":    "Google Ads",
@@ -162,15 +164,19 @@ export const UTM_SOURCE_ALIASES: Record<string, string> = {
 
   // Microsoft
   "bing":          "Bing",
+  "bing.com":      "Bing",
   "microsoft":     "Microsoft Ads",
   "microsoftads":  "Microsoft Ads",
   "msn":           "Bing",
 
-  // Meta
+  // Meta (incluindo variantes hostname)
   "facebook":      "Facebook",
+  "facebook.com":  "Facebook",
   "fb":            "Facebook",
+  "fb.com":        "Facebook",
   "meta":          "Facebook",
   "instagram":     "Instagram",
+  "instagram.com": "Instagram",
   "ig":            "Instagram",
   "metaads":       "Meta Ads",
   "meta-ads":      "Meta Ads",
@@ -179,43 +185,78 @@ export const UTM_SOURCE_ALIASES: Record<string, string> = {
 
   // TikTok
   "tiktok":        "TikTok",
+  "tiktok.com":    "TikTok",
   "tk":            "TikTok",
   "tiktokads":     "TikTok Ads",
   "tiktok-ads":    "TikTok Ads",
 
   // LinkedIn
   "linkedin":      "LinkedIn",
+  "linkedin.com":  "LinkedIn",
   "li":            "LinkedIn",
   "linkedinads":   "LinkedIn Ads",
 
   // YouTube
   "youtube":       "YouTube",
+  "youtube.com":   "YouTube",
+  "youtu.be":      "YouTube",
   "yt":            "YouTube",
   "youtubeads":    "YouTube Ads",
 
-  // Outras redes
+  // Outras redes (incluindo variantes hostname)
   "twitter":       "X (Twitter)",
+  "twitter.com":   "X (Twitter)",
   "x":             "X (Twitter)",
   "x.com":         "X (Twitter)",
   "reddit":        "Reddit Ads",  // Reddit costuma ser pago quando usa utm
+  "reddit.com":    "Reddit Ads",
   "pinterest":     "Pinterest",
+  "pinterest.com": "Pinterest",
   "snapchat":      "Snapchat Ads",
+  "snapchat.com":  "Snapchat Ads",
   "whatsapp":      "WhatsApp",
+  "whatsapp.com":  "WhatsApp",
   "wa":            "WhatsApp",
+  "wa.me":         "WhatsApp",
 
   // AI Assistants
-  "chatgpt":       "ChatGPT",
-  "openai":        "ChatGPT",
-  "perplexity":    "Perplexity",
-  "claude":        "Claude",
-  "anthropic":     "Claude",
-  "gemini":        "Gemini",
-  "bard":          "Gemini",
-  "copilot":       "Copilot",
-  "meta-ai":       "Meta AI",
-  "metaai":        "Meta AI",
-  "you":           "You.com",
-  "you.com":       "You.com",
+  // Inclui variantes "name" e "hostname" porque o ChatGPT (e similares)
+  // injetam `?utm_source=chatgpt.com` (hostname com TLD) em links — sem
+  // os aliases-com-domínio, leads sem referrer HTTP caíam em "Unknown".
+  "chatgpt":             "ChatGPT",
+  "chatgpt.com":         "ChatGPT",
+  "chat.openai.com":     "ChatGPT",
+  "openai":              "ChatGPT",
+  "openai.com":          "ChatGPT",
+  "perplexity":          "Perplexity",
+  "perplexity.ai":       "Perplexity",
+  "www.perplexity.ai":   "Perplexity",
+  "claude":              "Claude",
+  "claude.ai":           "Claude",
+  "anthropic":           "Claude",
+  "anthropic.com":       "Claude",
+  "gemini":              "Gemini",
+  "gemini.google.com":   "Gemini",
+  "bard":                "Gemini",
+  "bard.google.com":     "Gemini",
+  "copilot":             "Copilot",
+  "copilot.microsoft.com": "Copilot",
+  "meta-ai":             "Meta AI",
+  "metaai":              "Meta AI",
+  "meta.ai":             "Meta AI",
+  "you":                 "You.com",
+  "you.com":             "You.com",
+  "phind":               "Phind",
+  "phind.com":           "Phind",
+  "kagi":                "Kagi",
+  "kagi.com":            "Kagi",
+  "poe":                 "Poe",
+  "poe.com":             "Poe",
+  "grok":                "Grok",
+  "grok.com":            "Grok",
+  "x.ai":                "Grok",
+  "brave-search":        "Brave Search",
+  "search.brave.com":    "Brave Search",
 
   // Email / Newsletter
   "newsletter":    "Email",
