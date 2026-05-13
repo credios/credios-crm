@@ -45,7 +45,8 @@ export type Action =
   | "lead_bank.manage"
   | "user.manage"
   | "config.manage"
-  | "audit.read";
+  | "audit.read"
+  | "admin.view_activities";
 
 export type Resource =
   | { type: "lead"; consultorId?: string | null }
@@ -169,5 +170,11 @@ export function checkPermission(
     case "config.manage":
     case "audit.read":
       return perfil === "admin";
+
+    // Dashboard /atividades — histórico cronológico do que cada consultor
+    // fez no período. Admin pra acompanhamento; gerente herda pra ter
+    // visão da equipe no dia a dia.
+    case "admin.view_activities":
+      return perfil === "admin" || perfil === "gerente";
   }
 }
