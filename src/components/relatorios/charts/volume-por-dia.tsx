@@ -2,10 +2,13 @@
 
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useTransition } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   Legend,
   Tooltip,
   XAxis,
@@ -19,41 +22,127 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { VolumePorDiaRow } from "@/lib/reports/queries";
+import { CHANNELS } from "@/lib/tracking/taxonomy";
 
 import { ChartFrame } from "./chart-frame";
 import {
   AXIS_TICK,
-  CHART_COLORS,
+  CHANNEL_COLOR,
   GRID_STROKE,
   TOOLTIP_ITEM_STYLE,
   TOOLTIP_LABEL_STYLE,
   TOOLTIP_STYLE,
 } from "./theme";
 
-type Props = { rows: VolumePorDiaRow[] };
+type Props = {
+  rows: VolumePorDiaRow[];
+  /** Canal atualmente filtrado (vem da URL). undefined = "Todos". */
+  selectedCanal?: string;
+};
 
-export function VolumePorDiaChart({ rows }: Props) {
-  const { data, origens } = pivot(rows);
-  // Number.isFinite garante que NaN/undefined nunca poluam o total — o gráfico
-  // mostrava "NaN leads no período" quando alguma row chegava com valor
-  // inesperado.
-  const totalNoPeriodo = data.reduce((acc, d) => {
-    let s = 0;
-    for (const o of origens) {
-      const v = Number(d[o]);
-      if (Number.isFinite(v)) s += v;
+// Sentinela do dropdown — Select não aceita string vazia como value
+const TODOS = "__todos__";
+
+// Ordem fixa pra rendering — canais "Paid" primeiro (geram revenue, são o
+// foco do admin), depois "Organic"/AI, depois Direct/Other. Stack do recharts
+// usa essa ordem da esquerda pra direita / de baixo pra cima.
+const CHANNEL_RENDER_ORDER: string[] = [
+  "Paid Search",
+  "Paid Social",
+  "Paid Video",
+  "Paid Display",
+  "AI Assistant",
+  "Organic Search",
+  "Organic Social",
+  "Referral",
+  "Indicação",
+  "Email",
+  "Direct",
+  "Manual",
+  "Sem canal",
+];
+
+export function VolumePorDiaChart({ rows, selectedCanal }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [, startTransition] = useTransition();
+
+  const { data, channels, totalPorDia } = useMemo(() => pivot(rows), [rows]);
+  const totalNoPeriodo = totalPorDia.reduce((acc, n) => acc + n, 0);
+
+  // Pra coluna `__total` no objeto de dados — guarda o total do dia
+  // pra o LabelList usar como dataKey.
+  const dataWithTotal = useMemo(
+    () =>
+      data.map((d, i) => ({
+        ...d,
+        __total: totalPorDia[i] ?? 0,
+      })),
+    [data, totalPorDia],
+  );
+
+  function setCanal(value: string | null) {
+    const next = new URLSearchParams(params.toString());
+    if (value && value !== TODOS) next.set("canal", value);
+    else next.delete("canal");
+    startTransition(() => {
+      router.replace(`${pathname}?${next.toString()}`);
+    });
+  }
+
+  // Ordena os canais pra render usando CHANNEL_RENDER_ORDER (fixa).
+  // Channels que não estão na lista fixa (ex: novo canal customizado) caem
+  // no fim em ordem alfabética — defensivo.
+  const orderedChannels = useMemo(() => {
+    const set = new Set(channels);
+    const out: string[] = [];
+    for (const c of CHANNEL_RENDER_ORDER) {
+      if (set.has(c)) {
+        out.push(c);
+        set.delete(c);
+      }
     }
-    return acc + s;
-  }, 0);
+    return [...out, ...Array.from(set).sort()];
+  }, [channels]);
 
   return (
     <Card className="lg:col-span-2">
-      <CardHeader>
-        <CardTitle className="text-base">Leads por dia</CardTitle>
-        <CardDescription>
-          {totalNoPeriodo} leads no período · barras empilhadas por origem
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between gap-3">
+        <div className="min-w-0">
+          <CardTitle className="text-base">Leads por dia</CardTitle>
+          <CardDescription>
+            {totalNoPeriodo} leads no período · barras empilhadas por canal
+          </CardDescription>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Label className="text-xs text-muted-foreground">Canal</Label>
+          <Select
+            value={selectedCanal ?? TODOS}
+            onValueChange={(v) => setCanal(v ?? TODOS)}
+          >
+            <SelectTrigger className="h-8 w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todos os canais</SelectItem>
+              {CHANNELS.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -61,13 +150,14 @@ export function VolumePorDiaChart({ rows }: Props) {
             Sem dados no período.
           </p>
         ) : (
-          <ChartFrame height={280}>
+          <ChartFrame height={300}>
             {({ width, height }) => (
               <BarChart
-                data={data}
+                data={dataWithTotal}
                 barCategoryGap="20%"
                 width={width}
                 height={height}
+                margin={{ top: 24, right: 4, bottom: 4, left: 0 }}
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -106,8 +196,12 @@ export function VolumePorDiaChart({ rows }: Props) {
                   cursor={{
                     fill: "color-mix(in oklch, var(--foreground) 5%, transparent)",
                   }}
-                  // Suprime entradas com valor 0 (legenda vazia poluía)
                   filterNull
+                  // Ignora a coluna `__total` no tooltip (é só pro LabelList).
+                  formatter={(value, name) => {
+                    if (name === "__total") return ["", ""];
+                    return [value, name];
+                  }}
                 />
                 <Legend
                   wrapperStyle={{
@@ -118,15 +212,38 @@ export function VolumePorDiaChart({ rows }: Props) {
                   iconType="circle"
                   iconSize={8}
                 />
-                {origens.map((o, i) => (
+                {orderedChannels.map((ch, i) => (
                   <Bar
-                    key={o}
-                    dataKey={o}
+                    key={ch}
+                    dataKey={ch}
+                    name={ch}
                     stackId="vol"
-                    fill={CHART_COLORS[i % CHART_COLORS.length]}
-                    // Radius só na última stack (visual unificado)
-                    radius={i === origens.length - 1 ? [4, 4, 0, 0] : 0}
-                  />
+                    fill={CHANNEL_COLOR[ch] ?? "#94a3b8"}
+                    // Radius só na última stack (visual unificado).
+                    // O LabelList vai aplicado APÓS na bar mais alta — daí
+                    // o total renderiza acima da pilha inteira.
+                    radius={i === orderedChannels.length - 1 ? [4, 4, 0, 0] : 0}
+                  >
+                    {/* LabelList apenas na última bar da pilha — o `position="top"`
+                        renderiza o valor de `__total` (o total do dia) acima.
+                        Só uma vez por barra empilhada — não acumula. */}
+                    {i === orderedChannels.length - 1 && (
+                      <LabelList
+                        dataKey="__total"
+                        position="top"
+                        style={{
+                          fontSize: 10,
+                          fontFamily: "var(--font-mono, monospace)",
+                          fill: "var(--foreground)",
+                          fontWeight: 600,
+                        }}
+                        formatter={(value: unknown) => {
+                          const n = Number(value);
+                          return Number.isFinite(n) && n > 0 ? String(n) : "";
+                        }}
+                      />
+                    )}
+                  </Bar>
                 ))}
               </BarChart>
             )}
@@ -139,25 +256,36 @@ export function VolumePorDiaChart({ rows }: Props) {
 
 function pivot(rows: VolumePorDiaRow[]): {
   data: Array<Record<string, string | number>>;
-  origens: string[];
+  channels: string[];
+  totalPorDia: number[];
 } {
   const days = new Map<string, Record<string, string | number>>();
-  const origens = new Set<string>();
+  const channels = new Set<string>();
   for (const r of rows) {
     if (!days.has(r.dia)) days.set(r.dia, { dia: r.dia });
     const row = days.get(r.dia)!;
-    row[r.origem] = ((row[r.origem] as number) ?? 0) + r.count;
-    origens.add(r.origem);
+    row[r.channel] = ((row[r.channel] as number) ?? 0) + r.count;
+    channels.add(r.channel);
   }
   for (const row of days.values()) {
-    for (const o of origens) {
-      if (row[o] === undefined) row[o] = 0;
+    for (const c of channels) {
+      if (row[c] === undefined) row[c] = 0;
     }
   }
+  const sorted = Array.from(days.values()).sort((a, b) =>
+    String(a.dia).localeCompare(String(b.dia)),
+  );
+  const totalPorDia = sorted.map((row) => {
+    let total = 0;
+    for (const c of channels) {
+      const v = Number(row[c]);
+      if (Number.isFinite(v)) total += v;
+    }
+    return total;
+  });
   return {
-    data: Array.from(days.values()).sort((a, b) =>
-      String(a.dia).localeCompare(String(b.dia)),
-    ),
-    origens: Array.from(origens).sort(),
+    data: sorted,
+    channels: Array.from(channels),
+    totalPorDia,
   };
 }
