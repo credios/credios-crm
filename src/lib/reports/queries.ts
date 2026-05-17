@@ -360,71 +360,65 @@ async function fetchKpisFromTable(
 }
 
 // ============================================================================
-// Volume por dia (linha + área empilhada por origem)
+// Volume por dia (barras empilhadas por CANAL)
 // ============================================================================
+// Agrupado por `channel` (12 categorias estáveis) em vez de `origem`/`source`
+// (40+ que crescem). Reduz drasticamente a poluição visual da legenda e
+// alinha com a taxonomia GA4-style introduzida na migration 0017.
+//
+// MV (mv_leads_diarios) não inclui `channel` — usamos query direta na
+// `leads`. Volume atual (~hundreds/mês) não exige otimização. Quando
+// crescer, refazer a MV adicionando a coluna.
 
-export type VolumePorDiaRow = { dia: string; origem: string; count: number };
+export type VolumePorDiaRow = { dia: string; channel: string; count: number };
 
 export async function fetchVolumePorDia(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<VolumePorDiaRow[]> {
-  const fromDateStr = period.from.toISOString().slice(0, 10);
-  const toDateStr = period.to.toISOString().slice(0, 10);
-  const useMV = canUseMV(filters);
+  // Conditions extra:
+  //   - se filters.canal preenchido, restringe àquele canal específico
+  //   - lead.channel null vira "Sem canal" (fallback defensivo pra leads
+  //     antigos pré-migration 0017 que possam ter ficado sem classificação)
+  const extraConds = [];
+  if (filters.canal) {
+    extraConds.push(eq(leads.channel, filters.canal));
+  }
 
-  const rows = useMV
-    ? await db
-        .select({
-          dia: sql<string>`to_char(${mvLeadsDiarios.diaCriacao}, 'YYYY-MM-DD')`,
-          origem: mvLeadsDiarios.origem,
-          count: sql<number>`coalesce(sum(${mvLeadsDiarios.qtd}), 0)::int`,
-        })
-        .from(mvLeadsDiarios)
-        .where(
-          and(
-            gte(mvLeadsDiarios.diaCriacao, fromDateStr),
-            lte(mvLeadsDiarios.diaCriacao, toDateStr),
-            ...mvLeadsConds(filters),
-          ),
-        )
-        .groupBy(mvLeadsDiarios.diaCriacao, mvLeadsDiarios.origem)
-        .orderBy(mvLeadsDiarios.diaCriacao)
-    : await db
-        .select({
-          dia: sql<string>`to_char(date_trunc('day', ${leads.createdAt}), 'YYYY-MM-DD')`,
-          origem: sql<string>`coalesce(${leads.origem}, 'Sem origem')`,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(leads)
-        .where(
-          and(
-            gte(leads.createdAt, period.from),
-            lte(leads.createdAt, period.to),
-            ...baseConds(filters),
-          ),
-        )
-        .groupBy(
-          sql`date_trunc('day', ${leads.createdAt})`,
-          sql`coalesce(${leads.origem}, 'Sem origem')`,
-        )
-        .orderBy(sql`date_trunc('day', ${leads.createdAt})`);
+  const rows = await db
+    .select({
+      dia: sql<string>`to_char(date_trunc('day', ${leads.createdAt}), 'YYYY-MM-DD')`,
+      channel: sql<string>`coalesce(${leads.channel}, 'Sem canal')`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(leads)
+    .where(
+      and(
+        gte(leads.createdAt, period.from),
+        lte(leads.createdAt, period.to),
+        ...baseConds(filters),
+        ...extraConds,
+      ),
+    )
+    .groupBy(
+      sql`date_trunc('day', ${leads.createdAt})`,
+      sql`coalesce(${leads.channel}, 'Sem canal')`,
+    )
+    .orderBy(sql`date_trunc('day', ${leads.createdAt})`);
 
-  // Defensivo: se postgres-js retornar tipos inesperados (origem null mesmo
-  // com COALESCE em corner cases, count vindo bigint não-conversível, etc),
-  // filtra/sanitiza pra não vazar NaN/undefined pro componente.
+  // Defensivo: filtra/sanitiza tipos inesperados do postgres-js.
   return rows
     .map((r) => {
       const count = Number(r.count);
       const dia = typeof r.dia === "string" && r.dia.length === 10 ? r.dia : null;
-      const origem =
-        typeof r.origem === "string" && r.origem.length > 0
-          ? r.origem
-          : "Sem origem";
-      return { dia, origem, count };
+      const channel =
+        typeof r.channel === "string" && r.channel.length > 0
+          ? r.channel
+          : "Sem canal";
+      return { dia, channel, count };
     })
     .filter(
-      (r): r is { dia: string; origem: string; count: number } =>
+      (r): r is { dia: string; channel: string; count: number } =>
         r.dia !== null && Number.isFinite(r.count),
     );
 }

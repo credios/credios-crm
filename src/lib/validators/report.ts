@@ -51,6 +51,11 @@ export const reportFiltersSchema = z.object({
   consultorId: z.string().optional(),
   origem: z.string().optional(),
 
+  // Filtro do gráfico "Leads por dia": canal específico ou todos. Single-
+  // select porque agrupar por canal já reduz pra ~12 categorias, e o caso
+  // de uso é "isolar 1 canal" (ex: ver só AI Assistant ou só Paid Search).
+  canal: z.string().optional(),
+
   // Modo de comparação (página executiva).
   comparar: z.enum(COMPARACAO_MODES).default("anterior_equivalente"),
 });

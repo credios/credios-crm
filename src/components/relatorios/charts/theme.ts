@@ -14,6 +14,26 @@ export const CHART_COLORS = [
   "#2c4fa8", // blue-700
 ] as const;
 
+// Cores fixas por canal — garantem consistência visual entre o gráfico
+// inteiro e qualquer filtro aplicado (AI Assistant sempre roxo, Paid Search
+// sempre azul, etc). Sem isso, o map de cor depende da ordem de aparição
+// e muda quando o usuário filtra.
+export const CHANNEL_COLOR: Record<string, string> = {
+  "Paid Search":    "#4b7be5",  // blue-500 — Google Ads é o "azul forte" do CRM
+  "Paid Social":    "#0ea5e9",  // sky-500
+  "Paid Video":     "#dc2626",  // red-600 — alinha com YouTube branding
+  "Paid Display":   "#f97316",  // orange-500
+  "Organic Search": "#10b981",  // emerald-500
+  "Organic Social": "#ec4899",  // pink-500
+  "AI Assistant":   "#8b5cf6",  // violet-500 — destaque pra categoria nova
+  "Direct":         "#94a3b8",  // slate-400 — neutro
+  "Referral":       "#6366f1",  // indigo-500
+  "Indicação":      "#d4a351",  // gold-500 — premium (cliente que indica)
+  "Email":          "#06b6d4",  // cyan-500
+  "Manual":         "#71717a",  // zinc-500
+  "Sem canal":      "#cbd5e1",  // slate-300 — fallback
+};
+
 // Sincronizado com --color-status-* em globals.css. Progressão do funil:
 // frio (azul) → quente (amarelo/laranja) → verde (won) ou vermelho (lost).
 export const STATUS_COLOR: Record<string, string> = {
