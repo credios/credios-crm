@@ -7,7 +7,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  LabelList,
+  Customized,
   Legend,
   Tooltip,
   XAxis,
@@ -77,15 +77,15 @@ const CHANNEL_RENDER_ORDER: string[] = [
   "Sem canal",
 ];
 
-// Tipo dos props que o LabelList content recebe — campos relevantes pro
-// posicionamento + payload com a linha de dados completa.
-type LabelContentProps = {
-  x?: number | string;
-  y?: number | string;
-  width?: number | string;
-  height?: number | string;
-  value?: string | number;
-  payload?: Record<string, unknown>;
+// Shape mínimo dos props que `<Customized>` injeta no componente — Recharts
+// passa o estado interno do chart (xAxisMap, yAxisMap, etc) via cloneElement.
+// Tipagem solta porque Recharts tipa internamente como `any`.
+type CustomizedProps = {
+  xAxisMap?: Record<
+    string,
+    { scale?: ((v: string | number) => number) & { bandwidth?: () => number } }
+  >;
+  yAxisMap?: Record<string, { scale?: (v: number) => number }>;
 };
 
 export function VolumePorDiaChart({
@@ -118,62 +118,63 @@ export function VolumePorDiaChart({
     return [...out, ...Array.from(set).sort()];
   }, [channels]);
 
-  // Anota cada linha com `__topmost` = canal no topo da pilha visível
-  // naquele dia (último canal não-zero na ordem de render). O LabelList em
-  // cada Bar verifica se ESTE canal é o topmost — se sim, desenha o total
-  // ali; senão, retorna null.
-  //
-  // Por que não LabelList no último Bar (orderedChannels[N-1])?
-  //   - Quando o último canal tem 0 num dia, o Bar não renderiza pra aquele
-  //     dia → LabelList ancorado nele desaparece → total some.
-  // Por que não Bar marker transparente com value=0?
-  //   - Mesmo problema: Recharts pula Bars com value=0, então o LabelList
-  //     ancorado também é pulado.
-  // A solução robusta é distribuir o LabelList por todos os Bars e cada um
-  // saber se é o "dono" do label naquele dia, via payload.__topmost.
-  const data = useMemo(() => {
-    return aggregated.data.map((row) => {
-      let topmost: string | undefined;
-      for (const ch of orderedChannels) {
-        if (Number(row[ch] ?? 0) > 0) topmost = ch;
-      }
-      return { ...row, __topmost: topmost };
-    });
-  }, [aggregated.data, orderedChannels]);
+  const data = aggregated.data;
 
-  // Factory pra render do label do total — uma função nomeada por Bar
-  // (nome serve de displayName, sai do lint react/display-name). O param
-  // é `unknown` porque o tipo do Recharts é amplo demais pra anotar bem;
-  // narrowing defensivo dentro do corpo.
-  const renderTotalLabel = (channelName: string) => {
-    function TotalLabel(raw: unknown) {
-      const r = (raw ?? {}) as LabelContentProps;
-      const payload = r.payload as
-        | { __topmost?: string; __total?: number }
-        | undefined;
-      if (!payload || payload.__topmost !== channelName) return null;
-      const total = Number(payload.__total);
-      if (!Number.isFinite(total) || total <= 0) return null;
-      const x = Number(r.x ?? 0);
-      const y = Number(r.y ?? 0);
-      const width = Number(r.width ?? 0);
-      return (
-        <text
-          x={x + width / 2}
-          y={y - 6}
-          textAnchor="middle"
-          style={{
-            fontSize: 10,
-            fontFamily: "var(--font-mono, monospace)",
-            fontWeight: 600,
-            fill: "var(--foreground)",
-          }}
-        >
-          {total}
-        </text>
-      );
+  // Layer customizado que desenha o total de cada dia como SVG <text>,
+  // posicionado via as escalas x/y computadas pelo Recharts. Independente
+  // do render individual de cada Bar — funciona mesmo quando o canal no
+  // topo varia dia-a-dia, ou quando barras têm value=0.
+  //
+  // Por que não LabelList?
+  //   - LabelList ancorado num Bar específico só renderiza pra dias em
+  //     que aquele Bar tem value > 0. Pra um stack heterogêneo, nenhum
+  //     Bar é "topo" em todos os dias → total some em alguns.
+  //   - Customized renderiza UMA vez por chart, usando as escalas para
+  //     calcular a posição correta de cada label.
+  //
+  // Closure: `data` é capturado do componente — quando muda, o componente
+  // re-renderiza, Recharts re-clona <Customized> com nova função.
+  const TotalsLayer = (raw: unknown) => {
+    const p = raw as CustomizedProps;
+    const xAxis = p.xAxisMap ? Object.values(p.xAxisMap)[0] : undefined;
+    const yAxis = p.yAxisMap ? Object.values(p.yAxisMap)[0] : undefined;
+    const xScale = xAxis?.scale;
+    const yScale = yAxis?.scale;
+    if (typeof xScale !== "function" || typeof yScale !== "function") {
+      return null;
     }
-    return TotalLabel;
+    return (
+      // pointerEvents:none → não bloqueia o hover/tooltip dos Bars abaixo.
+      <g style={{ pointerEvents: "none" }}>
+        {data.map((row) => {
+          const total = Number(row.__total ?? 0);
+          if (!Number.isFinite(total) || total <= 0) return null;
+          const dia = String(row.dia ?? "");
+          const xBase = xScale(dia);
+          if (typeof xBase !== "number" || !Number.isFinite(xBase)) return null;
+          const bw =
+            typeof xScale.bandwidth === "function" ? xScale.bandwidth() : 0;
+          const yPos = yScale(total);
+          if (typeof yPos !== "number" || !Number.isFinite(yPos)) return null;
+          return (
+            <text
+              key={dia}
+              x={xBase + bw / 2}
+              y={yPos - 6}
+              textAnchor="middle"
+              style={{
+                fontSize: 10,
+                fontFamily: "var(--font-mono, monospace)",
+                fontWeight: 600,
+                fill: "var(--foreground)",
+              }}
+            >
+              {total}
+            </text>
+          );
+        })}
+      </g>
+    );
   };
 
   return (
@@ -277,13 +278,6 @@ export function VolumePorDiaChart({
                     fill: "color-mix(in oklch, var(--foreground) 5%, transparent)",
                   }}
                   filterNull
-                  // Esconde keys internas (__total, __topmost) do tooltip.
-                  formatter={(value, name) => {
-                    if (typeof name === "string" && name.startsWith("__")) {
-                      return ["", ""];
-                    }
-                    return [value, name];
-                  }}
                 />
                 <Legend
                   wrapperStyle={{
@@ -302,17 +296,11 @@ export function VolumePorDiaChart({
                     stackId="vol"
                     fill={CHANNEL_COLOR[ch] ?? "#94a3b8"}
                     radius={i === orderedChannels.length - 1 ? [4, 4, 0, 0] : 0}
-                  >
-                    {/* LabelList em CADA Bar — só renderiza o total quando
-                        ESTE canal é o topo da pilha visível naquele dia
-                        (via payload.__topmost). Garante que o label aparece
-                        sempre, em qualquer Bar do stack. */}
-                    <LabelList
-                      dataKey="__total"
-                      content={renderTotalLabel(ch)}
-                    />
-                  </Bar>
+                  />
                 ))}
+                {/* Layer dos totais: desenhado por cima dos Bars usando as
+                    escalas do chart. Renderiza uma única vez (não por Bar). */}
+                <Customized component={TotalsLayer} />
               </BarChart>
             )}
           </ChartFrame>
