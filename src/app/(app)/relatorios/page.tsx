@@ -388,8 +388,8 @@ async function VolumeSection({
     return (
       <VolumePorDiaChart
         rows={rows}
-        selectedCanal={filters.canal ?? undefined}
-        excluirDesq={filters.excluirDesq ?? false}
+        initialCanal={filters.canal ?? undefined}
+        initialExcluirDesq={filters.excluirDesq ?? false}
       />
     );
   });

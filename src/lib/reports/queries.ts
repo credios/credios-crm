@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte, ne, notInArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
@@ -366,35 +366,36 @@ async function fetchKpisFromTable(
 // (40+ que crescem). Reduz drasticamente a poluição visual da legenda e
 // alinha com a taxonomia GA4-style introduzida na migration 0017.
 //
+// Retorna granularidade dia × channel × desqualificado(bool). Cliente
+// agrega/filtra sob demanda — toggle de "esconder desqualificados" e
+// filtro de canal aplicados no client, sem novo roundtrip pro server.
+// Cache do unstable_cache(filters) preserva hit independente de toggles.
+//
 // MV (mv_leads_diarios) não inclui `channel` — usamos query direta na
 // `leads`. Volume atual (~hundreds/mês) não exige otimização. Quando
 // crescer, refazer a MV adicionando a coluna.
 
-export type VolumePorDiaRow = { dia: string; channel: string; count: number };
+export type VolumePorDiaRow = {
+  dia: string;
+  channel: string;
+  /** Lead foi desqualificado depois da criação. Cliente filtra com base nisso. */
+  desqualificado: boolean;
+  count: number;
+};
 
 export async function fetchVolumePorDia(
-  filters: ReportFilters,
+  _filters: ReportFilters,
   period: PeriodRange,
 ): Promise<VolumePorDiaRow[]> {
-  // Conditions extra:
-  //   - se filters.canal preenchido, restringe àquele canal específico
-  //   - se filters.excluirDesq, omite status='desqualificado' (admin quer
-  //     ver só leads que entraram no funil de verdade — útil pra avaliar
-  //     volume "limpo" sem ruído da triagem)
-  //   - lead.channel null vira "Sem canal" (fallback defensivo pra leads
-  //     antigos pré-migration 0017 que possam ter ficado sem classificação)
-  const extraConds = [];
-  if (filters.canal) {
-    extraConds.push(eq(leads.channel, filters.canal));
-  }
-  if (filters.excluirDesq) {
-    extraConds.push(ne(leads.status, "desqualificado"));
-  }
+  // Note: filters.canal e filters.excluirDesq NÃO entram no WHERE — cliente
+  // aplica visualmente. Mantém URL bookmarkable + UX fluida sem cache miss.
+  const filters = _filters;
 
   const rows = await db
     .select({
       dia: sql<string>`to_char(date_trunc('day', ${leads.createdAt}), 'YYYY-MM-DD')`,
       channel: sql<string>`coalesce(${leads.channel}, 'Sem canal')`,
+      desqualificado: sql<boolean>`${leads.status} = 'desqualificado'`,
       count: sql<number>`count(*)::int`,
     })
     .from(leads)
@@ -403,12 +404,12 @@ export async function fetchVolumePorDia(
         gte(leads.createdAt, period.from),
         lte(leads.createdAt, period.to),
         ...baseConds(filters),
-        ...extraConds,
       ),
     )
     .groupBy(
       sql`date_trunc('day', ${leads.createdAt})`,
       sql`coalesce(${leads.channel}, 'Sem canal')`,
+      sql`${leads.status} = 'desqualificado'`,
     )
     .orderBy(sql`date_trunc('day', ${leads.createdAt})`);
 
@@ -421,10 +422,11 @@ export async function fetchVolumePorDia(
         typeof r.channel === "string" && r.channel.length > 0
           ? r.channel
           : "Sem canal";
-      return { dia, channel, count };
+      const desqualificado = Boolean(r.desqualificado);
+      return { dia, channel, desqualificado, count };
     })
     .filter(
-      (r): r is { dia: string; channel: string; count: number } =>
+      (r): r is { dia: string; channel: string; desqualificado: boolean; count: number } =>
         r.dia !== null && Number.isFinite(r.count),
     );
 }

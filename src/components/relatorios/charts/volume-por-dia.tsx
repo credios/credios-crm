@@ -2,8 +2,7 @@
 
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useTransition } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -45,19 +44,23 @@ import {
 } from "./theme";
 
 type Props = {
+  /**
+   * Rows granulares vindas do server (dia × channel × desqualificado).
+   * Toggle/dropdown agregam/filtram CLIENT-SIDE — evita roundtrip e
+   * re-render das outras seções do dashboard.
+   */
   rows: VolumePorDiaRow[];
-  /** Canal atualmente filtrado (vem da URL). undefined = "Todos". */
-  selectedCanal?: string;
-  /** Se true, query já omitiu leads desqualificados — toggle reflete isso. */
-  excluirDesq?: boolean;
+  /** Estado inicial do filtro de canal (vem da URL pra bookmarkability). */
+  initialCanal?: string;
+  /** Estado inicial do toggle "esconder desqualificados". */
+  initialExcluirDesq?: boolean;
 };
 
-// Sentinela do dropdown — Select não aceita string vazia como value
+// Sentinela do dropdown
 const TODOS = "__todos__";
 
-// Ordem fixa pra rendering — canais "Paid" primeiro (geram revenue, são o
-// foco do admin), depois "Organic"/AI, depois Direct/Other. Stack do recharts
-// usa essa ordem da esquerda pra direita / de baixo pra cima.
+// Ordem fixa pra render do stack — Paid* primeiro (geram revenue) → AI →
+// Organic → Direct/Other. Stack do recharts pega ordem de baixo pra cima.
 const CHANNEL_RENDER_ORDER: string[] = [
   "Paid Search",
   "Paid Social",
@@ -74,51 +77,30 @@ const CHANNEL_RENDER_ORDER: string[] = [
   "Sem canal",
 ];
 
+// dataKey sentinela pro marker invisível que carrega o LabelList do total.
+// Bar com valor sempre 0 e fill transparente — não consome espaço visual,
+// mas posiciona o LabelList no topo da pilha real (porque renderiza por
+// último com mesma stackId). Resolve o bug de "total some quando o último
+// canal não tem dados naquele dia".
+const TOTAL_MARKER_KEY = "__total_marker";
+
 export function VolumePorDiaChart({
   rows,
-  selectedCanal,
-  excluirDesq = false,
+  initialCanal,
+  initialExcluirDesq = false,
 }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const [, startTransition] = useTransition();
+  // State local — sem URL state, sem server roundtrip. Toggle é instantâneo.
+  // initialCanal/initialExcluirDesq vêm dos searchParams (página passa)
+  // pra preservar bookmarkability — mas mudanças subsequentes ficam locais.
+  const [selectedCanal, setSelectedCanal] = useState<string | undefined>(initialCanal);
+  const [excluirDesq, setExcluirDesq] = useState(initialExcluirDesq);
 
-  const { data, channels, totalPorDia } = useMemo(() => pivot(rows), [rows]);
-  const totalNoPeriodo = totalPorDia.reduce((acc, n) => acc + n, 0);
-
-  // Pra coluna `__total` no objeto de dados — guarda o total do dia
-  // pra o LabelList usar como dataKey.
-  const dataWithTotal = useMemo(
-    () =>
-      data.map((d, i) => ({
-        ...d,
-        __total: totalPorDia[i] ?? 0,
-      })),
-    [data, totalPorDia],
+  const { data, channels, totalNoPeriodo } = useMemo(
+    () => aggregate(rows, { selectedCanal, excluirDesq }),
+    [rows, selectedCanal, excluirDesq],
   );
 
-  function setCanal(value: string | null) {
-    const next = new URLSearchParams(params.toString());
-    if (value && value !== TODOS) next.set("canal", value);
-    else next.delete("canal");
-    startTransition(() => {
-      router.replace(`${pathname}?${next.toString()}`);
-    });
-  }
-
-  function setExcluirDesq(checked: boolean) {
-    const next = new URLSearchParams(params.toString());
-    if (checked) next.set("excluirDesq", "1");
-    else next.delete("excluirDesq");
-    startTransition(() => {
-      router.replace(`${pathname}?${next.toString()}`);
-    });
-  }
-
   // Ordena os canais pra render usando CHANNEL_RENDER_ORDER (fixa).
-  // Channels que não estão na lista fixa (ex: novo canal customizado) caem
-  // no fim em ordem alfabética — defensivo.
   const orderedChannels = useMemo(() => {
     const set = new Set(channels);
     const out: string[] = [];
@@ -146,7 +128,7 @@ export function VolumePorDiaChart({
             <Switch
               checked={excluirDesq}
               onCheckedChange={setExcluirDesq}
-              aria-label="Excluir leads desqualificados"
+              aria-label="Esconder leads desqualificados"
             />
             Esconder desqualificados
           </label>
@@ -154,17 +136,15 @@ export function VolumePorDiaChart({
             <Label className="text-xs text-muted-foreground">Canal</Label>
             <Select
               value={selectedCanal ?? TODOS}
-              onValueChange={(v) => setCanal(v ?? TODOS)}
+              onValueChange={(v) =>
+                setSelectedCanal(v && v !== TODOS ? v : undefined)
+              }
             >
               <SelectTrigger className="h-8 w-44">
-                {/* Render-prop pro SelectValue não mostrar a sentinela
-                    "__todos__" literalmente. Value=TODOS → label "Todos". */}
-                <SelectValue>
-                  {(v: unknown) => {
-                    if (typeof v !== "string" || v === TODOS) return "Todos";
-                    return v;
-                  }}
-                </SelectValue>
+                {/* Radix exibe automaticamente os children do SelectItem
+                    selecionado — como TODOS tem children "Todos", o trigger
+                    renderiza "Todos" sem precisar de placeholder/render-prop. */}
+                <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={TODOS}>Todos</SelectItem>
@@ -187,7 +167,7 @@ export function VolumePorDiaChart({
           <ChartFrame height={300}>
             {({ width, height }) => (
               <BarChart
-                data={dataWithTotal}
+                data={data}
                 barCategoryGap="20%"
                 width={width}
                 height={height}
@@ -231,9 +211,11 @@ export function VolumePorDiaChart({
                     fill: "color-mix(in oklch, var(--foreground) 5%, transparent)",
                   }}
                   filterNull
-                  // Ignora a coluna `__total` no tooltip (é só pro LabelList).
+                  // Esconde o marker invisível e __total do tooltip.
                   formatter={(value, name) => {
-                    if (name === "__total") return ["", ""];
+                    if (name === TOTAL_MARKER_KEY || name === "__total") {
+                      return ["", ""];
+                    }
                     return [value, name];
                   }}
                 />
@@ -253,32 +235,36 @@ export function VolumePorDiaChart({
                     name={ch}
                     stackId="vol"
                     fill={CHANNEL_COLOR[ch] ?? "#94a3b8"}
-                    // Radius só na última stack (visual unificado).
-                    // O LabelList vai aplicado APÓS na bar mais alta — daí
-                    // o total renderiza acima da pilha inteira.
                     radius={i === orderedChannels.length - 1 ? [4, 4, 0, 0] : 0}
-                  >
-                    {/* LabelList apenas na última bar da pilha — o `position="top"`
-                        renderiza o valor de `__total` (o total do dia) acima.
-                        Só uma vez por barra empilhada — não acumula. */}
-                    {i === orderedChannels.length - 1 && (
-                      <LabelList
-                        dataKey="__total"
-                        position="top"
-                        style={{
-                          fontSize: 10,
-                          fontFamily: "var(--font-mono, monospace)",
-                          fill: "var(--foreground)",
-                          fontWeight: 600,
-                        }}
-                        formatter={(value: unknown) => {
-                          const n = Number(value);
-                          return Number.isFinite(n) && n > 0 ? String(n) : "";
-                        }}
-                      />
-                    )}
-                  </Bar>
+                  />
                 ))}
+                {/* Bar marker invisible (fill=transparent, valor=0) na mesma
+                    stackId. Renderiza por último → posiciona-se no topo da
+                    pilha real → LabelList "position=top" fica acima do total.
+                    Resolve o bug de total sumir quando o último canal não
+                    tem dado em algum dia. */}
+                <Bar
+                  dataKey={TOTAL_MARKER_KEY}
+                  stackId="vol"
+                  fill="transparent"
+                  legendType="none"
+                  isAnimationActive={false}
+                >
+                  <LabelList
+                    dataKey="__total"
+                    position="top"
+                    style={{
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono, monospace)",
+                      fill: "var(--foreground)",
+                      fontWeight: 600,
+                    }}
+                    formatter={(value: unknown) => {
+                      const n = Number(value);
+                      return Number.isFinite(n) && n > 0 ? String(n) : "";
+                    }}
+                  />
+                </Bar>
               </BarChart>
             )}
           </ChartFrame>
@@ -288,38 +274,51 @@ export function VolumePorDiaChart({
   );
 }
 
-function pivot(rows: VolumePorDiaRow[]): {
+// ============================================================================
+// Agregação client-side
+// ============================================================================
+// Recebe rows granulares (dia × channel × desqualificado) e produz a
+// estrutura que o BarChart espera (linha por dia, coluna por channel +
+// `__total` pro label + `__total_marker=0` pra trigger do LabelList).
+
+function aggregate(
+  rows: VolumePorDiaRow[],
+  opts: { selectedCanal?: string; excluirDesq: boolean },
+): {
   data: Array<Record<string, string | number>>;
   channels: string[];
-  totalPorDia: number[];
+  totalNoPeriodo: number;
 } {
-  const days = new Map<string, Record<string, string | number>>();
+  const days = new Map<string, Record<string, number>>();
   const channels = new Set<string>();
+  let totalNoPeriodo = 0;
+
   for (const r of rows) {
-    if (!days.has(r.dia)) days.set(r.dia, { dia: r.dia });
-    const row = days.get(r.dia)!;
-    row[r.channel] = ((row[r.channel] as number) ?? 0) + r.count;
+    if (opts.excluirDesq && r.desqualificado) continue;
+    if (opts.selectedCanal && r.channel !== opts.selectedCanal) continue;
+
+    if (!days.has(r.dia)) days.set(r.dia, {});
+    const dayRow = days.get(r.dia)!;
+    dayRow[r.channel] = (dayRow[r.channel] ?? 0) + r.count;
     channels.add(r.channel);
+    totalNoPeriodo += r.count;
   }
-  for (const row of days.values()) {
-    for (const c of channels) {
-      if (row[c] === undefined) row[c] = 0;
-    }
-  }
-  const sorted = Array.from(days.values()).sort((a, b) =>
-    String(a.dia).localeCompare(String(b.dia)),
-  );
-  const totalPorDia = sorted.map((row) => {
-    let total = 0;
-    for (const c of channels) {
-      const v = Number(row[c]);
-      if (Number.isFinite(v)) total += v;
-    }
-    return total;
-  });
-  return {
-    data: sorted,
-    channels: Array.from(channels),
-    totalPorDia,
-  };
+
+  // Preenche canais ausentes com 0 + adiciona __total e __total_marker
+  const sorted = Array.from(days.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dia, dayRow]) => {
+      const out: Record<string, string | number> = { dia };
+      let total = 0;
+      for (const c of channels) {
+        const v = dayRow[c] ?? 0;
+        out[c] = v;
+        total += v;
+      }
+      out.__total = total;
+      out[TOTAL_MARKER_KEY] = 0; // marker invisível pra posicionar o label
+      return out;
+    });
+
+  return { data: sorted, channels: Array.from(channels), totalNoPeriodo };
 }
