@@ -77,12 +77,16 @@ const CHANNEL_RENDER_ORDER: string[] = [
   "Sem canal",
 ];
 
-// dataKey sentinela pro marker invisível que carrega o LabelList do total.
-// Bar com valor sempre 0 e fill transparente — não consome espaço visual,
-// mas posiciona o LabelList no topo da pilha real (porque renderiza por
-// último com mesma stackId). Resolve o bug de "total some quando o último
-// canal não tem dados naquele dia".
-const TOTAL_MARKER_KEY = "__total_marker";
+// Tipo dos props que o LabelList content recebe — campos relevantes pro
+// posicionamento + payload com a linha de dados completa.
+type LabelContentProps = {
+  x?: number | string;
+  y?: number | string;
+  width?: number | string;
+  height?: number | string;
+  value?: string | number;
+  payload?: Record<string, unknown>;
+};
 
 export function VolumePorDiaChart({
   rows,
@@ -95,10 +99,11 @@ export function VolumePorDiaChart({
   const [selectedCanal, setSelectedCanal] = useState<string | undefined>(initialCanal);
   const [excluirDesq, setExcluirDesq] = useState(initialExcluirDesq);
 
-  const { data, channels, totalNoPeriodo } = useMemo(
+  const aggregated = useMemo(
     () => aggregate(rows, { selectedCanal, excluirDesq }),
     [rows, selectedCanal, excluirDesq],
   );
+  const { channels, totalNoPeriodo } = aggregated;
 
   // Ordena os canais pra render usando CHANNEL_RENDER_ORDER (fixa).
   const orderedChannels = useMemo(() => {
@@ -112,6 +117,64 @@ export function VolumePorDiaChart({
     }
     return [...out, ...Array.from(set).sort()];
   }, [channels]);
+
+  // Anota cada linha com `__topmost` = canal no topo da pilha visível
+  // naquele dia (último canal não-zero na ordem de render). O LabelList em
+  // cada Bar verifica se ESTE canal é o topmost — se sim, desenha o total
+  // ali; senão, retorna null.
+  //
+  // Por que não LabelList no último Bar (orderedChannels[N-1])?
+  //   - Quando o último canal tem 0 num dia, o Bar não renderiza pra aquele
+  //     dia → LabelList ancorado nele desaparece → total some.
+  // Por que não Bar marker transparente com value=0?
+  //   - Mesmo problema: Recharts pula Bars com value=0, então o LabelList
+  //     ancorado também é pulado.
+  // A solução robusta é distribuir o LabelList por todos os Bars e cada um
+  // saber se é o "dono" do label naquele dia, via payload.__topmost.
+  const data = useMemo(() => {
+    return aggregated.data.map((row) => {
+      let topmost: string | undefined;
+      for (const ch of orderedChannels) {
+        if (Number(row[ch] ?? 0) > 0) topmost = ch;
+      }
+      return { ...row, __topmost: topmost };
+    });
+  }, [aggregated.data, orderedChannels]);
+
+  // Factory pra render do label do total — uma função nomeada por Bar
+  // (nome serve de displayName, sai do lint react/display-name). O param
+  // é `unknown` porque o tipo do Recharts é amplo demais pra anotar bem;
+  // narrowing defensivo dentro do corpo.
+  const renderTotalLabel = (channelName: string) => {
+    function TotalLabel(raw: unknown) {
+      const r = (raw ?? {}) as LabelContentProps;
+      const payload = r.payload as
+        | { __topmost?: string; __total?: number }
+        | undefined;
+      if (!payload || payload.__topmost !== channelName) return null;
+      const total = Number(payload.__total);
+      if (!Number.isFinite(total) || total <= 0) return null;
+      const x = Number(r.x ?? 0);
+      const y = Number(r.y ?? 0);
+      const width = Number(r.width ?? 0);
+      return (
+        <text
+          x={x + width / 2}
+          y={y - 6}
+          textAnchor="middle"
+          style={{
+            fontSize: 10,
+            fontFamily: "var(--font-mono, monospace)",
+            fontWeight: 600,
+            fill: "var(--foreground)",
+          }}
+        >
+          {total}
+        </text>
+      );
+    }
+    return TotalLabel;
+  };
 
   return (
     <Card className="lg:col-span-2">
@@ -141,10 +204,13 @@ export function VolumePorDiaChart({
               }
             >
               <SelectTrigger className="h-8 w-44">
-                {/* Radix exibe automaticamente os children do SelectItem
-                    selecionado — como TODOS tem children "Todos", o trigger
-                    renderiza "Todos" sem precisar de placeholder/render-prop. */}
-                <SelectValue placeholder="Todos" />
+                {/* children explícito sobrescreve o display do Radix —
+                    garante que mostra "Todos" mesmo se a resolução do
+                    ItemText falhar (timing de portal, hidratação, etc).
+                    Antes: placeholder não disparava porque value=TODOS
+                    é uma string non-empty → Radix tentava resolver o
+                    ItemText e mostrava o valor cru `__todos__`. */}
+                <SelectValue>{selectedCanal ?? "Todos"}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={TODOS}>Todos</SelectItem>
@@ -211,9 +277,9 @@ export function VolumePorDiaChart({
                     fill: "color-mix(in oklch, var(--foreground) 5%, transparent)",
                   }}
                   filterNull
-                  // Esconde o marker invisível e __total do tooltip.
+                  // Esconde keys internas (__total, __topmost) do tooltip.
                   formatter={(value, name) => {
-                    if (name === TOTAL_MARKER_KEY || name === "__total") {
+                    if (typeof name === "string" && name.startsWith("__")) {
                       return ["", ""];
                     }
                     return [value, name];
@@ -236,35 +302,17 @@ export function VolumePorDiaChart({
                     stackId="vol"
                     fill={CHANNEL_COLOR[ch] ?? "#94a3b8"}
                     radius={i === orderedChannels.length - 1 ? [4, 4, 0, 0] : 0}
-                  />
+                  >
+                    {/* LabelList em CADA Bar — só renderiza o total quando
+                        ESTE canal é o topo da pilha visível naquele dia
+                        (via payload.__topmost). Garante que o label aparece
+                        sempre, em qualquer Bar do stack. */}
+                    <LabelList
+                      dataKey="__total"
+                      content={renderTotalLabel(ch)}
+                    />
+                  </Bar>
                 ))}
-                {/* Bar marker invisible (fill=transparent, valor=0) na mesma
-                    stackId. Renderiza por último → posiciona-se no topo da
-                    pilha real → LabelList "position=top" fica acima do total.
-                    Resolve o bug de total sumir quando o último canal não
-                    tem dado em algum dia. */}
-                <Bar
-                  dataKey={TOTAL_MARKER_KEY}
-                  stackId="vol"
-                  fill="transparent"
-                  legendType="none"
-                  isAnimationActive={false}
-                >
-                  <LabelList
-                    dataKey="__total"
-                    position="top"
-                    style={{
-                      fontSize: 10,
-                      fontFamily: "var(--font-mono, monospace)",
-                      fill: "var(--foreground)",
-                      fontWeight: 600,
-                    }}
-                    formatter={(value: unknown) => {
-                      const n = Number(value);
-                      return Number.isFinite(n) && n > 0 ? String(n) : "";
-                    }}
-                  />
-                </Bar>
               </BarChart>
             )}
           </ChartFrame>
@@ -279,7 +327,8 @@ export function VolumePorDiaChart({
 // ============================================================================
 // Recebe rows granulares (dia × channel × desqualificado) e produz a
 // estrutura que o BarChart espera (linha por dia, coluna por channel +
-// `__total` pro label + `__total_marker=0` pra trigger do LabelList).
+// `__total` pro label). O campo `__topmost` é anotado depois no componente,
+// pq depende da ordem de render dos canais (orderedChannels).
 
 function aggregate(
   rows: VolumePorDiaRow[],
@@ -304,7 +353,7 @@ function aggregate(
     totalNoPeriodo += r.count;
   }
 
-  // Preenche canais ausentes com 0 + adiciona __total e __total_marker
+  // Preenche canais ausentes com 0 e adiciona __total agregado por dia.
   const sorted = Array.from(days.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dia, dayRow]) => {
@@ -316,7 +365,6 @@ function aggregate(
         total += v;
       }
       out.__total = total;
-      out[TOTAL_MARKER_KEY] = 0; // marker invisível pra posicionar o label
       return out;
     });
 
