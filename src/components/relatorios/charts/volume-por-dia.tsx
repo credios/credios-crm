@@ -7,9 +7,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Customized,
   Legend,
   Tooltip,
+  useXAxisScale,
+  useYAxisScale,
   XAxis,
   YAxis,
 } from "recharts";
@@ -77,16 +78,58 @@ const CHANNEL_RENDER_ORDER: string[] = [
   "Sem canal",
 ];
 
-// Shape mínimo dos props que `<Customized>` injeta no componente — Recharts
-// passa o estado interno do chart (xAxisMap, yAxisMap, etc) via cloneElement.
-// Tipagem solta porque Recharts tipa internamente como `any`.
-type CustomizedProps = {
-  xAxisMap?: Record<
-    string,
-    { scale?: ((v: string | number) => number) & { bandwidth?: () => number } }
-  >;
-  yAxisMap?: Record<string, { scale?: (v: number) => number }>;
-};
+// ============================================================================
+// TotalsLayer — desenha o total de cada dia acima da barra empilhada.
+// ============================================================================
+// Vive como filho direto do BarChart pra acessar o contexto via hooks do
+// Recharts 3 (useXAxisScale/useYAxisScale, since 3.8). As escalas são
+// funções d3 que mapeiam valor → pixel. Pra eixo categórico (band scale),
+// passamos `position: "middle"` pra obter o centro da banda direto.
+//
+// Por que não <Customized>?
+//   - Customized está deprecated em Recharts 3.x ("just render directly").
+//     Tentei usar mas o shape antigo (xAxisMap/yAxisMap nos props) não
+//     existe mais — a função recebia props vazios e nada renderizava.
+//   - A API moderna são os hooks, que funcionam como qualquer hook React
+//     dentro de um componente filho do chart.
+function TotalsLayer({
+  data,
+}: {
+  data: Array<Record<string, string | number>>;
+}) {
+  const xScale = useXAxisScale();
+  const yScale = useYAxisScale();
+  if (!xScale || !yScale) return null;
+  return (
+    // pointerEvents:none → não bloqueia o hover/tooltip dos Bars abaixo.
+    <g style={{ pointerEvents: "none" }}>
+      {data.map((row) => {
+        const total = Number(row.__total ?? 0);
+        if (!Number.isFinite(total) || total <= 0) return null;
+        const dia = String(row.dia ?? "");
+        const x = xScale(dia, { position: "middle" });
+        const y = yScale(total);
+        if (typeof x !== "number" || typeof y !== "number") return null;
+        return (
+          <text
+            key={dia}
+            x={x}
+            y={y - 6}
+            textAnchor="middle"
+            style={{
+              fontSize: 10,
+              fontFamily: "var(--font-mono, monospace)",
+              fontWeight: 600,
+              fill: "var(--foreground)",
+            }}
+          >
+            {total}
+          </text>
+        );
+      })}
+    </g>
+  );
+}
 
 export function VolumePorDiaChart({
   rows,
@@ -119,63 +162,6 @@ export function VolumePorDiaChart({
   }, [channels]);
 
   const data = aggregated.data;
-
-  // Layer customizado que desenha o total de cada dia como SVG <text>,
-  // posicionado via as escalas x/y computadas pelo Recharts. Independente
-  // do render individual de cada Bar — funciona mesmo quando o canal no
-  // topo varia dia-a-dia, ou quando barras têm value=0.
-  //
-  // Por que não LabelList?
-  //   - LabelList ancorado num Bar específico só renderiza pra dias em
-  //     que aquele Bar tem value > 0. Pra um stack heterogêneo, nenhum
-  //     Bar é "topo" em todos os dias → total some em alguns.
-  //   - Customized renderiza UMA vez por chart, usando as escalas para
-  //     calcular a posição correta de cada label.
-  //
-  // Closure: `data` é capturado do componente — quando muda, o componente
-  // re-renderiza, Recharts re-clona <Customized> com nova função.
-  const TotalsLayer = (raw: unknown) => {
-    const p = raw as CustomizedProps;
-    const xAxis = p.xAxisMap ? Object.values(p.xAxisMap)[0] : undefined;
-    const yAxis = p.yAxisMap ? Object.values(p.yAxisMap)[0] : undefined;
-    const xScale = xAxis?.scale;
-    const yScale = yAxis?.scale;
-    if (typeof xScale !== "function" || typeof yScale !== "function") {
-      return null;
-    }
-    return (
-      // pointerEvents:none → não bloqueia o hover/tooltip dos Bars abaixo.
-      <g style={{ pointerEvents: "none" }}>
-        {data.map((row) => {
-          const total = Number(row.__total ?? 0);
-          if (!Number.isFinite(total) || total <= 0) return null;
-          const dia = String(row.dia ?? "");
-          const xBase = xScale(dia);
-          if (typeof xBase !== "number" || !Number.isFinite(xBase)) return null;
-          const bw =
-            typeof xScale.bandwidth === "function" ? xScale.bandwidth() : 0;
-          const yPos = yScale(total);
-          if (typeof yPos !== "number" || !Number.isFinite(yPos)) return null;
-          return (
-            <text
-              key={dia}
-              x={xBase + bw / 2}
-              y={yPos - 6}
-              textAnchor="middle"
-              style={{
-                fontSize: 10,
-                fontFamily: "var(--font-mono, monospace)",
-                fontWeight: 600,
-                fill: "var(--foreground)",
-              }}
-            >
-              {total}
-            </text>
-          );
-        })}
-      </g>
-    );
-  };
 
   return (
     <Card className="lg:col-span-2">
@@ -298,9 +284,10 @@ export function VolumePorDiaChart({
                     radius={i === orderedChannels.length - 1 ? [4, 4, 0, 0] : 0}
                   />
                 ))}
-                {/* Layer dos totais: desenhado por cima dos Bars usando as
-                    escalas do chart. Renderiza uma única vez (não por Bar). */}
-                <Customized component={TotalsLayer} />
+                {/* Totais por dia, desenhados acima das pilhas. Componente
+                    filho direto do BarChart pra acessar useXAxisScale/
+                    useYAxisScale do Recharts 3. */}
+                <TotalsLayer data={data} />
               </BarChart>
             )}
           </ChartFrame>
