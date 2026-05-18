@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, ne, notInArray, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
@@ -378,11 +378,17 @@ export async function fetchVolumePorDia(
 ): Promise<VolumePorDiaRow[]> {
   // Conditions extra:
   //   - se filters.canal preenchido, restringe àquele canal específico
+  //   - se filters.excluirDesq, omite status='desqualificado' (admin quer
+  //     ver só leads que entraram no funil de verdade — útil pra avaliar
+  //     volume "limpo" sem ruído da triagem)
   //   - lead.channel null vira "Sem canal" (fallback defensivo pra leads
   //     antigos pré-migration 0017 que possam ter ficado sem classificação)
   const extraConds = [];
   if (filters.canal) {
     extraConds.push(eq(leads.channel, filters.canal));
+  }
+  if (filters.excluirDesq) {
+    extraConds.push(ne(leads.status, "desqualificado"));
   }
 
   const rows = await db

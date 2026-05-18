@@ -386,7 +386,11 @@ async function VolumeSection({
   return renderSection("Volume por dia", async () => {
     const rows = await fetchVolumePorDia(filters, period);
     return (
-      <VolumePorDiaChart rows={rows} selectedCanal={filters.canal ?? undefined} />
+      <VolumePorDiaChart
+        rows={rows}
+        selectedCanal={filters.canal ?? undefined}
+        excluirDesq={filters.excluirDesq ?? false}
+      />
     );
   });
 }
