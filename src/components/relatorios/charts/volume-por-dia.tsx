@@ -30,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import type { VolumePorDiaRow } from "@/lib/reports/queries";
 import { CHANNELS } from "@/lib/tracking/taxonomy";
 
@@ -47,6 +48,8 @@ type Props = {
   rows: VolumePorDiaRow[];
   /** Canal atualmente filtrado (vem da URL). undefined = "Todos". */
   selectedCanal?: string;
+  /** Se true, query já omitiu leads desqualificados — toggle reflete isso. */
+  excluirDesq?: boolean;
 };
 
 // Sentinela do dropdown — Select não aceita string vazia como value
@@ -71,7 +74,11 @@ const CHANNEL_RENDER_ORDER: string[] = [
   "Sem canal",
 ];
 
-export function VolumePorDiaChart({ rows, selectedCanal }: Props) {
+export function VolumePorDiaChart({
+  rows,
+  selectedCanal,
+  excluirDesq = false,
+}: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -100,6 +107,15 @@ export function VolumePorDiaChart({ rows, selectedCanal }: Props) {
     });
   }
 
+  function setExcluirDesq(checked: boolean) {
+    const next = new URLSearchParams(params.toString());
+    if (checked) next.set("excluirDesq", "1");
+    else next.delete("excluirDesq");
+    startTransition(() => {
+      router.replace(`${pathname}?${next.toString()}`);
+    });
+  }
+
   // Ordena os canais pra render usando CHANNEL_RENDER_ORDER (fixa).
   // Channels que não estão na lista fixa (ex: novo canal customizado) caem
   // no fim em ordem alfabética — defensivo.
@@ -117,31 +133,49 @@ export function VolumePorDiaChart({ rows, selectedCanal }: Props) {
 
   return (
     <Card className="lg:col-span-2">
-      <CardHeader className="flex flex-row items-start justify-between gap-3">
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <CardTitle className="text-base">Leads por dia</CardTitle>
           <CardDescription>
             {totalNoPeriodo} leads no período · barras empilhadas por canal
+            {excluirDesq && " · sem desqualificados"}
           </CardDescription>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Label className="text-xs text-muted-foreground">Canal</Label>
-          <Select
-            value={selectedCanal ?? TODOS}
-            onValueChange={(v) => setCanal(v ?? TODOS)}
-          >
-            <SelectTrigger className="h-8 w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODOS}>Todos os canais</SelectItem>
-              {CHANNELS.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 shrink-0">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Switch
+              checked={excluirDesq}
+              onCheckedChange={setExcluirDesq}
+              aria-label="Excluir leads desqualificados"
+            />
+            Esconder desqualificados
+          </label>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground">Canal</Label>
+            <Select
+              value={selectedCanal ?? TODOS}
+              onValueChange={(v) => setCanal(v ?? TODOS)}
+            >
+              <SelectTrigger className="h-8 w-44">
+                {/* Render-prop pro SelectValue não mostrar a sentinela
+                    "__todos__" literalmente. Value=TODOS → label "Todos". */}
+                <SelectValue>
+                  {(v: unknown) => {
+                    if (typeof v !== "string" || v === TODOS) return "Todos";
+                    return v;
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS}>Todos</SelectItem>
+                {CHANNELS.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

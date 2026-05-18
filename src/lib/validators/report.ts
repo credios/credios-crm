@@ -56,6 +56,11 @@ export const reportFiltersSchema = z.object({
   // de uso é "isolar 1 canal" (ex: ver só AI Assistant ou só Paid Search).
   canal: z.string().optional(),
 
+  // Toggle do gráfico "Leads por dia": esconde leads com status='desqualificado'
+  // pra admin ver apenas leads que entraram no funil sem cair na triagem.
+  // URL: ?excluirDesq=1 (URLSearchParams trata "0"/"" como falsy via coerce).
+  excluirDesq: z.coerce.boolean().optional(),
+
   // Modo de comparação (página executiva).
   comparar: z.enum(COMPARACAO_MODES).default("anterior_equivalente"),
 });
