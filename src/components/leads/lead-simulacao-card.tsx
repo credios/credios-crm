@@ -79,8 +79,11 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
   );
   const [creditAmount, setCreditAmount] = useState<number>(defaultCredito);
   const [propertyValue, setPropertyValue] = useState<number>(defaultImovel);
-  const [interestRate, setInterestRate] = useState<string>("1.19"); // % a.m.
-  const [installments, setInstallments] = useState<number>(180);
+  // Defaults da política Credios: taxa 1,09% a.m. + prazo 240m em PRICE
+  // pós-fixado (IPCA+). O consultor edita à vontade quando o cliente pede
+  // simulação com parâmetros diferentes.
+  const [interestRate, setInterestRate] = useState<string>("1.09"); // % a.m.
+  const [installments, setInstallments] = useState<number>(240);
   const [amortizationType, setAmortizationType] =
     useState<AmortizationType>("price");
   const [indexation, setIndexation] = useState<Indexation>("pos");
@@ -347,7 +350,7 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
               step="0.01"
               value={interestRate}
               onChange={(e) => setInterestRate(e.currentTarget.value)}
-              placeholder="1.19"
+              placeholder="1.09"
             />
           </div>
           <div className="space-y-1.5">
@@ -363,7 +366,7 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
                   e.currentTarget.value === "" ? 0 : Number(e.currentTarget.value),
                 )
               }
-              placeholder="180"
+              placeholder="240"
             />
           </div>
           <div className="space-y-1.5">
