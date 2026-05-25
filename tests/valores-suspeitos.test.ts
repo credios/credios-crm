@@ -7,6 +7,7 @@ import {
   THRESHOLD_CREDITO_REAIS,
   THRESHOLD_IMOVEL_REAIS,
   THRESHOLD_RENDA_REAIS,
+  THRESHOLD_SALDO_REAIS,
 } from "@/lib/leads/valores-suspeitos";
 
 describe("detectarValoresSuspeitos", () => {
@@ -34,9 +35,21 @@ describe("detectarValoresSuspeitos", () => {
     const result = detectarValoresSuspeitos({
       rendaMensal: THRESHOLD_RENDA_REAIS,
       valorImovel: THRESHOLD_IMOVEL_REAIS,
+      saldoDevedor: THRESHOLD_SALDO_REAIS,
       valorCredito: THRESHOLD_CREDITO_REAIS,
     });
     expect(result).toBeNull();
+  });
+
+  it("marca saldo devedor quando estoura R$ 5M", () => {
+    const result = detectarValoresSuspeitos({
+      rendaMensal: 15_000,
+      valorImovel: 800_000,
+      saldoDevedor: 200_000_000,
+      valorCredito: 300_000,
+    });
+    expect(result?.campos).toEqual({ saldo: true });
+    expect(result?.valoresOriginais.saldo).toBe(200_000_000);
   });
 
   it("marca renda quando estoura R$ 1M", () => {
@@ -73,11 +86,13 @@ describe("detectarValoresSuspeitos", () => {
     const result = detectarValoresSuspeitos({
       rendaMensal: 6_000_000,
       valorImovel: 110_000_000,
+      saldoDevedor: 71_374_000,
       valorCredito: 30_000_000,
     });
     expect(result?.campos).toEqual({
       renda: true,
       imovel: true,
+      saldo: true,
       credito: true,
     });
   });
@@ -88,6 +103,7 @@ describe("calcularValoresCorrigidos", () => {
     const input = {
       rendaMensal: 6_000_000,
       valorImovel: 110_000_000,
+      saldoDevedor: 200_000, // dentro do threshold (R$ 5M)
       valorCredito: 25_000, // dentro do threshold
     };
     const suspeitos = detectarValoresSuspeitos(input)!;
@@ -96,7 +112,22 @@ describe("calcularValoresCorrigidos", () => {
     const corrigidos = calcularValoresCorrigidos(input, suspeitos);
     expect(corrigidos.rendaMensal).toBe(6_000);
     expect(corrigidos.valorImovel).toBe(110_000);
+    expect(corrigidos.saldoDevedor).toBe(200_000); // intacto
     expect(corrigidos.valorCredito).toBe(25_000); // intacto
+  });
+
+  it("corrige saldo devedor quando estourou", () => {
+    const input = {
+      rendaMensal: 15_000,
+      valorImovel: 800_000,
+      saldoDevedor: 71_374_000, // estourado
+      valorCredito: 300_000,
+    };
+    const suspeitos = detectarValoresSuspeitos(input)!;
+    expect(suspeitos.campos).toEqual({ saldo: true });
+    const corrigidos = calcularValoresCorrigidos(input, suspeitos);
+    expect(corrigidos.saldoDevedor).toBe(71_374);
+    expect(corrigidos.rendaMensal).toBe(15_000); // intacto
   });
 
   it("preserva nulls em campos não informados", () => {
@@ -121,13 +152,16 @@ describe("listarCamposSuspeitos", () => {
     const input = {
       rendaMensal: 6_000_000,
       valorImovel: 110_000_000,
+      saldoDevedor: 71_374_000,
       valorCredito: 25_000,
     };
     const suspeitos = detectarValoresSuspeitos(input)!;
     const lista = listarCamposSuspeitos(suspeitos);
+    // Ordem canônica: renda → imovel → saldo → credito.
     expect(lista).toEqual([
       { campo: "renda", valor: 6_000_000 },
       { campo: "imovel", valor: 110_000_000 },
+      { campo: "saldo", valor: 71_374_000 },
     ]);
   });
 });

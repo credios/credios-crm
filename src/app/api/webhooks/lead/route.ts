@@ -185,6 +185,7 @@ export async function POST(request: NextRequest) {
     const valoresSuspeitos = detectarValoresSuspeitos({
       rendaMensal: payload.renda_mensal ?? null,
       valorImovel: payload.valor_imovel ?? null,
+      saldoDevedor: payload.saldo_devedor ?? null,
       valorCredito: payload.valor_credito ?? null,
     });
 
