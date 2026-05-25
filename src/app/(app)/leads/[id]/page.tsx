@@ -22,6 +22,7 @@ import {
 import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
 import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
 import { MensagensSugeridas } from "@/components/leads/mensagens-sugeridas";
+import { ValoresSuspeitosBanner } from "@/components/leads/valores-suspeitos-banner";
 import {
   SkeletonLeadBancos,
   SkeletonTimeline,
@@ -29,9 +30,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
-import { checkPermission } from "@/lib/auth/permissions";
+import { checkPermission, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { listConsultoresAtivos } from "@/lib/leads/list-leads";
+import type { ValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { listActiveStatuses } from "@/lib/status/queries";
 
 type Props = { params: Promise<{ id: string }> };
@@ -125,8 +127,22 @@ export default async function LeadDetailPage({ params }: Props) {
   });
   const canDeleteAnotacao = checkPermission(user, "lead_anotacao.delete");
 
+  // Banner de valores suspeitos: só pra admin/gerente, só quando flag está
+  // ativa e ainda não foi revisada. Some assim que admin decide (router.refresh).
+  const mostrarValoresSuspeitos =
+    isAdminOrGerente(user) &&
+    row.valoresSuspeitos != null &&
+    row.valoresRevisadoEm == null;
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {mostrarValoresSuspeitos && (
+        <ValoresSuspeitosBanner
+          leadId={lead.id}
+          valoresSuspeitos={row.valoresSuspeitos as ValoresSuspeitos}
+        />
+      )}
+
       {/* Header — depende de statuses ativos. Streaming pra não bloquear. */}
       <Suspense fallback={<HeaderSkeleton />}>
         <HeaderBlock

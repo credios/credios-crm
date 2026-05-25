@@ -83,6 +83,12 @@ export function LeadList({ result, consultores, sources, isAdmin }: Props) {
           const cold = isEsfriando(row.original.ultimoContato);
           return (
             <div className="flex items-center gap-2">
+              {row.original.valoresSuspeitosPendentes && (
+                <AlertTriangle
+                  className="size-4 text-gold-600 dark:text-gold-400 shrink-0"
+                  aria-label="Valores suspeitos: aguardando revisão"
+                />
+              )}
               {row.original.slaAtrasado && (
                 <AlertTriangle
                   className="size-4 text-destructive shrink-0"

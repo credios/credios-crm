@@ -227,6 +227,24 @@ export const leads = pgTable(
     comissaoCentavos: bigint("comissao_centavos", { mode: "number" }),
     dataFechamento: date("data_fechamento"),
 
+    // --- Detecção de valores suspeitos (migration 0025) ---
+    // Lead chega com renda > R$ 1M, imóvel > R$ 30M ou crédito > R$ 10M:
+    // quase sempre erro de digitação (cliente confundiu casas decimais).
+    // Marcamos pra revisão manual sem rejeitar o lead. UI no detalhe do
+    // lead permite aceitar (dividir os estourados por 1000) ou negar
+    // (valores realmente eram altos). Resolvido = `valores_revisado_em`
+    // preenchido.
+    valoresSuspeitos: jsonb("valores_suspeitos"),
+    valoresRevisadoEm: timestamp("valores_revisado_em", {
+      withTimezone: true,
+    }),
+    valoresRevisadoPor: uuid("valores_revisado_por").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    /** 'mantido' (admin/gerente confirmou valores) ou 'dividido_por_1000'. */
+    valoresRevisadoAcao: text("valores_revisado_acao"),
+
     // --- Auditoria ---
     rawPayload: jsonb("raw_payload"),
     // UUID do Notion (filename do .md exportado) — preenchido apenas em

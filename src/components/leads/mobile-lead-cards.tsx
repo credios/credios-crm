@@ -59,6 +59,13 @@ export function MobileLeadCards({ rows, emptyAction }: Props) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex items-center gap-1.5">
+                    {lead.valoresSuspeitosPendentes && (
+                      <AlertTriangle
+                        className="size-3.5 text-gold-600 dark:text-gold-400 shrink-0"
+                        aria-label="Valores suspeitos"
+                        strokeWidth={1.75}
+                      />
+                    )}
                     {lead.slaAtrasado && (
                       <AlertTriangle
                         className="size-3.5 text-destructive shrink-0"
