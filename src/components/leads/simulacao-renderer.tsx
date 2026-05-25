@@ -1,13 +1,13 @@
 "use client";
 
-import { ArrowLeft, Check, Copy, Download } from "lucide-react";
-import Link from "next/link";
+import { Check, Copy, Download } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { SimpleSimulationResult } from "@/lib/simulador/simple-simulator";
 
 import { SimpleSimulationPDF } from "./simple-simulation-pdf";
+import { VoltarProLeadButton } from "./voltar-pro-lead-button";
 
 // ═══════════════════════════════════════════════════════════
 // Wrapper client-side da página standalone do PDF.
@@ -84,22 +84,13 @@ export function SimulacaoRenderer({ result, leadId }: Props) {
           saída garantida para o consultor que abriu a simulação dentro do
           PWA (onde a setinha do topo só funciona se houver histórico). */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 print:hidden">
-        {/* `nativeButton={false}` + `render={<Link>}` é o padrão do Button
-            shadcn neste projeto pra renderizar como link (mesmo padrão
-            usado em /configuracoes/status). Mantém Link do Next pra evitar
-            reload desnecessário; se o consultor abriu em nova aba, este
-            Link traz pra ficha do lead na mesma aba (que já é descartável).
-            Se abriu same-window (PWA), volta exatamente igual. */}
-        <Button
-          variant="outline"
-          nativeButton={false}
-          render={
-            <Link href={`/leads/${leadId}`}>
-              <ArrowLeft className="size-4" />
-              Voltar pro lead
-            </Link>
-          }
-        />
+        {/* Botão "Voltar pro lead" decide a ação por contexto:
+            - Aba nova (browser): window.close() — usuário cai na aba
+              original que já mostra /leads/[id], evita poluir histórico
+              da nova aba (que causava loop com o BackButton do header).
+            - PWA / same-window: router.back() — não adiciona entrada.
+            - Sem histórico (deep link): router.push("/leads/[id]"). */}
+        <VoltarProLeadButton leadId={leadId} />
 
 
         <div className="flex items-center gap-3 text-sm">
