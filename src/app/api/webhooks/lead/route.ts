@@ -15,6 +15,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { dispatchCapi } from "@/lib/capi/dispatch";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
+import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import {
   sendLeadAssignedEmail,
   sendNewLeadEmail,
@@ -179,6 +180,14 @@ export async function POST(request: NextRequest) {
     // 7. Engine de roteamento (CLAUDE.md §6.4).
     routing = await aplicarRoteamento(contextFromWebhook(payload), realRoutingDeps);
 
+    // 7b. Detecção de valores monetários fora do range esperado. Lead é
+    // aceito normalmente — admin/gerente revisa via UI no /leads/[id].
+    const valoresSuspeitos = detectarValoresSuspeitos({
+      rendaMensal: payload.renda_mensal ?? null,
+      valorImovel: payload.valor_imovel ?? null,
+      valorCredito: payload.valor_credito ?? null,
+    });
+
     // 8. Insere lead.
     const inserted = await db
       .insert(leads)
@@ -205,6 +214,8 @@ export async function POST(request: NextRequest) {
       valorImovelCentavos: reaisParaCentavos(payload.valor_imovel),
       saldoDevedorCentavos: reaisParaCentavos(payload.saldo_devedor),
       valorCreditoCentavos: reaisParaCentavos(payload.valor_credito),
+      // Flag de revisão (migration 0025). Drizzle jsonb aceita objeto JS.
+      valoresSuspeitos: valoresSuspeitos as never,
       consultorId: routing.consultorId,
       atribuidoEm: routing.consultorId ? new Date() : null,
       // ── Tracking canônico (taxonomia hierárquica, migration 0017) ──────

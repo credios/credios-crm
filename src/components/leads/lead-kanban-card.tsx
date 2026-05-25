@@ -80,6 +80,16 @@ function LeadKanbanCardImpl({
           {lead.nome}
         </Link>
         <div className="flex items-center gap-1 shrink-0 mt-0.5">
+          {/* Valores suspeitos: vai em primeiro pq é qualidade do dado
+              em si (renda/imóvel/crédito potencialmente errados).
+              Cor gold em vez de destructive: erro de digitação ≠ urgência. */}
+          {lead.valoresSuspeitosPendentes && (
+            <AlertTriangle
+              className="size-3.5 text-gold-600 dark:text-gold-400"
+              aria-label="Valores suspeitos: aguardando revisão"
+              strokeWidth={1.75}
+            />
+          )}
           {lead.slaAtrasado && (
             <AlertTriangle
               className="size-3.5 text-destructive"

@@ -200,6 +200,12 @@ async function rawQuery(
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       valorImovelCentavos: leadsTable.valorImovelCentavos,
       rendaMensalCentavos: leadsTable.rendaMensalCentavos,
+      // Flag derivada: true quando webhook detectou valores fora do range
+      // e ninguém revisou ainda. Usada pra badge ⚠️ no Kanban/Lista.
+      valoresSuspeitosPendentes: sql<boolean>`
+        ${leadsTable.valoresSuspeitos} IS NOT NULL
+        AND ${leadsTable.valoresRevisadoEm} IS NULL
+      `,
       bancoAprovador: leadsTable.bancoAprovador,
       valorLiberadoCentavos: leadsTable.valorLiberadoCentavos,
       comissaoCentavos: leadsTable.comissaoCentavos,
