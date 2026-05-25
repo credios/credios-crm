@@ -6,8 +6,8 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { ensureBancoInteracao } from "@/lib/tasks/service";
-import { updateLeadBancoSchema } from "@/lib/validators/task";
+import { ensureBancoInteracao } from "@/lib/leads/bancos";
+import { updateLeadBancoSchema } from "@/lib/validators/banco";
 
 type Ctx = { params: Promise<{ id: string; bancoId: string }> };
 

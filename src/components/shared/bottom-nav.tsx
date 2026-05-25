@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardList, KanbanSquare, Search, User, Users } from "lucide-react";
+import { Flame, KanbanSquare, Search, User, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,9 +16,9 @@ type Item = {
 };
 
 const ITEMS: Item[] = [
+  { href: "/minha-mesa", label: "Mesa", icon: Flame, exact: true },
   { href: "/leads", label: "Leads", icon: Users, exact: true },
   { href: "/leads/kanban", label: "Kanban", icon: KanbanSquare },
-  { href: "/tarefas", label: "Tarefas", icon: ClipboardList },
   { href: "#search", label: "Buscar", icon: Search, asPaletteTrigger: true },
   { href: "/perfil", label: "Perfil", icon: User },
 ];

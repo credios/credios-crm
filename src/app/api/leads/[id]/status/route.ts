@@ -10,7 +10,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/tasks/service";
+import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads/bancos";
 import { updateStatusSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
