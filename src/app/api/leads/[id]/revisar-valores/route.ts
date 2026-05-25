@@ -106,6 +106,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       {
         rendaMensal: suspeitos.valoresOriginais.renda ?? null,
         valorImovel: suspeitos.valoresOriginais.imovel ?? null,
+        saldoDevedor: suspeitos.valoresOriginais.saldo ?? null,
         valorCredito: suspeitos.valoresOriginais.credito ?? null,
       },
       suspeitos,
@@ -123,6 +124,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       updateData.valorImovelCentavos = Math.round(corrigidos.valorImovel * 100);
       partes.push(
         `Valor do imóvel: R$ ${(suspeitos.valoresOriginais.imovel ?? 0).toLocaleString("pt-BR")} → R$ ${corrigidos.valorImovel.toLocaleString("pt-BR")}`,
+      );
+    }
+    if (suspeitos.campos.saldo && corrigidos.saldoDevedor != null) {
+      updateData.saldoDevedorCentavos = Math.round(
+        corrigidos.saldoDevedor * 100,
+      );
+      partes.push(
+        `Saldo devedor: R$ ${(suspeitos.valoresOriginais.saldo ?? 0).toLocaleString("pt-BR")} → R$ ${corrigidos.saldoDevedor.toLocaleString("pt-BR")}`,
       );
     }
     if (suspeitos.campos.credito && corrigidos.valorCredito != null) {

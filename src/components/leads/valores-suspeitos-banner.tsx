@@ -49,7 +49,7 @@ export function ValoresSuspeitosBanner({ leadId, valoresSuspeitos }: Props) {
   const [confirmingAcao, setConfirmingAcao] = useState<Acao | null>(null);
 
   const camposLista = (
-    ["renda", "imovel", "credito"] as const
+    ["renda", "imovel", "saldo", "credito"] as const
   ).filter((k) => valoresSuspeitos.campos[k]);
 
   function submit(acao: Acao) {

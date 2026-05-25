@@ -7,8 +7,9 @@
  * contato), aceitamos e marcamos pra revisão manual no CRM.
  *
  * Thresholds calibrados pra perfil Credios (CGI brasileiro):
- *   - Renda mensal: até R$ 1M (acima é raríssimo no público CGI).
- *   - Imóvel: até R$ 30M (acima é high-net-worth, fora do alvo).
+ *   - Renda mensal:    até R$ 1M  (acima é raríssimo no público CGI).
+ *   - Imóvel:          até R$ 30M (acima é high-net-worth, fora do alvo).
+ *   - Saldo devedor:   até R$ 5M  (raro: implica imóvel financiado > R$ 8M).
  *   - Crédito buscado: até R$ 10M (política CGI típica vai até ~R$ 3M).
  *
  * UI no CRM (`/leads/[id]`) mostra banner com 2 botões:
@@ -20,6 +21,7 @@
  *  pra centavos só no momento de salvar no banco. */
 export const THRESHOLD_RENDA_REAIS = 1_000_000; // R$ 1M/mês
 export const THRESHOLD_IMOVEL_REAIS = 30_000_000; // R$ 30M
+export const THRESHOLD_SALDO_REAIS = 5_000_000; // R$ 5M
 export const THRESHOLD_CREDITO_REAIS = 10_000_000; // R$ 10M
 
 export type ValoresInput = {
@@ -27,13 +29,22 @@ export type ValoresInput = {
   rendaMensal?: number | null;
   /** Em reais. */
   valorImovel?: number | null;
+  /** Em reais. Aplica apenas pra imóvel financiado. */
+  saldoDevedor?: number | null;
   /** Em reais. */
   valorCredito?: number | null;
 };
 
+/**
+ * União dos campos suportados — usar como key em vários maps abaixo.
+ * Mantém o tipo central pra evitar drift quando adicionar campos no futuro.
+ */
+export type CampoSuspeito = "renda" | "imovel" | "saldo" | "credito";
+
 export type CamposSuspeitos = {
   renda?: boolean;
   imovel?: boolean;
+  saldo?: boolean;
   credito?: boolean;
 };
 
@@ -44,12 +55,14 @@ export type ValoresSuspeitos = {
   valoresOriginais: {
     renda?: number;
     imovel?: number;
+    saldo?: number;
     credito?: number;
   };
   /** Limites usados na detecção — útil pra UI explicar o motivo. */
   thresholds: {
     renda: number;
     imovel: number;
+    saldo: number;
     credito: number;
   };
 };
@@ -79,6 +92,13 @@ export function detectarValoresSuspeitos(
     valoresOriginais.imovel = input.valorImovel;
   }
   if (
+    typeof input.saldoDevedor === "number" &&
+    input.saldoDevedor > THRESHOLD_SALDO_REAIS
+  ) {
+    campos.saldo = true;
+    valoresOriginais.saldo = input.saldoDevedor;
+  }
+  if (
     typeof input.valorCredito === "number" &&
     input.valorCredito > THRESHOLD_CREDITO_REAIS
   ) {
@@ -94,6 +114,7 @@ export function detectarValoresSuspeitos(
     thresholds: {
       renda: THRESHOLD_RENDA_REAIS,
       imovel: THRESHOLD_IMOVEL_REAIS,
+      saldo: THRESHOLD_SALDO_REAIS,
       credito: THRESHOLD_CREDITO_REAIS,
     },
   };
@@ -103,9 +124,9 @@ export function detectarValoresSuspeitos(
  * Calcula valores corrigidos (÷1000) apenas pros campos suspeitos.
  * Campos não suspeitos são preservados intactos. Saída em REAIS.
  *
- * Ex.: input { renda: 6_000_000, imovel: 110_000_000, credito: 30_000 }
- *      suspeitos: { renda: true, imovel: true } (credito NÃO marcou)
- *      → output { renda: 6_000, imovel: 110_000, credito: 30_000 }
+ * Ex.: input  { renda: 6_000_000, imovel: 110_000_000, saldo: 200_000, credito: 30_000 }
+ *      flags: { renda: true, imovel: true }  (saldo e credito NÃO marcaram)
+ *      out:   { renda: 6_000, imovel: 110_000, saldo: 200_000, credito: 30_000 }
  */
 export function calcularValoresCorrigidos(
   input: ValoresInput,
@@ -113,6 +134,7 @@ export function calcularValoresCorrigidos(
 ): {
   rendaMensal: number | null;
   valorImovel: number | null;
+  saldoDevedor: number | null;
   valorCredito: number | null;
 } {
   return {
@@ -124,6 +146,10 @@ export function calcularValoresCorrigidos(
       suspeitos.campos.imovel && typeof input.valorImovel === "number"
         ? Math.round(input.valorImovel / 1000)
         : (input.valorImovel ?? null),
+    saldoDevedor:
+      suspeitos.campos.saldo && typeof input.saldoDevedor === "number"
+        ? Math.round(input.saldoDevedor / 1000)
+        : (input.saldoDevedor ?? null),
     valorCredito:
       suspeitos.campos.credito && typeof input.valorCredito === "number"
         ? Math.round(input.valorCredito / 1000)
@@ -131,17 +157,22 @@ export function calcularValoresCorrigidos(
   };
 }
 
-/** Helper pra UI: lista campos com seus valores originais. */
+/**
+ * Helper pra UI: lista campos com seus valores originais, na ordem
+ * canônica em que devem aparecer no banner.
+ */
 export function listarCamposSuspeitos(
   suspeitos: ValoresSuspeitos,
-): Array<{ campo: "renda" | "imovel" | "credito"; valor: number }> {
-  const out: Array<{ campo: "renda" | "imovel" | "credito"; valor: number }> =
-    [];
+): Array<{ campo: CampoSuspeito; valor: number }> {
+  const out: Array<{ campo: CampoSuspeito; valor: number }> = [];
   if (suspeitos.campos.renda && suspeitos.valoresOriginais.renda != null) {
     out.push({ campo: "renda", valor: suspeitos.valoresOriginais.renda });
   }
   if (suspeitos.campos.imovel && suspeitos.valoresOriginais.imovel != null) {
     out.push({ campo: "imovel", valor: suspeitos.valoresOriginais.imovel });
+  }
+  if (suspeitos.campos.saldo && suspeitos.valoresOriginais.saldo != null) {
+    out.push({ campo: "saldo", valor: suspeitos.valoresOriginais.saldo });
   }
   if (suspeitos.campos.credito && suspeitos.valoresOriginais.credito != null) {
     out.push({ campo: "credito", valor: suspeitos.valoresOriginais.credito });
@@ -149,8 +180,9 @@ export function listarCamposSuspeitos(
   return out;
 }
 
-export const CAMPO_LABEL: Record<"renda" | "imovel" | "credito", string> = {
+export const CAMPO_LABEL: Record<CampoSuspeito, string> = {
   renda: "Renda mensal",
   imovel: "Valor do imóvel",
+  saldo: "Saldo devedor",
   credito: "Crédito buscado",
 };
