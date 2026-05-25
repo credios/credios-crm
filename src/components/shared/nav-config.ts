@@ -1,6 +1,5 @@
 import {
   Activity,
-  ClipboardList,
   Crown,
   Flame,
   Inbox,
@@ -53,7 +52,6 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { href: "/leads", label: "Leads", icon: Users, exact: true },
       { href: "/leads/kanban", label: "Kanban", icon: KanbanSquare },
-      { href: "/tarefas", label: "Tarefas", icon: ClipboardList },
       { href: "/meu-desempenho", label: "Meu desempenho", icon: TrendingUp },
     ],
   },
@@ -125,10 +123,6 @@ export const ROUTE_META: Record<string, SimpleNavMeta> = {
   "/meu-desempenho": {
     title: "Meu desempenho",
     description: "Métricas pessoais e pipeline",
-  },
-  "/tarefas": {
-    title: "Tarefas",
-    description: "Follow-ups e pendências do dia",
   },
   "/admin/leads-novos": {
     title: "Leads novos",

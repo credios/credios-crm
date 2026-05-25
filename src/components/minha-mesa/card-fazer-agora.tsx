@@ -21,7 +21,6 @@ const MOTIVO_TONE: Record<
   { border: string; pill: "danger" | "warning" | "info" | "secondary" }
 > = {
   sla_estourado: { border: "border-l-destructive", pill: "danger" },
-  tarefa_atrasada: { border: "border-l-destructive", pill: "danger" },
   novo_hoje: { border: "border-l-blue-500", pill: "info" },
   docs_paradas: { border: "border-l-amber-500", pill: "warning" },
   negociacao_parada: { border: "border-l-amber-500", pill: "warning" },

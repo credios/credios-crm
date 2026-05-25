@@ -8,11 +8,6 @@ import {
   renderNewLeadEmail,
 } from "@/lib/notifications/email";
 import { renderSlaAlertEmail } from "@/lib/sla/notify";
-import {
-  renderDailyTasksEmail,
-  renderManagerSummaryEmail,
-  renderOverdueTasksEmail,
-} from "@/lib/tasks/email";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -89,14 +84,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ to, results });
 }
 
-type TestType =
-  | "daily"
-  | "manager"
-  | "overdue"
-  | "sla"
-  | "new-lead"
-  | "lead-assigned"
-  | "all";
+type TestType = "sla" | "new-lead" | "lead-assigned" | "all";
 
 async function buildSamples(adminNome: string): Promise<
   Record<Exclude<TestType, "all">, { subject: string; html: string }>
@@ -174,58 +162,6 @@ async function buildSamples(adminNome: string): Promise<
     createdBy: null,
   };
 
-  const fakeTask = (
-    over: Partial<{
-      id: string;
-      leadNome: string;
-      titulo: string;
-      status: "aberta" | "atrasada" | "concluida";
-      valor: number;
-    }> = {},
-  ) => ({
-    id: over.id ?? "task-1",
-    leadId: "00000000-0000-0000-0000-000000000001",
-    leadNome: over.leadNome ?? "Maria da Silva (TESTE)",
-    titulo: over.titulo ?? "Fazer acompanhamento do lead",
-    descricao: null,
-    status: over.status ?? "aberta",
-    consultorId: "consultor-1",
-    consultorNome: "Rodrigo (TESTE)",
-    leadStatus: "novo",
-    valorCreditoCentavos: over.valor ?? 35000000,
-    origem: "Google",
-    dataReferencia: new Date().toISOString().slice(0, 10),
-    venceEm: new Date(),
-    concluidaEm: null,
-    acaoConclusao: null,
-    observacaoConclusao: null,
-    createdAt: new Date(),
-  });
-
-  const tasks = [
-    fakeTask({ id: "t1", titulo: "Cobrar documentação" }),
-    fakeTask({
-      id: "t2",
-      leadNome: "João Pedro (TESTE)",
-      titulo: "Retornar ligação",
-      valor: 15000000,
-    }),
-  ];
-  const atrasadas = [
-    fakeTask({
-      id: "t3",
-      leadNome: "Carlos Santos (TESTE)",
-      titulo: "Atualizar status no banco parceiro",
-      status: "atrasada",
-      valor: 65000000,
-    }),
-  ];
-
-  const stats = [
-    { consultorId: "u1", consultorNome: "Rodrigo (TESTE)", total: 12, abertas: 5, atrasadas: 2, concluidas: 5 },
-    { consultorId: "u2", consultorNome: "Ana Maria (TESTE)", total: 8, abertas: 1, atrasadas: 0, concluidas: 7 },
-  ];
-
   const slaAlerts = [
     {
       alertaId: "alert-1",
@@ -244,33 +180,6 @@ async function buildSamples(adminNome: string): Promise<
   ];
 
   return {
-    daily: {
-      subject: "Suas tarefas no CRM Credios — sample",
-      html: renderDailyTasksEmail({
-        consultorNome: adminNome,
-        tasks,
-        atrasadas,
-        destaque: [
-          {
-            consultor_id: "u1",
-            lead_id: "00000000-0000-0000-0000-000000000099",
-            lead_nome: "Lead que ficou no Novo (TESTE)",
-            valor_credito_centavos: "42000000",
-          },
-        ],
-      }),
-    },
-    manager: {
-      subject: "Resumo de tarefas da equipe — sample",
-      html: renderManagerSummaryEmail({
-        dataReferencia: new Date().toISOString().slice(0, 10),
-        stats,
-      }),
-    },
-    overdue: {
-      subject: "1 tarefa atrasada no CRM — sample",
-      html: renderOverdueTasksEmail({ overdue: atrasadas }),
-    },
     sla: {
       subject: "2 leads sem 1º contato (>30min) — sample",
       html: renderSlaAlertEmail({ novos: slaAlerts }),

@@ -1,8 +1,6 @@
 import {
   AlertTriangle,
-  CheckCircle2,
   Inbox,
-  ListTodo,
   PhoneCall,
   Wallet,
   type LucideIcon,
@@ -16,19 +14,7 @@ type Props = { data: MiniPlacarData };
 
 export function MiniPlacar({ data }: Props) {
   return (
-    <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-      <Cell
-        icon={ListTodo}
-        label="Tarefas hoje"
-        value={String(data.tarefasHojeAbertas)}
-        tone={data.tarefasHojeAbertas > 0 ? "primary" : "neutral"}
-      />
-      <Cell
-        icon={CheckCircle2}
-        label="Concluídas hoje"
-        value={String(data.tarefasHojeConcluidas)}
-        tone={data.tarefasHojeConcluidas > 0 ? "success" : "neutral"}
-      />
+    <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
       <Cell
         icon={Inbox}
         label="Novos 24h"

@@ -5,7 +5,6 @@ import {
   desc,
   eq,
   gte,
-  inArray,
   isNull,
   lt,
   notInArray,
@@ -17,7 +16,6 @@ import {
   interacoes,
   leads as leadsTable,
   slaAlertas,
-  tarefas,
 } from "../../../db/schema";
 import { db } from "@/lib/db";
 import { startOfDayBrt, todayYmdBrt } from "@/lib/datetime/brt";
@@ -28,7 +26,6 @@ import { startOfDayBrt, todayYmdBrt } from "@/lib/datetime/brt";
 
 export type FilaItemTipo =
   | "sla_estourado"
-  | "tarefa_atrasada"
   | "novo_hoje"
   | "docs_paradas"
   | "negociacao_parada"
@@ -48,13 +45,10 @@ export type FilaItem = {
   motivoTipo: FilaItemTipo;
   /** 0..100 — maior é mais urgente. */
   score: number;
-  /** Preenchido quando o motivo veio de uma tarefa específica. */
-  tarefaId: string | null;
 };
 
 const SCORE: Record<FilaItemTipo, number> = {
   sla_estourado: 100,
-  tarefa_atrasada: 90,
   novo_hoje: 85,
   docs_paradas: 80,
   negociacao_parada: 75,
@@ -70,29 +64,20 @@ const STATUS_TERMINAIS = ["fechado", "perdido", "desqualificado"];
 // ============================================================================
 
 export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]> {
-  // 7 buckets em paralelo. Mesclamos no JS escolhendo o motivo de maior
+  // 6 buckets em paralelo. Mesclamos no JS escolhendo o motivo de maior
   // prioridade por lead — evita o mesmo lead aparecer duas vezes.
-  const [
-    sla,
-    tarefasAtrasadasRows,
-    novosHoje,
-    docsParadas,
-    negociacaoParada,
-    esfriando,
-    altoValorParado,
-  ] = await Promise.all([
-    qSlaEstourado(consultorId),
-    qTarefasAtrasadas(consultorId),
-    qNovosHoje(consultorId),
-    qDocsParadas(consultorId),
-    qNegociacaoParada(consultorId),
-    qEsfriando(consultorId),
-    qAltoValorParado(consultorId),
-  ]);
+  const [sla, novosHoje, docsParadas, negociacaoParada, esfriando, altoValorParado] =
+    await Promise.all([
+      qSlaEstourado(consultorId),
+      qNovosHoje(consultorId),
+      qDocsParadas(consultorId),
+      qNegociacaoParada(consultorId),
+      qEsfriando(consultorId),
+      qAltoValorParado(consultorId),
+    ]);
 
   const todos: FilaItem[] = [
     ...sla,
-    ...tarefasAtrasadasRows,
     ...novosHoje,
     ...docsParadas,
     ...negociacaoParada,
@@ -153,49 +138,8 @@ async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
           : "SLA estourado · sem 1º contato",
       motivoTipo: "sla_estourado",
       score: SCORE.sla_estourado,
-      tarefaId: null,
     };
   });
-}
-
-async function qTarefasAtrasadas(consultorId: string): Promise<FilaItem[]> {
-  const rows = await db
-    .select({
-      tarefaId: tarefas.id,
-      titulo: tarefas.titulo,
-      leadId: leadsTable.id,
-      leadNome: leadsTable.nome,
-      whatsapp: leadsTable.whatsapp,
-      status: leadsTable.status,
-      origem: leadsTable.origem,
-      cidade: leadsTable.cidade,
-      estado: leadsTable.estado,
-      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
-    })
-    .from(tarefas)
-    .innerJoin(leadsTable, eq(leadsTable.id, tarefas.leadId))
-    .where(
-      and(
-        eq(tarefas.consultorId, consultorId),
-        eq(tarefas.status, "atrasada"),
-      ),
-    )
-    .orderBy(desc(tarefas.venceEm))
-    .limit(30);
-  return rows.map((r) => ({
-    leadId: r.leadId,
-    leadNome: r.leadNome,
-    whatsapp: r.whatsapp,
-    status: r.status,
-    origem: r.origem,
-      cidade: r.cidade,
-      estado: r.estado,
-    valorCreditoCentavos: r.valorCreditoCentavos,
-    motivo: `Tarefa atrasada · ${r.titulo}`,
-    motivoTipo: "tarefa_atrasada",
-    score: SCORE.tarefa_atrasada,
-    tarefaId: r.tarefaId,
-  }));
 }
 
 async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
@@ -236,7 +180,6 @@ async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
       : "Novo · recebido hoje",
     motivoTipo: "novo_hoje",
     score: SCORE.novo_hoje,
-    tarefaId: null,
   }));
 }
 
@@ -284,7 +227,6 @@ async function qDocsParadas(consultorId: string): Promise<FilaItem[]> {
           : "Aguardando documentação · sem contato registrado",
       motivoTipo: "docs_paradas",
       score: SCORE.docs_paradas,
-      tarefaId: null,
     };
   });
 }
@@ -328,7 +270,6 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
       motivo: `Em negociação parada há ${dias}d`,
       motivoTipo: "negociacao_parada",
       score: SCORE.negociacao_parada,
-      tarefaId: null,
     };
   });
 }
@@ -383,7 +324,6 @@ async function qEsfriando(consultorId: string): Promise<FilaItem[]> {
           : "Sem contato registrado",
       motivoTipo: "esfriando",
       score: SCORE.esfriando,
-      tarefaId: null,
     };
   });
 }
@@ -434,7 +374,6 @@ async function qAltoValorParado(consultorId: string): Promise<FilaItem[]> {
       motivo: `Alto valor parado (R$ ${valorMi} mi)`,
       motivoTipo: "alto_valor_parado",
       score: SCORE.alto_valor_parado,
-      tarefaId: null,
     };
   });
 }
@@ -583,8 +522,6 @@ export async function getCarteiraEmRisco(
 // ============================================================================
 
 export type MiniPlacar = {
-  tarefasHojeAbertas: number;
-  tarefasHojeConcluidas: number;
   leadsNovosRecebidos24h: number;
   leadsContatadosHoje: number;
   slaPendente: number;
@@ -595,86 +532,58 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
   const inicioDia = startOfDayBrt(todayYmdBrt());
   const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const [
-    [tarefasAbertasRow],
-    [tarefasConcluidasRow],
-    [novos24hRow],
-    [contatadosHojeRow],
-    [slaRow],
-    [pipelineRow],
-  ] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(tarefas)
-      .where(
-        and(
-          eq(tarefas.consultorId, consultorId),
-          inArray(tarefas.status, ["aberta", "atrasada"]),
-          eq(tarefas.dataReferencia, todayYmdBrt()),
+  const [[novos24hRow], [contatadosHojeRow], [slaRow], [pipelineRow]] =
+    await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(leadsTable)
+        .where(
+          and(
+            eq(leadsTable.consultorId, consultorId),
+            gte(leadsTable.atribuidoEm, desde24h),
+          ),
         ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(tarefas)
-      .where(
-        and(
-          eq(tarefas.consultorId, consultorId),
-          eq(tarefas.status, "concluida"),
-          gte(tarefas.concluidaEm, inicioDia),
+      db
+        .select({
+          count: sql<number>`count(distinct ${interacoes.leadId})::int`,
+        })
+        .from(interacoes)
+        .where(
+          and(
+            eq(interacoes.autorId, consultorId),
+            gte(interacoes.criadoEm, inicioDia),
+            notInArray(interacoes.tipo, [
+              "mudanca_status",
+              "mudanca_atribuicao",
+              "evento_sistema",
+            ]),
+          ),
         ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(leadsTable)
-      .where(
-        and(
-          eq(leadsTable.consultorId, consultorId),
-          gte(leadsTable.atribuidoEm, desde24h),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(slaAlertas)
+        .innerJoin(leadsTable, eq(leadsTable.id, slaAlertas.leadId))
+        .where(
+          and(
+            eq(leadsTable.consultorId, consultorId),
+            eq(slaAlertas.tipo, "primeiro_contato_atrasado"),
+            isNull(slaAlertas.resolvidoEm),
+          ),
         ),
-      ),
-    db
-      .select({
-        count: sql<number>`count(distinct ${interacoes.leadId})::int`,
-      })
-      .from(interacoes)
-      .where(
-        and(
-          eq(interacoes.autorId, consultorId),
-          gte(interacoes.criadoEm, inicioDia),
-          notInArray(interacoes.tipo, [
-            "mudanca_status",
-            "mudanca_atribuicao",
-            "evento_sistema",
-          ]),
+      db
+        .select({
+          valor: sql<string>`coalesce(sum(${leadsTable.valorCreditoCentavos}), 0)::text`,
+        })
+        .from(leadsTable)
+        .where(
+          and(
+            eq(leadsTable.consultorId, consultorId),
+            notInArray(leadsTable.status, STATUS_TERMINAIS),
+          ),
         ),
-      ),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(slaAlertas)
-      .innerJoin(leadsTable, eq(leadsTable.id, slaAlertas.leadId))
-      .where(
-        and(
-          eq(leadsTable.consultorId, consultorId),
-          eq(slaAlertas.tipo, "primeiro_contato_atrasado"),
-          isNull(slaAlertas.resolvidoEm),
-        ),
-      ),
-    db
-      .select({
-        valor: sql<string>`coalesce(sum(${leadsTable.valorCreditoCentavos}), 0)::text`,
-      })
-      .from(leadsTable)
-      .where(
-        and(
-          eq(leadsTable.consultorId, consultorId),
-          notInArray(leadsTable.status, STATUS_TERMINAIS),
-        ),
-      ),
-  ]);
+    ]);
 
   return {
-    tarefasHojeAbertas: tarefasAbertasRow.count,
-    tarefasHojeConcluidas: tarefasConcluidasRow.count,
     leadsNovosRecebidos24h: novos24hRow.count,
     leadsContatadosHoje: contatadosHojeRow.count,
     slaPendente: slaRow.count,

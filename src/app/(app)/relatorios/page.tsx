@@ -51,7 +51,6 @@ import {
   fetchUfsDistintas,
   fetchVolumePorDia,
 } from "@/lib/reports/queries";
-import { taskStatsByConsultor } from "@/lib/tasks/service";
 import {
   reportFiltersSchema,
   type ReportFilters as RFilters,
@@ -181,12 +180,6 @@ export default async function RelatoriosPage({ searchParams }: Props) {
       <Suspense fallback={<SectionSkeleton h={400} />}>
         <SaudeOperacionalSection filters={filters} period={period} />
       </Suspense>
-
-      {isAdminGerente && (
-        <Suspense fallback={<SectionSkeleton h={250} />}>
-          <TarefasSection />
-        </Suspense>
-      )}
     </div>
   );
 }
@@ -542,55 +535,3 @@ async function SaudeOperacionalSection({
   });
 }
 
-async function TarefasSection() {
-  return renderSection("Gestão de tarefas", async () => {
-    const tarefasStats = await taskStatsByConsultor();
-    if (tarefasStats.length === 0) return null;
-
-    return (
-      <section className="space-y-3">
-        <div>
-          <h2 className="font-display text-lg font-semibold tracking-tight">
-            Gestão de tarefas
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Conclusão e atrasos operacionais por consultor.
-          </p>
-        </div>
-        <div className="surface-solid rounded-xl overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-            <thead className="border-b bg-bg-subtle">
-              <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="px-3 py-2">Consultor</th>
-                <th className="px-3 py-2 text-right">Total</th>
-                <th className="px-3 py-2 text-right">Abertas</th>
-                <th className="px-3 py-2 text-right">Atrasadas</th>
-                <th className="px-3 py-2 text-right">Concluídas</th>
-                <th className="px-3 py-2 text-right">Taxa conclusão</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tarefasStats.map((s) => {
-                const taxa = s.total > 0 ? (s.concluidas / s.total) * 100 : 0;
-                return (
-                  <tr key={s.consultorId} className="border-b last:border-0">
-                    <td className="px-3 py-2 font-medium">{s.consultorNome}</td>
-                    <td className="px-3 py-2 text-right">{s.total}</td>
-                    <td className="px-3 py-2 text-right">{s.abertas}</td>
-                    <td className="px-3 py-2 text-right text-destructive">
-                      {s.atrasadas}
-                    </td>
-                    <td className="px-3 py-2 text-right">{s.concluidas}</td>
-                    <td className="px-3 py-2 text-right">{taxa.toFixed(0)}%</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-    );
-  });
-}

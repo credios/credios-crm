@@ -1,4 +1,4 @@
-import { ArrowRight, Compass, ListChecks, MessageSquare, Route, Users, Workflow } from "lucide-react";
+import { ArrowRight, Compass, MessageSquare, Route, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -36,13 +36,6 @@ const SECTIONS = [
     description:
       "Criar, renomear, reordenar ou desativar status. Lead em status removido cai no anterior.",
     icon: Workflow,
-  },
-  {
-    href: "/configuracoes/tarefas",
-    title: "Tarefas por status",
-    description:
-      "Definir título, descrição e frequência das tarefas geradas para cada status do funil.",
-    icon: ListChecks,
   },
   {
     href: "/configuracoes/tracking",

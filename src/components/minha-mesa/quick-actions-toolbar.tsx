@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Check,
   Loader2,
   MessageSquare,
   Phone,
@@ -13,7 +12,6 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { ConcluirTarefaQuickDialog } from "./concluir-tarefa-quick-dialog";
 import { MudarStatusQuickDialog } from "./mudar-status-quick-dialog";
 import { NotaRapidaDialog } from "./nota-rapida-dialog";
 import { Button } from "@/components/ui/button";
@@ -25,7 +23,6 @@ type Props = { item: FilaItem; onResolved: () => void };
 export function QuickActionsToolbar({ item, onResolved }: Props) {
   const [openNota, setOpenNota] = useState(false);
   const [openStatus, setOpenStatus] = useState(false);
-  const [openConcluirTarefa, setOpenConcluirTarefa] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const wpHref = whatsappUrl(item.whatsapp);
@@ -79,14 +76,6 @@ export function QuickActionsToolbar({ item, onResolved }: Props) {
           loading={pendingAction === "whatsapp_enviado"}
           title="Registrar que enviei WhatsApp"
         />
-        {item.tarefaId && (
-          <ActionButton
-            icon={Check}
-            label="Concluir tarefa"
-            onClick={() => setOpenConcluirTarefa(true)}
-            tone="primary"
-          />
-        )}
         <ActionButton
           icon={Shuffle}
           label="Mudar status"
@@ -120,18 +109,6 @@ export function QuickActionsToolbar({ item, onResolved }: Props) {
           onResolved();
         }}
       />
-      {item.tarefaId && (
-        <ConcluirTarefaQuickDialog
-          open={openConcluirTarefa}
-          onOpenChange={setOpenConcluirTarefa}
-          tarefaId={item.tarefaId}
-          leadNome={item.leadNome}
-          onSuccess={() => {
-            setOpenConcluirTarefa(false);
-            onResolved();
-          }}
-        />
-      )}
     </>
   );
 }
