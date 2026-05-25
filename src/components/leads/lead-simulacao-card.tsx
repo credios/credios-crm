@@ -227,7 +227,11 @@ export function LeadSimulacaoCard({ leadId, defaults }: Props) {
       window.location.href = url;
     } else {
       // Aba nova — usuário mantém o lead aberto na aba original.
-      window.open(url, "_blank", "noopener,noreferrer");
+      // Sem `noopener` de propósito: a página da simulação precisa fechar
+      // a aba via window.close() quando o consultor clica em "Voltar pro
+      // lead", e isso só funciona quando a janela tem opener. Seguro
+      // porque é navegação same-origin (mesmo CRM).
+      window.open(url, "_blank");
     }
   }
 
