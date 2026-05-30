@@ -17,6 +17,12 @@ const tipoPessoaEnum = z.enum(["Pessoa Física", "Pessoa Jurídica"]);
  */
 export const webhookLeadPayloadSchema = z
   .object({
+    // Enriquecimento: quando presente e o lead existe, o webhook ATUALIZA
+    // esse lead em vez de criar um novo. Usado pelo fluxo de 2 etapas do
+    // simulador do site (captura parcial → completa depois). Lead inexistente
+    // (id antigo/inválido) cai no fluxo normal de criação (defensivo).
+    lead_id: z.string().uuid().optional(),
+
     // Dados pessoais
     nome: z.string().trim().min(2, "Nome muito curto").max(200),
     cpf: z.string().trim().optional().or(z.literal("")),

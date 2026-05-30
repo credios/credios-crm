@@ -279,3 +279,70 @@ export function renderNewLeadEmail(params: { lead: Lead }): string {
     ctas,
   });
 }
+
+/**
+ * E-mail de ENRIQUECIMENTO — disparado quando um lead que entrou parcial
+ * (1ª etapa do simulador inline: nome, telefone, valores) completa o restante
+ * do cadastro (2ª etapa). Conteúdo DIFERENTE do "Novo lead" pra não parecer
+ * duplicado: sinaliza "cadastro completo" e traz os dados que faltavam (CPF,
+ * renda, objetivo, situação do imóvel). Vai pros admins + consultor atribuído.
+ */
+export async function sendLeadEnrichedEmail(
+  lead: Lead,
+  recipients: string[],
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (recipients.length === 0)
+    return { ok: false, reason: "nenhum destinatário" };
+
+  const valor = formatBrl(lead.valorCreditoCentavos);
+  const subject = `Cadastro completo: ${lead.nome} — ${valor}`;
+  const html = renderLeadEnrichedEmail({ lead });
+
+  try {
+    const result = await resend.emails.send({
+      from,
+      to: recipients,
+      replyTo,
+      subject,
+      html,
+    });
+    if (result.error) {
+      console.error("[email-enriched] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-enriched] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+export function renderLeadEnrichedEmail(params: { lead: Lead }): string {
+  const { lead } = params;
+  const cidadeUf = [lead.cidade, lead.estado].filter(Boolean).join(" / ") || "—";
+  const wpHref = lead.whatsapp
+    ? `https://wa.me/${lead.whatsapp.replace(/\D/g, "")}`
+    : null;
+
+  const ctas: Array<{ href: string; label: string; tone?: "primary" | "secondary" }> = [
+    { href: appUrl(`/leads/${lead.id}`), label: "Abrir lead no CRM" },
+  ];
+  if (wpHref) ctas.push({ href: wpHref, label: "Abrir WhatsApp", tone: "secondary" });
+
+  const isGoogleAds = lead.origem === "Google Ads" || !!lead.gclid;
+  const eyebrowExtra = isGoogleAds
+    ? `<div style="margin:0 0 8px">${pill("Google Ads", "warning")}</div>`
+    : "";
+
+  return renderEmailLayout({
+    preheader: `${lead.nome} completou o cadastro — ${formatBrl(lead.valorCreditoCentavos)}, ${cidadeUf}`,
+    eyebrow: "Cadastro completo",
+    eyebrowTone: "success",
+    title: lead.nome,
+    intro:
+      "Este lead já tinha entrado pelo simulador e agora completou o restante do cadastro. Os dados que faltavam — CPF, renda, objetivo e situação do imóvel — estão abaixo.",
+    contentHtml: `${eyebrowExtra}${buildLeadKpis(lead)}${buildLeadDetailsHtml(lead)}`,
+    ctas,
+  });
+}

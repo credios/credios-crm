@@ -18,6 +18,7 @@ import { formatProperName } from "@/lib/formatters/proper-name";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import {
   sendLeadAssignedEmail,
+  sendLeadEnrichedEmail,
   sendNewLeadEmail,
 } from "@/lib/notifications/email";
 import { contextFromWebhook } from "@/lib/routing/context";
@@ -85,6 +86,124 @@ export async function POST(request: NextRequest) {
     );
   }
   const payload = parsed.data;
+
+  // 3b. Enriquecimento de lead parcial (fluxo simulador 2-etapas do site).
+  //
+  // O site captura nome+telefone+valores numa 1ª etapa (mini-form inline da
+  // money page), cria um lead PARCIAL aqui e guarda o leadId retornado. Na 2ª
+  // etapa (formulário completo em /simulador), reenvia os dados já com
+  // `lead_id` — neste ponto ATUALIZAMOS aquele lead em vez de criar um novo,
+  // evitando duplicidade.
+  //
+  // Premissas:
+  //   - Não reclassifica origem nem re-roteia: o lead parcial já foi
+  //     classificado e atribuído na criação (1ª etapa).
+  //   - Só sobrescreve coluna quando o novo valor está presente (COALESCE):
+  //     mantém o que a 1ª etapa já gravou se a 2ª não trouxer o campo.
+  //   - lead_id inexistente (sessão antiga, lead apagado) → cai no fluxo
+  //     normal de criação abaixo, defensivamente.
+  if (payload.lead_id) {
+    const [existing] = await db
+      .select()
+      .from(leads)
+      .where(eq(leads.id, payload.lead_id))
+      .limit(1);
+
+    if (existing) {
+      const setIf = <T>(val: T | null | undefined, current: T): T =>
+        val == null ? current : val;
+
+      const cpfClean = normalizarCpf(emptyToNull(payload.cpf ?? null));
+      const whatsappClean = normalizarWhatsapp(emptyToNull(payload.whatsapp));
+      const valoresSuspeitos = detectarValoresSuspeitos({
+        rendaMensal: payload.renda_mensal ?? null,
+        valorImovel: payload.valor_imovel ?? null,
+        saldoDevedor: payload.saldo_devedor ?? null,
+        valorCredito: payload.valor_credito ?? null,
+      });
+
+      await db
+        .update(leads)
+        .set({
+          nome: formatProperName(payload.nome),
+          cpf: setIf(cpfClean, existing.cpf),
+          estadoCivil: setIf(emptyToNull(payload.estado_civil ?? null), existing.estadoCivil),
+          ocupacao: setIf(emptyToNull(payload.ocupacao ?? null), existing.ocupacao),
+          rendaMensalCentavos: setIf(reaisParaCentavos(payload.renda_mensal), existing.rendaMensalCentavos),
+          whatsapp: setIf(whatsappClean, existing.whatsapp),
+          email: setIf(emptyToNull(payload.email ?? null), existing.email),
+          cidade: setIf(emptyToNull(payload.cidade ?? null), existing.cidade),
+          estado: setIf(emptyToNull(payload.estado ?? null)?.toUpperCase() ?? null, existing.estado),
+          objetivoCredito: setIf(emptyToNull(payload.objetivo_credito ?? null), existing.objetivoCredito),
+          tipoImovel: setIf(emptyToNull(payload.tipo_imovel ?? null), existing.tipoImovel),
+          tipoImovelDetalhes: setIf(emptyToNull(payload.tipo_imovel_detalhes ?? null), existing.tipoImovelDetalhes),
+          situacaoImovel: setIf(emptyToNull(payload.situacao_imovel ?? null), existing.situacaoImovel),
+          tipoPessoa: setIf(emptyToNull(payload.tipo_pessoa ?? null), existing.tipoPessoa),
+          valorImovelCentavos: setIf(reaisParaCentavos(payload.valor_imovel), existing.valorImovelCentavos),
+          saldoDevedorCentavos: setIf(reaisParaCentavos(payload.saldo_devedor), existing.saldoDevedorCentavos),
+          valorCreditoCentavos: setIf(reaisParaCentavos(payload.valor_credito), existing.valorCreditoCentavos),
+          valoresSuspeitos: valoresSuspeitos as never,
+          // Preserva o payload original da 1ª etapa e anexa o da 2ª, sem perder
+          // histórico de atribuição.
+          rawPayload: { parcial: existing.rawPayload, completo: body } as never,
+          updatedAt: new Date(),
+        })
+        .where(eq(leads.id, existing.id));
+
+      await db.insert(interacoes).values({
+        leadId: existing.id,
+        autorId: null,
+        tipo: "evento_sistema",
+        conteudo: "Lead enriquecido com dados completos do simulador",
+        metadata: {} as never,
+      });
+
+      // E-mail de ENRIQUECIMENTO — conteúdo diferente do "Novo lead" pra não
+      // duplicar. Re-busca o lead atualizado pra refletir os dados completos.
+      // UM único e-mail combinado pros admins + consultor (deduplicado).
+      const [updated] = await db
+        .select()
+        .from(leads)
+        .where(eq(leads.id, existing.id))
+        .limit(1);
+      const enrichedLead = updated ?? existing;
+      const enrichMeta = extractRequestMeta(request);
+      after(() =>
+        logAction(
+          null,
+          null,
+          "lead_enriquecido_webhook",
+          "lead",
+          existing.id,
+          { origem: "simulador (2a etapa)" },
+          enrichMeta,
+        ),
+      );
+      after(async () => {
+        const admins = await db
+          .select({ email: usersTable.email })
+          .from(usersTable)
+          .where(sql`${usersTable.perfil} = 'admin' AND ${usersTable.ativo} = true`);
+        const recipients = admins.map((a) => a.email).filter(Boolean);
+        if (enrichedLead.consultorId) {
+          const [c] = await db
+            .select({ email: usersTable.email })
+            .from(usersTable)
+            .where(eq(usersTable.id, enrichedLead.consultorId))
+            .limit(1);
+          if (c?.email) recipients.push(c.email);
+        }
+        const unique = [...new Set(recipients)];
+        if (unique.length > 0) await sendLeadEnrichedEmail(enrichedLead, unique);
+      });
+
+      return NextResponse.json(
+        { leadId: existing.id, enriched: true },
+        { status: 200 },
+      );
+    }
+    // lead_id não encontrado → segue para criação normal abaixo.
+  }
 
   // 4. Claim atômico de idempotência (evita race entre 2 webhooks idênticos
   // concorrentes que dariam 2 leads).
