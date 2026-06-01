@@ -11,6 +11,7 @@ import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { sendLeadAssignedEmail } from "@/lib/notifications/email";
+import { sendLeadAssignedSlack } from "@/lib/notifications/slack";
 import { reassignSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -115,6 +116,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   ) {
     after(async () => {
       await sendLeadAssignedEmail(
+        updated,
+        targetConsultor.email,
+        targetConsultor.nome,
+      );
+      await sendLeadAssignedSlack(
         updated,
         targetConsultor.email,
         targetConsultor.nome,
