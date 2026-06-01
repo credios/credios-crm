@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import { interacoes, leads as leadsTable } from "../../../../db/schema";
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   if (user.perfil === "consultor") {
     conds.push(eq(leadsTable.consultorId, user.id));
   }
-  if (q.status) conds.push(eq(leadsTable.status, q.status));
+  if (q.status.length > 0) conds.push(inArray(leadsTable.status, q.status));
   if (q.consultorId) conds.push(eq(leadsTable.consultorId, q.consultorId));
   if (q.origem) conds.push(eq(leadsTable.origem, q.origem));
   if (q.valorMin != null) conds.push(gte(leadsTable.valorCreditoCentavos, q.valorMin));

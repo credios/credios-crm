@@ -181,7 +181,15 @@ export { SORT_LEAD_KEYS, type SortLeadKey };
 export const listLeadsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(50),
-  status: statusLeadEnum.optional(),
+  // Multi-seleção: aceita um ou vários status separados por vírgula
+  // (ex.: ?status=novo,em_negociacao). Vira string[] (vazio = sem filtro).
+  status: z
+    .string()
+    .optional()
+    .transform((v) =>
+      v ? v.split(",").map((s) => s.trim()).filter(Boolean) : [],
+    )
+    .pipe(z.array(statusKeySchema)),
   consultorId: z.string().optional(),
   // origem (legado) e source (taxonomia 0017) — filtro aceita os dois;
   // semanticamente referem-se à mesma coluna source/origem (são mirror).

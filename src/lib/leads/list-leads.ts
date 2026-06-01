@@ -121,8 +121,8 @@ async function rawQuery(
   if (user.perfil === "consultor") {
     conds.push(eq(leadsTable.consultorId, user.id));
   }
-  if (filters.status) {
-    conds.push(eq(leadsTable.status, filters.status as StatusLead));
+  if (filters.status.length > 0) {
+    conds.push(inArray(leadsTable.status, filters.status as StatusLead[]));
   } else {
     // Esconde por default status terminais que poluem a lista. Cada categoria
     // tem seu próprio toggle nos filtros — replica comportamento do Notion.
@@ -275,8 +275,8 @@ function buildCountWhere(filters: ListLeadsQuery, user: AppUser) {
   if (user.perfil === "consultor") {
     conds.push(eq(leadsTable.consultorId, user.id));
   }
-  if (filters.status) {
-    conds.push(eq(leadsTable.status, filters.status as StatusLead));
+  if (filters.status.length > 0) {
+    conds.push(inArray(leadsTable.status, filters.status as StatusLead[]));
   } else {
     // Esconde por default status terminais que poluem a lista. Cada categoria
     // tem seu próprio toggle nos filtros — replica comportamento do Notion.

@@ -1,10 +1,18 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -141,10 +149,9 @@ export function LeadFilters({ consultores, sources = [] }: Props) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-        <FilterSelect
-          label="Status"
-          value={params.get("status")}
-          onChange={(v) => setParam("status", v)}
+        <StatusMultiFilter
+          selected={parseList(params.get("status"))}
+          onChange={(next) => setParam("status", next.join(",") || null)}
           options={STATUS_VALUES.map((s) => ({ value: s, label: STATUS_LEAD_LABEL[s] }))}
         />
         <FilterSelect
@@ -334,6 +341,73 @@ function FilterSelect({
       </Select>
     </div>
   );
+}
+
+/**
+ * Filtro de Status com MÚLTIPLA seleção (marca quantos quiser). Mesmo visual
+ * dos outros filtros (label + trigger bordado), mas abre um menu de checkboxes.
+ * Sincroniza com a URL como lista separada por vírgula (?status=a,b,c).
+ */
+function StatusMultiFilter({
+  selected,
+  onChange,
+  options,
+}: {
+  selected: string[];
+  onChange: (next: string[]) => void;
+  options: { value: string; label: string }[];
+}) {
+  const triggerLabel =
+    selected.length === 0
+      ? "Todos"
+      : selected.length === 1
+        ? (options.find((o) => o.value === selected[0])?.label ?? selected[0])
+        : `${selected.length} selecionados`;
+
+  function toggle(value: string) {
+    const set = new Set(selected);
+    if (set.has(value)) set.delete(value);
+    else set.add(value);
+    onChange(Array.from(set));
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Status</Label>
+      <DropdownMenu>
+        <DropdownMenuTrigger className="flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50">
+          <span className={`truncate ${selected.length === 0 ? "text-muted-foreground" : ""}`}>
+            {triggerLabel}
+          </span>
+          <ChevronDown className="size-4 shrink-0 opacity-50" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-[220px] max-h-[320px] overflow-y-auto">
+          {selected.length > 0 && (
+            <>
+              <DropdownMenuItem onClick={() => onChange([])}>
+                Limpar status
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          {options.map((o) => (
+            <DropdownMenuCheckboxItem
+              key={o.value}
+              checked={selected.includes(o.value)}
+              onCheckedChange={() => toggle(o.value)}
+            >
+              {o.label}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function parseList(v: string | null): string[] {
+  if (!v) return [];
+  return v.split(",").filter(Boolean);
 }
 
 // Aceita string vazia ou data ISO completa (YYYY-MM-DD) com ano plausível.
