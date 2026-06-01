@@ -9,6 +9,10 @@ import { EmptyLeads } from "@/components/shared/illustrations";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { formatBrlShort } from "@/lib/formatters/currency";
+import {
+  creditoTotalBuscadoCentavos,
+  temSaldoDevedor,
+} from "@/lib/leads/credito-total";
 import { formatRelative, isEsfriando } from "@/lib/formatters/date";
 import type { LeadRow } from "@/lib/leads/list-leads";
 import { cn } from "@/lib/utils";
@@ -84,9 +88,27 @@ export function MobileLeadCards({ rows, emptyAction }: Props) {
                       {lead.nome}
                     </p>
                   </div>
-                  <p className="font-mono tabular-nums text-base font-semibold text-foreground">
-                    {formatBrlShort(lead.valorCreditoCentavos)}
-                  </p>
+                  <div>
+                    <p className="font-mono tabular-nums text-base font-semibold text-foreground">
+                      {formatBrlShort(lead.valorCreditoCentavos)}
+                    </p>
+                    {/* Imóvel financiado: total real da operação
+                        (valor buscado + saldo devedor a quitar). */}
+                    {temSaldoDevedor(lead.saldoDevedorCentavos) &&
+                      lead.valorCreditoCentavos != null && (
+                        <p className="font-mono tabular-nums text-[11px] leading-tight text-muted-foreground">
+                          total c/ saldo{" "}
+                          <span className="font-semibold text-foreground/70">
+                            {formatBrlShort(
+                              creditoTotalBuscadoCentavos(
+                                lead.valorCreditoCentavos,
+                                lead.saldoDevedorCentavos,
+                              ),
+                            )}
+                          </span>
+                        </p>
+                      )}
+                  </div>
                 </div>
                 <StatusBadge status={lead.status} className="shrink-0" />
               </div>

@@ -28,6 +28,10 @@ import {
   UFS,
 } from "@/lib/constants";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
+import {
+  creditoTotalBuscadoCentavos,
+  temSaldoDevedor,
+} from "@/lib/leads/credito-total";
 import { formatCpf, formatPhoneBr } from "@/lib/formatters/phone";
 
 export type LeadDetailData = {
@@ -281,6 +285,30 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
     // Para imóveis quitados ele fica null e a row é ocultada pelo viewer.
     { label: "Saldo devedor", value: lead.saldoDevedorCentavos != null ? formatBrlFromCents(lead.saldoDevedorCentavos) : null },
     { label: "Valor buscado", value: lead.valorCreditoCentavos != null ? formatBrlFromCents(lead.valorCreditoCentavos) : null },
+    // Total real da operação quando o imóvel é financiado: o novo crédito
+    // precisa cobrir o saldo devedor (quitação) + o valor que o cliente quer
+    // receber em mãos. A maioria informa só o "valor de força" no simulador,
+    // subdimensionando a operação. Só aparece quando há saldo devedor —
+    // pra imóvel quitado seria redundante (total == valor buscado).
+    {
+      label: "Total de crédito buscado",
+      value:
+        temSaldoDevedor(lead.saldoDevedorCentavos) && lead.valorCreditoCentavos != null ? (
+          <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+            <span className="font-semibold">
+              {formatBrlFromCents(
+                creditoTotalBuscadoCentavos(
+                  lead.valorCreditoCentavos,
+                  lead.saldoDevedorCentavos,
+                ),
+              )}
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              valor buscado + saldo devedor
+            </span>
+          </span>
+        ) : null,
+    },
   ];
 
   if (lead.bancoAprovador) {

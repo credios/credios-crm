@@ -8,6 +8,10 @@ import { memo } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { formatBrlShort } from "@/lib/formatters/currency";
+import {
+  creditoTotalBuscadoCentavos,
+  temSaldoDevedor,
+} from "@/lib/leads/credito-total";
 import { formatRelative, isEsfriando } from "@/lib/formatters/date";
 import type { LeadRow } from "@/lib/leads/list-leads";
 import { cn } from "@/lib/utils";
@@ -107,9 +111,31 @@ function LeadKanbanCardImpl({
         </div>
       </div>
 
-      <p className="font-display tabular-nums text-sm font-semibold tracking-tight text-foreground">
-        {formatBrlShort(lead.valorCreditoCentavos)}
-      </p>
+      <div>
+        <p className="font-display tabular-nums text-sm font-semibold tracking-tight text-foreground">
+          {formatBrlShort(lead.valorCreditoCentavos)}
+        </p>
+        {/* Imóvel financiado: o valor buscado é só o que o cliente quer em
+            mãos. Mostra o total real da operação (buscado + saldo a quitar)
+            numa linha discreta — só aparece quando há saldo devedor. */}
+        {temSaldoDevedor(lead.saldoDevedorCentavos) &&
+          lead.valorCreditoCentavos != null && (
+            <p
+              className="font-mono tabular-nums text-[10px] leading-tight text-muted-foreground"
+              title="Total da operação: valor buscado + saldo devedor a quitar"
+            >
+              total c/ saldo{" "}
+              <span className="font-semibold text-foreground/70">
+                {formatBrlShort(
+                  creditoTotalBuscadoCentavos(
+                    lead.valorCreditoCentavos,
+                    lead.saldoDevedorCentavos,
+                  ),
+                )}
+              </span>
+            </p>
+          )}
+      </div>
 
       <div className="flex items-center gap-1 flex-wrap">
         {lead.origem && (

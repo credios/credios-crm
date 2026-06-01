@@ -198,6 +198,9 @@ async function rawQuery(
       consultorId: leadsTable.consultorId,
       consultorNome: usersTable.nome,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
+      // Saldo devedor: usado pra derivar o "total de crédito buscado" no card
+      // (valor buscado + saldo a quitar) quando o imóvel é financiado.
+      saldoDevedorCentavos: leadsTable.saldoDevedorCentavos,
       valorImovelCentavos: leadsTable.valorImovelCentavos,
       rendaMensalCentavos: leadsTable.rendaMensalCentavos,
       // Flag derivada: true quando webhook detectou valores fora do range
