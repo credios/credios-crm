@@ -2,7 +2,9 @@
 
 import {
   AlertTriangle,
+  ChevronDown,
   Download,
+  FileText,
   Loader2,
   Trash2,
   UserCheck,
@@ -13,6 +15,12 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +44,7 @@ import {
   MOTIVOS_PERDIDO,
   STATUS_LEAD_LABEL,
 } from "@/lib/constants";
+import { openLeadsPrintWindow } from "@/lib/leads/leads-export-pdf";
 import type { LeadRow } from "@/lib/leads/list-leads";
 
 const NON_TERMINAL_STATUSES = [
@@ -73,10 +82,23 @@ export function LeadBulkActions({
   const [openEncerrar, setOpenEncerrar] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
 
-  function handleExport() {
+  function handleExportCsv() {
     const csv = leadsToCsv(selectedLeads);
     downloadCsv(`leads-${new Date().toISOString().slice(0, 10)}.csv`, csv);
     toast.success(`${selectedLeads.length} leads exportados`);
+  }
+
+  function handleExportPdf() {
+    const ok = openLeadsPrintWindow(selectedLeads);
+    if (ok) {
+      toast.success(
+        `Gerando PDF de ${selectedLeads.length} lead${selectedLeads.length === 1 ? "" : "s"}…`,
+      );
+    } else {
+      toast.error(
+        "Não foi possível abrir a janela de impressão. Permita pop-ups para este site e tente de novo.",
+      );
+    }
   }
 
   return (
@@ -96,7 +118,24 @@ export function LeadBulkActions({
           onClick={() => setOpenEncerrar(true)}
           tone="warning"
         />
-        <BulkButton icon={Download} label="Exportar CSV" onClick={handleExport} />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="outline" size="sm">
+                <Download className="size-3.5" /> Exportar
+                <ChevronDown className="size-3.5 opacity-60" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleExportPdf}>
+              <FileText className="size-3.5" /> PDF (tabela)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportCsv}>
+              <Download className="size-3.5" /> CSV (planilha)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {isAdmin && (
           <BulkButton
             icon={Trash2}
