@@ -17,6 +17,7 @@ import { useMemo, useState, useTransition } from "react";
 import { LeadBulkActions } from "./lead-bulk-actions";
 import { LeadFilters } from "./lead-filters";
 import { MobileLeadCards } from "./mobile-lead-cards";
+import { SavedViewsMenu } from "./saved-views-menu";
 import { SortPicker } from "./sort-picker";
 import { StatusBadge } from "./status-badge";
 import { ViewToggle } from "./view-toggle";
@@ -30,6 +31,7 @@ import { formatPhoneBr, whatsappUrl } from "@/lib/formatters/phone";
 import type { LeadRow, ListLeadsResult } from "@/lib/leads/list-leads";
 import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
 import { cn } from "@/lib/utils";
+import type { SavedLeadView } from "@/lib/validators/lead-view";
 
 type Props = {
   result: ListLeadsResult;
@@ -38,9 +40,17 @@ type Props = {
   sources: Array<{ source: string; channel: string; displayName: string }>;
   /** Habilita ações destrutivas em massa (desqualificar/excluir). */
   isAdmin: boolean;
+  /** Visualizações salvas do usuário (presets de filtro). */
+  savedViews: SavedLeadView[];
 };
 
-export function LeadList({ result, consultores, sources, isAdmin }: Props) {
+export function LeadList({
+  result,
+  consultores,
+  sources,
+  isAdmin,
+  savedViews,
+}: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -215,7 +225,10 @@ export function LeadList({ result, consultores, sources, isAdmin }: Props) {
       <LeadFilters consultores={consultores} sources={sources} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ViewToggle current="lista" />
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewToggle current="lista" />
+          <SavedViewsMenu current="lista" views={savedViews} />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <SortPicker />
           <Button nativeButton={false} render={<Link href="/leads/novo">+ Novo lead</Link>} />

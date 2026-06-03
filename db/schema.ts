@@ -57,6 +57,13 @@ export const tipoInteracaoEnum = pgEnum("tipo_interacao", [
   "mudanca_atribuicao",
   "documento_recebido",
   "evento_sistema",
+  // Acontecimentos da operação (migration 0026) — trabalho de bastidor que o
+  // consultor registra na timeline, mas que NÃO é contato com o cliente: não
+  // atualiza `ultimo_contato`, não resolve SLA, não conta como "contatado hoje".
+  // São acontecimentos manuais (autor preenchido), exibidos com acento próprio.
+  "contato_banco",
+  "analise_credito_solicitada",
+  "vistoria_realizada",
 ]);
 
 export const acaoRegraEnum = pgEnum("acao_regra", [
@@ -743,5 +750,40 @@ export const leadAnotacoes = pgTable(
   },
   (table) => [
     index("idx_lead_anotacoes_lead").on(table.leadId, sql`${table.createdAt} DESC`),
+  ],
+);
+
+// ============================================================================
+// saved_lead_views — visualizações salvas (presets de filtro) por usuário
+// ============================================================================
+// Cada usuário salva combinações nomeadas de filtros + ordenação + modo
+// (lista/kanban) das telas de leads, e seleciona depois por um menu. Escopo
+// estritamente por usuário — não há compartilhamento entre consultores.
+// `filtros` guarda os params da URL (sem `page`) como objeto chave→valor.
+
+export const savedLeadViews = pgTable(
+  "saved_lead_views",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    nome: text("nome").notNull(),
+    /** 'lista' | 'kanban' — a tela em que a visualização foi salva. */
+    viewMode: text("view_mode").notNull().default("lista"),
+    /** Params da URL (status, consultorId, sortBy, ...) sem `page`. */
+    filtros: jsonb("filtros")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_saved_lead_views_user").on(
+      table.userId,
+      sql`${table.createdAt} DESC`,
+    ),
   ],
 );

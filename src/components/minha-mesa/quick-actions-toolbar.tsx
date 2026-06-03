@@ -16,9 +16,16 @@ import { MudarStatusQuickDialog } from "./mudar-status-quick-dialog";
 import { NotaRapidaDialog } from "./nota-rapida-dialog";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/lib/formatters/phone";
-import type { FilaItem } from "@/lib/minha-mesa/queries";
 
-type Props = { item: FilaItem; onResolved: () => void };
+/** Shape mínimo pra agir sobre um lead. FilaItem e NegociacaoAberta satisfazem. */
+export type QuickActionTarget = {
+  leadId: string;
+  leadNome: string;
+  whatsapp: string | null;
+  status: string;
+};
+
+type Props = { item: QuickActionTarget; onResolved: () => void };
 
 export function QuickActionsToolbar({ item, onResolved }: Props) {
   const [openNota, setOpenNota] = useState(false);

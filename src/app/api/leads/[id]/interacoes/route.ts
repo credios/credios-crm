@@ -10,6 +10,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { isContatoComCliente } from "@/lib/leads/interacao-tipos";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { createInteracaoSchema } from "@/lib/validators/lead";
 
@@ -140,14 +141,24 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     })
     .returning();
 
-  // Atualiza ultimo_contato.
-  await db
-    .update(leadsTable)
-    .set({ ultimoContato: now })
-    .where(eq(leadsTable.id, id));
+  // Acontecimentos da operação (contato com banco, vistoria, análise) são
+  // trabalho de bastidor — NÃO são contato com o cliente. Não atualizam
+  // ultimo_contato nem resolvem SLA. Só os contatos reais (ligação, WhatsApp,
+  // email, reunião, documento recebido) movem esses marcadores.
+  const contaComoContato = isContatoComCliente(data.tipo);
+
+  if (contaComoContato) {
+    // Atualiza ultimo_contato.
+    await db
+      .update(leadsTable)
+      .set({ ultimoContato: now })
+      .where(eq(leadsTable.id, id));
+  }
 
   // Auto-resolve SLA ativos (interação manual indica que o lead foi atendido).
-  const resolvedCount = await resolveSlaAlertsForLead(id);
+  const resolvedCount = contaComoContato
+    ? await resolveSlaAlertsForLead(id)
+    : 0;
 
   after(() =>
     logAction(

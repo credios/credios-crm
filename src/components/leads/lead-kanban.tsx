@@ -24,6 +24,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { LeadFilters } from "./lead-filters";
+import { SavedViewsMenu } from "./saved-views-menu";
 import { SortPicker } from "./sort-picker";
 import { LeadKanbanCard } from "./lead-kanban-card";
 import {
@@ -47,6 +48,7 @@ import { formatBrlShort } from "@/lib/formatters/currency";
 import type { LeadRow } from "@/lib/leads/list-leads";
 import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
 import { cn } from "@/lib/utils";
+import type { SavedLeadView } from "@/lib/validators/lead-view";
 
 import { statusBadgeColor } from "./status-badge";
 
@@ -67,6 +69,8 @@ type Props = {
   canCloseOrReopen: boolean;
   /** Status ATIVOS, ordenados. Vem de listActiveStatuses(). */
   statuses: StatusMeta[];
+  /** Visualizações salvas do usuário (presets de filtro). */
+  savedViews: SavedLeadView[];
 };
 
 type Cols = Record<string, LeadRow[]>;
@@ -103,6 +107,7 @@ export function LeadKanban({
   sources,
   canCloseOrReopen,
   statuses,
+  savedViews,
 }: Props) {
   const router = useRouter();
 
@@ -377,7 +382,10 @@ export function LeadKanban({
       <LeadFilters consultores={consultores} sources={sources} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ViewToggle current="kanban" />
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewToggle current="kanban" />
+          <SavedViewsMenu current="kanban" views={savedViews} />
+        </div>
         <div className="flex items-center gap-3">
           {/* Default do kanban: ultimo_contato asc (leads sem/com contato
               mais antigo ficam no topo das colunas — focus em esquecidos). */}

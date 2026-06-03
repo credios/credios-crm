@@ -36,6 +36,10 @@ const TIPO_INTERACAO_VALUES = [
   "reuniao",
   "contato",
   "documento_recebido",
+  // Acontecimentos da operação (não são contato com o cliente)
+  "contato_banco",
+  "analise_credito_solicitada",
+  "vistoria_realizada",
 ] as const;
 
 // Aceita qualquer key de status — incluindo custom. Validação contra o que

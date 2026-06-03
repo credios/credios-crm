@@ -50,7 +50,7 @@ export function LeadTimelineTabs({
           active={tab === "contatos"}
           onClick={() => setTab("contatos")}
         >
-          Contatos
+          Contatos & Acontecimentos
         </TabButton>
         <TabButton
           active={tab === "anotacoes"}

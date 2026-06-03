@@ -2,8 +2,11 @@
 
 import {
   Bell,
+  ClipboardCheck,
+  FileSearch,
   FileText,
   Handshake,
+  Landmark,
   Loader2,
   type LucideIcon,
   Mail,
@@ -18,17 +21,15 @@ import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -59,7 +60,12 @@ const TIPO_LABEL: Record<string, string> = {
   email: "Email",
   reuniao: "Reunião",
   contato: "Contato",
+  // Acontecimentos da operação
+  contato_banco: "Contato com banco",
+  analise_credito_solicitada: "Análise de crédito solicitada",
+  vistoria_realizada: "Vistoria realizada",
   documento_recebido: "Documento recebido",
+  // Sistema
   mudanca_status: "Mudança de status",
   mudanca_atribuicao: "Reatribuição",
   evento_sistema: "Evento do sistema",
@@ -72,6 +78,9 @@ const TIPO_ICON: Record<string, LucideIcon> = {
   email: Mail,
   reuniao: Users,
   contato: Handshake,
+  contato_banco: Landmark,
+  analise_credito_solicitada: FileSearch,
+  vistoria_realizada: ClipboardCheck,
   documento_recebido: FileText,
   mudanca_status: RefreshCw,
   mudanca_atribuicao: UserSquare,
@@ -86,6 +95,9 @@ const TIPOS_VISIVEIS = new Set([
   "email",
   "reuniao",
   "contato",
+  "contato_banco",
+  "analise_credito_solicitada",
+  "vistoria_realizada",
   "documento_recebido",
   "mudanca_status",
   "mudanca_atribuicao",
@@ -100,29 +112,50 @@ const SISTEMA_TIPOS = new Set([
   "evento_sistema",
 ]);
 
+// Tipos renderizados em estilo "acontecimento da operação" (âmbar) — trabalho
+// de bastidor (banco, vistoria, análise, documentos). Visualmente distintos do
+// contato com o cliente (azul). Agrupa documento_recebido por afinidade visual,
+// embora ele ainda conte como contato no back-end (ver interacao-tipos.ts).
+const ACONTECIMENTO_VISUAL_TIPOS = new Set([
+  "contato_banco",
+  "analise_credito_solicitada",
+  "vistoria_realizada",
+  "documento_recebido",
+]);
+
 // Sentinela na UI: "whatsapp" (genérico, sem direção) — submetido como
 // `whatsapp_recebido` por convenção histórica (rows antigas do CRM já usam).
 const WHATSAPP_UI_VALUE = "whatsapp";
-
-// Opções no dropdown de criar interação. Ordem decidida pela frequência de
-// uso esperada (WhatsApp + Ligação dominam o dia-a-dia do consultor).
-const TIPOS_MANUAIS = [
-  WHATSAPP_UI_VALUE,
-  "ligacao",
-  "email",
-  "reuniao",
-  "documento_recebido",
-  "contato",
-];
 
 const TIPO_LABEL_DROPDOWN: Record<string, string> = {
   [WHATSAPP_UI_VALUE]: "WhatsApp",
   ligacao: "Ligação",
   email: "Email",
   reuniao: "Reunião",
-  documento_recebido: "Documento recebido",
   contato: "Contato (sem especificar)",
+  contato_banco: "Contato com banco",
+  analise_credito_solicitada: "Análise de crédito solicitada",
+  vistoria_realizada: "Vistoria realizada",
+  documento_recebido: "Documento recebido",
 };
+
+// Dropdown agrupado: separa o que é conversa com o cliente do trabalho de
+// bastidor da operação. Ordem dentro de cada grupo segue frequência de uso.
+const GRUPOS_MANUAIS: { label: string; tipos: string[] }[] = [
+  {
+    label: "Contato com o cliente",
+    tipos: [WHATSAPP_UI_VALUE, "ligacao", "email", "reuniao", "contato"],
+  },
+  {
+    label: "Acontecimento da operação",
+    tipos: [
+      "contato_banco",
+      "analise_credito_solicitada",
+      "vistoria_realizada",
+      "documento_recebido",
+    ],
+  },
+];
 
 function initials(nome: string | null): string {
   if (!nome) return "S";
@@ -269,10 +302,7 @@ export function LeadTimeline({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Contatos</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 pt-5">
         {canCreate && (
           <div className="space-y-2 rounded-md border bg-muted/30 p-3">
             <div className="flex items-center gap-2">
@@ -286,10 +316,25 @@ export function LeadTimeline({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TIPOS_MANUAIS.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {TIPO_LABEL_DROPDOWN[t] ?? t}
-                    </SelectItem>
+                  {GRUPOS_MANUAIS.map((grupo, gi) => (
+                    <SelectGroup key={grupo.label}>
+                      {gi > 0 && <SelectSeparator />}
+                      <SelectLabel>{grupo.label}</SelectLabel>
+                      {grupo.tipos.map((t) => {
+                        const Icon = TIPO_ICON[t === WHATSAPP_UI_VALUE ? "whatsapp_recebido" : t];
+                        return (
+                          <SelectItem key={t} value={t}>
+                            {Icon && (
+                              <Icon
+                                className="size-3.5 text-muted-foreground"
+                                strokeWidth={1.75}
+                              />
+                            )}
+                            {TIPO_LABEL_DROPDOWN[t] ?? t}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>
@@ -316,9 +361,10 @@ export function LeadTimeline({
               Nada registrado ainda
             </p>
             <p className="font-serif italic text-xs text-muted-foreground">
-              Use o formulário acima pra registrar ligações, mensagens e
-              outros pontos de contato com o cliente. Informações sobre o
-              lead (dados do cônjuge, contexto) ficam na aba Anotações.
+              Use o formulário acima pra registrar contatos com o cliente
+              (ligações, mensagens) e acontecimentos da operação (contato com
+              banco, vistoria, análise de crédito). Informações sobre o lead
+              (dados do cônjuge, contexto) ficam na aba Anotações.
             </p>
           </div>
         ) : (
@@ -362,6 +408,7 @@ function TimelineItem({
   const Icon = TIPO_ICON[interacao.tipo] ?? Phone;
   const label = TIPO_LABEL[interacao.tipo] ?? interacao.tipo;
   const sistema = SISTEMA_TIPOS.has(interacao.tipo);
+  const acontecimento = ACONTECIMENTO_VISUAL_TIPOS.has(interacao.tipo);
   return (
     <li
       className={cn(
@@ -372,10 +419,13 @@ function TimelineItem({
       <div
         className={cn(
           "relative z-10 size-7 rounded-full flex items-center justify-center shrink-0 ring-2 ring-background transition-transform",
-          // Sistema (mudança de status etc) = cinza sutil; manual = azul/primário
+          // Três tiers visuais: sistema = cinza sutil; acontecimento da
+          // operação = âmbar; contato com o cliente = azul/primário.
           sistema
             ? "bg-bg-muted text-muted-foreground"
-            : "bg-blue-50 text-primary dark:bg-blue-950/40",
+            : acontecimento
+              ? "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
+              : "bg-blue-50 text-primary dark:bg-blue-950/40",
           flash && "scale-110",
         )}
       >

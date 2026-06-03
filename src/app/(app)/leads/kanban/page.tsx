@@ -7,6 +7,7 @@ import {
   listConsultoresAtivos,
   listLeadsForKanban,
 } from "@/lib/leads/list-leads";
+import { getSavedLeadViews } from "@/lib/leads/saved-views";
 import { listActiveStatuses } from "@/lib/status/queries";
 import { listActiveSources } from "@/lib/tracking/resolver";
 import { listLeadsQuerySchema } from "@/lib/validators/lead";
@@ -34,11 +35,12 @@ export default async function KanbanPage({ searchParams }: Props) {
   if (!flat.sortDir) flat.sortDir = "asc";
   const filters = listLeadsQuerySchema.parse(flat);
 
-  const [leads, consultores, sources, statuses] = await Promise.all([
+  const [leads, consultores, sources, statuses, savedViews] = await Promise.all([
     listLeadsForKanban(filters, user),
     listConsultoresAtivos(),
     listActiveSources(),
     listActiveStatuses(),
+    getSavedLeadViews(user.id).catch(() => []),
   ]);
 
   return (
@@ -60,6 +62,7 @@ export default async function KanbanPage({ searchParams }: Props) {
           label: s.label,
           eTerminal: s.eTerminal,
         }))}
+        savedViews={savedViews}
       />
     </div>
   );

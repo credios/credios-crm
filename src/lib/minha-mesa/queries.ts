@@ -19,6 +19,7 @@ import {
 } from "../../../db/schema";
 import { db } from "@/lib/db";
 import { startOfDayBrt, todayYmdBrt } from "@/lib/datetime/brt";
+import { NAO_CONTATO_TIPOS } from "@/lib/leads/interacao-tipos";
 
 // ============================================================================
 // Tipos compartilhados
@@ -552,11 +553,9 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
           and(
             eq(interacoes.autorId, consultorId),
             gte(interacoes.criadoEm, inicioDia),
-            notInArray(interacoes.tipo, [
-              "mudanca_status",
-              "mudanca_atribuicao",
-              "evento_sistema",
-            ]),
+            // Exclui eventos de sistema E acontecimentos da operação — só
+            // contatos reais com o cliente contam como "contatado hoje".
+            notInArray(interacoes.tipo, [...NAO_CONTATO_TIPOS]),
           ),
         ),
       db

@@ -183,6 +183,20 @@
       "when": 1779600000000,
       "tag": "0025_valores_suspeitos",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1779700000000,
+      "tag": "0026_acontecimentos_operacao",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1779800000000,
+      "tag": "0027_saved_lead_views",
+      "breakpoints": true
     }
   ]
 }

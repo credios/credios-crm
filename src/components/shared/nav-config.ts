@@ -2,6 +2,7 @@ import {
   Activity,
   Crown,
   Flame,
+  Handshake,
   Inbox,
   KanbanSquare,
   PieChart,
@@ -52,6 +53,14 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { href: "/leads", label: "Leads", icon: Users, exact: true },
       { href: "/leads/kanban", label: "Kanban", icon: KanbanSquare },
+      // Sala de fechamento: leads em negociação, foco no contato diário.
+      // Marketing não atende leads, então não vê.
+      {
+        href: "/negociacoes",
+        label: "Em negociação",
+        icon: Handshake,
+        hideForMarketing: true,
+      },
       { href: "/meu-desempenho", label: "Meu desempenho", icon: TrendingUp },
     ],
   },
@@ -119,6 +128,10 @@ export const ROUTE_META: Record<string, SimpleNavMeta> = {
   "/leads/kanban": {
     title: "Kanban",
     description: "Visualização kanban do pipeline",
+  },
+  "/negociacoes": {
+    title: "Em negociação",
+    description: "Leads na reta final · foco no fechamento",
   },
   "/meu-desempenho": {
     title: "Meu desempenho",
