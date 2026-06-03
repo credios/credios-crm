@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Landmark, MapPin } from "lucide-react";
+import { Clock, Landmark, MapPin, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
@@ -49,9 +49,9 @@ const BANCO_STATUS_CLASS: Record<string, string> = {
   recusado: "bg-rose-500/12 text-rose-700 border-rose-500/25 dark:text-rose-300",
 };
 
-type Props = { items: NegociacaoAberta[] };
+type Props = { items: NegociacaoAberta[]; mostrarConsultor?: boolean };
 
-export function NegociacoesBoard({ items }: Props) {
+export function NegociacoesBoard({ items, mostrarConsultor = false }: Props) {
   const router = useRouter();
 
   const resumo = useMemo(() => {
@@ -95,6 +95,7 @@ export function NegociacoesBoard({ items }: Props) {
           <NegociacaoCard
             key={item.leadId}
             item={item}
+            mostrarConsultor={mostrarConsultor}
             onChanged={() => router.refresh()}
           />
         ))}
@@ -136,9 +137,11 @@ function ResumoChip({
 
 function NegociacaoCard({
   item,
+  mostrarConsultor,
   onChanged,
 }: {
   item: NegociacaoAberta;
+  mostrarConsultor: boolean;
   onChanged: () => void;
 }) {
   const cad = CADENCIA[item.cadencia];
@@ -148,13 +151,21 @@ function NegociacaoCard({
       <CardContent className="space-y-3 p-4">
         {/* Nome + valor */}
         <div className="flex items-start justify-between gap-3">
-          <Link
-            href={`/leads/${item.leadId}`}
-            prefetch={false}
-            className="font-display text-base font-semibold leading-tight hover:underline min-w-0 break-words"
-          >
-            {item.leadNome}
-          </Link>
+          <div className="min-w-0">
+            <Link
+              href={`/leads/${item.leadId}`}
+              prefetch={false}
+              className="font-display text-base font-semibold leading-tight hover:underline break-words"
+            >
+              {item.leadNome}
+            </Link>
+            {mostrarConsultor && (
+              <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                <UserRound className="size-3" strokeWidth={1.75} />
+                {item.consultorNome ?? "Pool · sem consultor"}
+              </div>
+            )}
+          </div>
           <div className="text-right shrink-0">
             <div className="font-mono text-sm font-semibold tabular-nums">
               {formatBrlFromCents(item.valorCreditoCentavos)}

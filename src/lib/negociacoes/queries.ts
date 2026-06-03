@@ -6,6 +6,7 @@ import {
   interacoes,
   leadBancos,
   leads as leadsTable,
+  users as usersTable,
 } from "../../../db/schema";
 import { db } from "@/lib/db";
 
@@ -34,6 +35,8 @@ export type NegociacaoAberta = {
   cidade: string | null;
   estado: string | null;
   origem: string | null;
+  /** Consultor dono do lead (null = pool). Usado na visão "todos" do admin. */
+  consultorNome: string | null;
   /** ISO; null se nunca houve contato registrado. */
   ultimoContato: string | null;
   horasSemContato: number | null;
@@ -63,9 +66,17 @@ const RANK: Record<CadenciaNivel, number> = {
   ok: 2,
 };
 
+/**
+ * Negociações abertas. `consultorId`:
+ *   - string → leads daquele consultor (uso padrão: o próprio usuário);
+ *   - null   → TODOS os consultores (só admin, via seletor na página).
+ */
 export async function getNegociacoesAbertas(
-  consultorId: string,
+  consultorId: string | null,
 ): Promise<NegociacaoAberta[]> {
+  const conds = [eq(leadsTable.status, "em_negociacao")];
+  if (consultorId) conds.push(eq(leadsTable.consultorId, consultorId));
+
   const rows = await db
     .select({
       leadId: leadsTable.id,
@@ -77,14 +88,11 @@ export async function getNegociacoesAbertas(
       estado: leadsTable.estado,
       origem: leadsTable.origem,
       ultimoContato: leadsTable.ultimoContato,
+      consultorNome: usersTable.nome,
     })
     .from(leadsTable)
-    .where(
-      and(
-        eq(leadsTable.consultorId, consultorId),
-        eq(leadsTable.status, "em_negociacao"),
-      ),
-    );
+    .leftJoin(usersTable, eq(usersTable.id, leadsTable.consultorId))
+    .where(and(...conds));
 
   if (rows.length === 0) return [];
 
@@ -150,6 +158,7 @@ export async function getNegociacoesAbertas(
       cidade: r.cidade,
       estado: r.estado,
       origem: r.origem,
+      consultorNome: r.consultorNome,
       ultimoContato: r.ultimoContato ? r.ultimoContato.toISOString() : null,
       horasSemContato,
       diasSemContato,
