@@ -230,7 +230,11 @@ function NegociacaoCard({
 
         {/* Ações rápidas */}
         <div className="pt-0.5">
-          <QuickActionsToolbar item={item} onResolved={onChanged} />
+          <QuickActionsToolbar
+            item={item}
+            onResolved={onChanged}
+            allowEncerrar
+          />
         </div>
       </CardContent>
     </Card>

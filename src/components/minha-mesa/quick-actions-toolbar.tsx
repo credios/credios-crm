@@ -25,9 +25,19 @@ export type QuickActionTarget = {
   status: string;
 };
 
-type Props = { item: QuickActionTarget; onResolved: () => void };
+type Props = {
+  item: QuickActionTarget;
+  onResolved: () => void;
+  /** Inclui transições de encerramento (perdido/desqualificado) no "Mudar
+   *  status", com coleta de motivo. Usado na página de negociações. */
+  allowEncerrar?: boolean;
+};
 
-export function QuickActionsToolbar({ item, onResolved }: Props) {
+export function QuickActionsToolbar({
+  item,
+  onResolved,
+  allowEncerrar = false,
+}: Props) {
   const [openNota, setOpenNota] = useState(false);
   const [openStatus, setOpenStatus] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -111,6 +121,7 @@ export function QuickActionsToolbar({ item, onResolved }: Props) {
         leadId={item.leadId}
         leadNome={item.leadNome}
         statusAtual={item.status}
+        incluirEncerramento={allowEncerrar}
         onSuccess={() => {
           setOpenStatus(false);
           onResolved();
