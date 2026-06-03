@@ -169,10 +169,17 @@ export async function getNegociacoesAbertas(
     };
   });
 
-  // Mais urgente primeiro; desempata por maior valor (o que mais importa fechar).
+  // Ordenação:
+  //   1. Cadência (semáforo): Falar hoje → Atenção → Em dia.
+  //   2. Dentro do grupo: maior tempo sem contato primeiro (quem nunca teve
+  //      contato registrado vai pro topo — Infinity).
+  //   3. Desempate final: maior valor de crédito.
+  const tempoSemContato = (it: NegociacaoAberta) =>
+    it.horasSemContato == null ? Infinity : it.horasSemContato;
   out.sort(
     (a, b) =>
       RANK[a.cadencia] - RANK[b.cadencia] ||
+      tempoSemContato(b) - tempoSemContato(a) ||
       (b.valorCreditoCentavos ?? 0) - (a.valorCreditoCentavos ?? 0),
   );
 
