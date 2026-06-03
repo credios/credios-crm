@@ -45,10 +45,14 @@ export function NotaRapidaDialog({
       return;
     }
     setPending(true);
-    const res = await fetch(`/api/leads/${leadId}/interacoes`, {
+    // Anotações vivem em `lead_anotacoes` (migration 0020) — a partir da 0021
+    // não entram mais na timeline de interações. Por isso o POST vai pro
+    // endpoint de anotações, não pro de interações (onde o tipo "anotacao"
+    // é rejeitado de propósito).
+    const res = await fetch(`/api/leads/${leadId}/anotacoes`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tipo: "anotacao", conteudo: txt }),
+      body: JSON.stringify({ conteudo: txt }),
     });
     setPending(false);
     if (!res.ok) {
@@ -59,7 +63,7 @@ export function NotaRapidaDialog({
       });
       return;
     }
-    toast.success("Anotação registrada");
+    toast.success("Anotação salva");
     reset();
     onSuccess();
   }
@@ -80,7 +84,8 @@ export function NotaRapidaDialog({
         <DialogHeader>
           <DialogTitle>Anotação rápida</DialogTitle>
           <DialogDescription>
-            Lead: <strong>{leadNome}</strong>. A anotação aparece na timeline.
+            Lead: <strong>{leadNome}</strong>. A anotação aparece na aba
+            Anotações do lead.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
