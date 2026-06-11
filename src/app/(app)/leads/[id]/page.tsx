@@ -17,6 +17,7 @@ import {
   LeadContatoCard,
   LeadOperacaoCard,
   LeadOrigemCard,
+  LeadParceriaCard,
   LeadPessoaisCard,
 } from "@/components/leads/lead-detail-sections";
 import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
@@ -88,6 +89,9 @@ export default async function LeadDetailPage({ params }: Props) {
     valorLiberadoCentavos: masked.valorLiberadoCentavos ?? null,
     comissaoCentavos: masked.comissaoCentavos ?? null,
     dataFechamento: masked.dataFechamento,
+    parceiroNome: row.parceiroNome ?? null,
+    parceiroPortalId: row.parceiroPortalId ?? null,
+    observacoesParceiro: row.observacoesParceiro ?? null,
     channel: masked.channel ?? null,
     source: masked.source ?? null,
     paid: masked.paid ?? null,
@@ -166,6 +170,7 @@ export default async function LeadDetailPage({ params }: Props) {
         <div className="min-w-0 space-y-6">
           <LeadPessoaisCard lead={lead} canEdit={canEdit} />
           <LeadContatoCard lead={lead} canEdit={canEdit} />
+          <LeadParceriaCard lead={lead} />
           <LeadOperacaoCard lead={lead} canEdit={canEdit} />
 
           {!isMarketing && (

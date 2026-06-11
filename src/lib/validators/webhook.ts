@@ -47,6 +47,12 @@ export const webhookLeadPayloadSchema = z
     saldo_devedor: z.coerce.number().nonnegative().optional(),
     valor_credito: z.coerce.number().nonnegative().optional(),
 
+    // ── Parceria (Portal de Parceiros) ───────────────────────────────────
+    // Enviados pelo portal quando o lead é uma indicação de parceiro.
+    parceiro_nome: z.string().trim().max(200).optional().or(z.literal("")),
+    parceiro_portal_id: z.string().trim().max(64).optional().or(z.literal("")),
+    observacoes_parceiro: z.string().trim().max(4000).optional().or(z.literal("")),
+
     // ── Tracking taxonomy (canônica, migration 0017) ─────────────────────
     // Site classifica e envia channel/source/paid; CRM valida contra
     // tracking_sources e reclassifica se vier inválido.

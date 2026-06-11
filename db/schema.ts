@@ -228,6 +228,13 @@ export const leads = pgTable(
     referrer: text("referrer"),
     paginaEntrada: text("pagina_entrada"),
 
+    // --- Parceria (Portal de Parceiros — parceiros.credios.com.br) ---
+    // Preenchidos quando o lead chega via portal: identificam o parceiro
+    // que indicou e preservam o contexto que ele escreveu sobre o cliente.
+    parceiroNome: text("parceiro_nome"),
+    parceiroPortalId: text("parceiro_portal_id"),
+    observacoesParceiro: text("observacoes_parceiro"),
+
     // --- Fechamento ---
     bancoAprovador: text("banco_aprovador"),
     valorLiberadoCentavos: bigint("valor_liberado_centavos", { mode: "number" }),

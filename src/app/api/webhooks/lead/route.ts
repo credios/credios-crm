@@ -335,6 +335,10 @@ export async function POST(request: NextRequest) {
       valorImovelCentavos: reaisParaCentavos(payload.valor_imovel),
       saldoDevedorCentavos: reaisParaCentavos(payload.saldo_devedor),
       valorCreditoCentavos: reaisParaCentavos(payload.valor_credito),
+      // ── Parceria (Portal de Parceiros) ──────────────────────────────────
+      parceiroNome: emptyToNull(payload.parceiro_nome ?? null),
+      parceiroPortalId: emptyToNull(payload.parceiro_portal_id ?? null),
+      observacoesParceiro: emptyToNull(payload.observacoes_parceiro ?? null),
       // Flag de revisão (migration 0025). Drizzle jsonb aceita objeto JS.
       valoresSuspeitos: valoresSuspeitos as never,
       consultorId: routing.consultorId,

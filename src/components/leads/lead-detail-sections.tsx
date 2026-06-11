@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Handshake } from "lucide-react";
 
 import { LeadEditableCard } from "./lead-editable-card";
 import {
@@ -58,6 +59,10 @@ export type LeadDetailData = {
   valorLiberadoCentavos: number | null;
   comissaoCentavos: number | null;
   dataFechamento: string | null;
+  // Parceria (Portal de Parceiros)
+  parceiroNome: string | null;
+  parceiroPortalId: string | null;
+  observacoesParceiro: string | null;
   // Taxonomia hierárquica (migration 0017)
   channel: string | null;
   source: string | null;
@@ -424,6 +429,63 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
 // ============================================================================
 // Origem (read-only)
 // ============================================================================
+
+/**
+ * Card "Parceria" — exibido apenas quando o lead veio do Portal de Parceiros.
+ * Somente leitura: a fonte da verdade é o portal (parceiros.credios.com.br).
+ */
+export function LeadParceriaCard({ lead }: { lead: LeadDetailData }) {
+  if (!lead.parceiroNome && !lead.parceiroPortalId && !lead.observacoesParceiro) {
+    return null;
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Handshake className="size-4 text-muted-foreground" aria-hidden />
+          Parceria
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className="space-y-2.5 text-sm sm:grid sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-1.5 sm:space-y-0">
+          <div className="flex flex-col gap-0.5 sm:contents">
+            <dt className="text-xs text-muted-foreground sm:text-sm">
+              Indicado por
+            </dt>
+            <dd className="min-w-0 font-medium">{lead.parceiroNome ?? "—"}</dd>
+          </div>
+          {lead.parceiroPortalId && (
+            <div className="flex flex-col gap-0.5 sm:contents">
+              <dt className="text-xs text-muted-foreground sm:text-sm">
+                Parceiro no portal
+              </dt>
+              <dd className="min-w-0">
+                <a
+                  href={`https://parceiros.credios.com.br/admin/parceiros/${lead.parceiroPortalId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  Abrir cadastro do parceiro
+                </a>
+              </dd>
+            </div>
+          )}
+          {lead.observacoesParceiro && (
+            <div className="flex flex-col gap-0.5 sm:contents">
+              <dt className="text-xs text-muted-foreground sm:text-sm">
+                Observações do parceiro
+              </dt>
+              <dd className="min-w-0 whitespace-pre-wrap">
+                {lead.observacoesParceiro}
+              </dd>
+            </div>
+          )}
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function LeadOrigemCard({ lead }: { lead: LeadDetailData }) {
   // Source canônico (migration 0017) + fallback pro legado `origem`.
