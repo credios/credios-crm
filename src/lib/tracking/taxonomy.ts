@@ -114,6 +114,7 @@ export const CANONICAL_SOURCES: CanonicalSource[] = [
   { source: "Manual",           channel: "Manual",         paid: false, color: "8B5CF6", icon: "UserPlus",      ordem: 92 },
   { source: "Email",            channel: "Email",          paid: false, color: "06B6D4", icon: "Mail",          ordem: 93 },
   { source: "Condomínio",       channel: "Referral",       paid: false, color: "059669", icon: "Building",      ordem: 94 },
+  { source: "Portal de Parceiros", channel: "Referral",    paid: false, color: "0A4D8C", icon: "Handshake",     ordem: 95 },
   { source: "Unknown",          channel: "Direct",         paid: false, color: "9CA3AF", icon: "HelpCircle",    ordem: 999 },
 ];
 

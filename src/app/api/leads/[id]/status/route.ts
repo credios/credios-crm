@@ -11,6 +11,7 @@ import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads/bancos";
+import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { updateStatusSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -161,6 +162,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     await auditCall();
   } else {
     after(() => auditCall());
+  }
+
+  // Notifica o Portal de Parceiros (no-op para leads que não vieram dele).
+  if (updated) {
+    after(() => notifyPartnerPortal(updated, data.status));
   }
 
   return NextResponse.json({ data: updated });
