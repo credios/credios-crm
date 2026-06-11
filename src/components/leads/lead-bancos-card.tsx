@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -39,6 +40,9 @@ export type LeadBancoRow = {
 
 const STATUS_OPTIONS = Object.entries(STATUS_PROPOSTA_BANCO_LABEL);
 
+// Valor sentinela do select — nunca persiste: o nome digitado é o que vai pra API.
+const OUTRO_VALUE = "__outro__";
+
 export function LeadBancosCard({
   leadId,
   rows,
@@ -51,13 +55,21 @@ export function LeadBancosCard({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [banco, setBanco] = useState("");
+  const [bancoOutro, setBancoOutro] = useState("");
   const [status, setStatus] = useState("enviado");
   const [observacoes, setObservacoes] = useState("");
   const [pending, setPending] = useState(false);
 
+  const isOutro = banco === OUTRO_VALUE;
+  const bancoFinal = isOutro
+    ? bancoOutro.trim().replace(/\s+/g, " ").slice(0, 80)
+    : banco;
+
   async function addBanco() {
-    if (!banco) {
-      toast.error("Selecione um banco");
+    if (!bancoFinal) {
+      toast.error(
+        isOutro ? "Informe o nome do banco ou fundo" : "Selecione um banco",
+      );
       return;
     }
     setPending(true);
@@ -65,7 +77,7 @@ export function LeadBancosCard({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        banco,
+        banco: bancoFinal,
         status,
         observacoes: observacoes.trim() || null,
       }),
@@ -80,6 +92,7 @@ export function LeadBancosCard({
     }
     toast.success("Banco atualizado");
     setBanco("");
+    setBancoOutro("");
     setStatus("enviado");
     setObservacoes("");
     startTransition(() => router.refresh());
@@ -178,9 +191,24 @@ export function LeadBancosCard({
                         {b}
                       </SelectItem>
                     ))}
+                    <SelectItem value={OUTRO_VALUE}>
+                      Outro (banco ou fundo não listado)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {isOutro && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="banco-outro-nome">Nome do banco/fundo</Label>
+                  <Input
+                    id="banco-outro-nome"
+                    value={bancoOutro}
+                    maxLength={80}
+                    placeholder="Ex.: Fundo XPTO Capital"
+                    onChange={(e) => setBancoOutro(e.currentTarget.value)}
+                  />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label>Status</Label>
                 <Select value={status} onValueChange={(v) => setStatus(v ?? "enviado")}>

@@ -32,11 +32,9 @@ import {
   FechamentoDialog,
 } from "./lead-status-dialogs";
 import { ViewToggle } from "./view-toggle";
+import { BancosPicker } from "./bancos-picker";
 import { Button } from "@/components/ui/button";
-import {
-  BANCOS_PARCEIROS,
-  STATUS_LEAD_LABEL,
-} from "@/lib/constants";
+import { STATUS_LEAD_LABEL } from "@/lib/constants";
 import {
   Dialog,
   DialogContent,
@@ -554,7 +552,7 @@ function KanbanBancosDialog({
 
   async function handleConfirm() {
     if (selected.size === 0) {
-      toast.error("Selecione ao menos um banco");
+      toast.error("Selecione ou informe ao menos um banco");
       return;
     }
     setPending(true);
@@ -582,26 +580,7 @@ function KanbanBancosDialog({
         <DialogHeader>
           <DialogTitle>{STATUS_LEAD_LABEL[status]} · bancos enviados</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {BANCOS_PARCEIROS.map((banco) => {
-            const active = selected.has(banco);
-            return (
-              <button
-                key={banco}
-                type="button"
-                onClick={() => toggle(banco)}
-                className={cn(
-                  "rounded-md border px-3 py-2 text-left text-sm transition-colors",
-                  active
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "hover:bg-muted",
-                )}
-              >
-                {banco}
-              </button>
-            );
-          })}
-        </div>
+        <BancosPicker selected={selected} onToggle={toggle} />
         <DialogFooter>
           <Button variant="outline" onClick={onCancel} disabled={pending}>
             Cancelar

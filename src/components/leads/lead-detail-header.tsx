@@ -41,7 +41,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BANCOS_PARCEIROS, STATUS_LEAD_LABEL } from "@/lib/constants";
+import { STATUS_LEAD_LABEL } from "@/lib/constants";
+import { BancosPicker } from "@/components/leads/bancos-picker";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { whatsappUrl } from "@/lib/formatters/phone";
 
@@ -466,7 +467,7 @@ function BancosStatusDialog({
 
   async function handleConfirm() {
     if (selected.size === 0) {
-      toast.error("Selecione ao menos um banco");
+      toast.error("Selecione ou informe ao menos um banco");
       return;
     }
     setPending(true);
@@ -493,26 +494,7 @@ function BancosStatusDialog({
         <DialogHeader>
           <DialogTitle>{STATUS_LEAD_LABEL[status]} · bancos enviados</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {BANCOS_PARCEIROS.map((banco) => {
-            const active = selected.has(banco);
-            return (
-              <button
-                key={banco}
-                type="button"
-                onClick={() => toggle(banco)}
-                className={[
-                  "rounded-md border px-3 py-2 text-left text-sm transition-colors",
-                  active
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "hover:bg-muted",
-                ].join(" ")}
-              >
-                {banco}
-              </button>
-            );
-          })}
-        </div>
+        <BancosPicker selected={selected} onToggle={toggle} />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancelar

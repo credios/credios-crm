@@ -12,6 +12,7 @@ import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
+import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { updateLeadSchema } from "@/lib/validators/lead";
 import { normalizarCpf, normalizarWhatsapp } from "@/lib/validators/webhook";
 
@@ -213,13 +214,10 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
   }
 
   const { id } = await params;
+  // Row completa: o snapshot alimenta a auditoria e a notificação ao Portal
+  // de Parceiros (que precisa de source/origem para decidir se notifica).
   const [existing] = await db
-    .select({
-      id: leadsTable.id,
-      nome: leadsTable.nome,
-      status: leadsTable.status,
-      consultorId: leadsTable.consultorId,
-    })
+    .select()
     .from(leadsTable)
     .where(eq(leadsTable.id, id))
     .limit(1);
@@ -242,6 +240,10 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
   );
 
   await db.delete(leadsTable).where(eq(leadsTable.id, id));
+
+  // Lead indicado por parceiro: marca como "Excluída" no Portal de Parceiros
+  // (o portal preserva o registro, só tira do funil). No-op para os demais.
+  after(() => notifyPartnerPortal(existing, "excluido"));
 
   return NextResponse.json({ ok: true });
 }
