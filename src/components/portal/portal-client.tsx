@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import {
   Check,
@@ -129,9 +130,14 @@ export function PortalClient({
     <div className="relative mx-auto max-w-2xl px-4 pb-24 pt-7 sm:px-6">
       {/* Header */}
       <header className="mb-8 flex items-center justify-between">
-        <span className="font-display text-lg font-semibold tracking-tight text-white">
-          credios<span className="text-credios-gold">.</span>
-        </span>
+        <Image
+          src="/credios-logo.png"
+          alt="Credios"
+          width={94}
+          height={30}
+          priority
+          className="h-[26px] w-auto object-contain brightness-0 invert"
+        />
         <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white/65 backdrop-blur">
           <Lock className="h-3 w-3 text-emerald-400" aria-hidden /> Ambiente seguro
         </span>
@@ -254,7 +260,7 @@ export function PortalClient({
             <button
               type="button"
               onClick={() => setConcluido(false)}
-              className="mt-4 text-sm font-medium text-credios-gold underline-offset-4 hover:underline"
+              className="mt-4 cursor-pointer text-sm font-medium text-credios-gold underline-offset-4 transition-colors hover:text-credios-gold/80 hover:underline"
             >
               Continuar enviando
             </button>
@@ -268,7 +274,7 @@ export function PortalClient({
             <button
               type="button"
               onClick={() => setConcluido(true)}
-              className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-credios-blue to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-credios-blue/25 transition-[filter] duration-150 hover:brightness-110"
+              className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-gradient-to-r from-credios-blue to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-credios-blue/25 transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.99]"
             >
               Já enviei o que tenho por agora
             </button>
@@ -355,7 +361,7 @@ function DocRow({
               <button
                 type="button"
                 onClick={() => onRemove(d.id)}
-                className="shrink-0 rounded-lg p-1 text-white/40 transition-colors hover:bg-white/10 hover:text-white/80"
+                className="shrink-0 cursor-pointer rounded-lg p-1 text-white/40 transition-colors hover:bg-white/10 hover:text-white/80"
                 aria-label="Remover documento"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden />
@@ -371,7 +377,7 @@ function DocRow({
           type="button"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-4 py-2.5 text-[13px] font-medium text-white/70 transition-colors hover:border-credios-blue/60 hover:bg-credios-blue/[0.06] hover:text-white disabled:cursor-wait disabled:opacity-60"
+          className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-4 py-2.5 text-[13px] font-medium text-white/70 transition-colors hover:border-credios-blue/60 hover:bg-credios-blue/[0.06] hover:text-white disabled:cursor-wait disabled:opacity-60"
         >
           {busy ? (
             <>
