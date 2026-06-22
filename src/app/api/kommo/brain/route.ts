@@ -283,17 +283,27 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Devolve a resposta pro Salesbot injetar no WhatsApp.
-      await fetch(returnUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: { handled: true },
-          execute_handlers: [
-            { handler: "show", params: { type: "text", value: resposta } },
-          ],
-        }),
-      }).catch((e) => console.error("[kommo/brain] return_url falhou:", e));
+      // Devolve a resposta pro Salesbot injetar no WhatsApp. A return_url é um
+      // endpoint /api/v4 autenticado → precisa do Bearer (long-lived token).
+      try {
+        const resp = await fetch(returnUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.KOMMO_TOKEN ?? ""}`,
+          },
+          body: JSON.stringify({
+            data: { handled: true },
+            execute_handlers: [
+              { handler: "show", params: { type: "text", value: resposta } },
+            ],
+          }),
+        });
+        const respText = await resp.text().catch(() => "");
+        console.log("[kommo/brain] return_url resp:", resp.status, respText.slice(0, 300));
+      } catch (e) {
+        console.error("[kommo/brain] return_url falhou:", e);
+      }
     } catch (err) {
       console.error("[kommo/brain] erro no processamento:", err);
     }
