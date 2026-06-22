@@ -2,12 +2,16 @@ import "server-only";
 
 import { Resend } from "resend";
 
-import { renderEmailLayout } from "@/lib/notifications/email-layout";
+import {
+  CLIENT_EMAIL_FROM,
+  renderClientEmail,
+} from "@/lib/notifications/client-email";
 
 const apiKey = process.env.RESEND_API_KEY;
-const from = process.env.EMAIL_FROM ?? "crm@credios.com.br";
 const replyTo = process.env.EMAIL_REPLY_TO;
 const resend = apiKey ? new Resend(apiKey) : null;
+
+const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 
 function primeiroNome(nome: string): string {
   return nome.trim().split(/\s+/)[0] || nome;
@@ -15,8 +19,8 @@ function primeiroNome(nome: string): string {
 
 /**
  * E-mail personalizado que convida o cliente a enviar a documentação pelo
- * portal. Tom: tranquilizador — a proposta JÁ está em andamento, pode enviar
- * aos poucos, ambiente seguro (LGPD), e um consultor entra em contato.
+ * portal. Tom tranquilizador — a proposta JÁ está em andamento, pode enviar aos
+ * poucos, ambiente seguro (LGPD), e um consultor entra em contato.
  */
 export async function sendPortalEmail(input: {
   nome: string;
@@ -27,42 +31,48 @@ export async function sendPortalEmail(input: {
 
   const nome = primeiroNome(input.nome);
 
-  const contentHtml = `
-    <div style="background:#eef3fe;border:1px solid #dce6fd;border-radius:14px;padding:18px 20px;margin:0 0 20px">
-      <p style="margin:0;color:#213d80;font-size:15px;line-height:1.6;font-family:Inter,Arial,sans-serif">
-        <strong>Sua proposta já está sendo trabalhada.</strong> Pra acelerar a análise e
-        já buscar as melhores condições com os bancos parceiros, criamos um espaço seguro
-        com a lista exata de documentos do seu caso.
-      </p>
-    </div>
-
-    <p style="margin:0 0 14px;color:#3f4a5a;font-size:15px;line-height:1.6;font-family:Inter,Arial,sans-serif">
-      É rápido e você não precisa de tudo agora:
+  const bodyHtml = `
+    <p style="margin:0 0 18px;color:#475467;font-size:16px;line-height:1.65;font-family:${FONT}">
+      <strong style="color:#0f1b3d">Sua proposta já está sendo trabalhada.</strong> Para
+      acelerar a análise e buscar as melhores condições com os bancos parceiros, reunimos
+      num só lugar, com segurança, a lista exata de documentos do seu caso.
     </p>
-    <ul style="margin:0 0 20px;padding-left:18px;color:#3f4a5a;font-size:15px;line-height:1.7;font-family:Inter,Arial,sans-serif">
-      <li><strong>Envie aos poucos.</strong> Mandou o que tinha em mãos? Pode fechar e voltar depois — salvamos tudo.</li>
-      <li><strong>Só o que o seu caso pede.</strong> A lista já vem personalizada pra você, sem papelada à toa.</li>
-      <li><strong>Com segurança.</strong> Seus documentos ficam protegidos e usados só para a análise da sua proposta (LGPD).</li>
-    </ul>
-
-    <p style="margin:0 0 4px;color:#3f4a5a;font-size:15px;line-height:1.6;font-family:Inter,Arial,sans-serif">
-      Em breve um consultor da Credios entra em contato pra te acompanhar de perto. Qualquer
-      documento que faltar, a gente resolve junto.
+    <p style="margin:0 0 12px;color:#475467;font-size:16px;line-height:1.65;font-family:${FONT}">
+      Você não precisa de tudo agora:
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 8px">
+      ${[
+        ["Envie aos poucos.", "Mandou o que tinha em mãos? Pode fechar e voltar depois — salvamos tudo."],
+        ["Só o que o seu caso pede.", "A lista já vem personalizada para você, sem papelada à toa."],
+        ["Com segurança.", "Seus documentos ficam protegidos e usados só para a análise da sua proposta (LGPD)."],
+      ]
+        .map(
+          ([t, d]) => `
+      <tr><td style="padding:6px 0;font-family:${FONT};font-size:15px;line-height:1.55;color:#475467;vertical-align:top">
+        <span style="color:#2f55c7;font-weight:700">•</span>&nbsp;
+        <strong style="color:#0f1b3d">${t}</strong> ${d}
+      </td></tr>`,
+        )
+        .join("")}
+    </table>
+    <p style="margin:18px 0 0;color:#475467;font-size:15px;line-height:1.65;font-family:${FONT}">
+      Em breve um consultor da Credios entra em contato para te acompanhar de perto.
+      Qualquer documento que faltar, a gente resolve junto.
     </p>
   `;
 
-  const html = renderEmailLayout({
+  const html = renderClientEmail({
     preheader: "Adiante sua proposta — envie seus documentos com segurança, no seu tempo.",
-    eyebrow: "SUA PROPOSTA",
     title: `${nome}, vamos adiantar sua proposta`,
-    intro: "Reunimos num só lugar, seguro, a lista exata de documentos do seu caso.",
-    contentHtml,
-    ctas: [{ href: input.url, label: "Enviar meus documentos", tone: "primary" }],
+    bodyHtml,
+    cta: { href: input.url, label: "Enviar meus documentos" },
+    footer:
+      "Você recebeu este e-mail porque solicitou uma simulação na Credios. Seus dados são tratados conforme a LGPD.",
   });
 
   try {
     const result = await resend.emails.send({
-      from,
+      from: CLIENT_EMAIL_FROM,
       to: input.email,
       replyTo,
       subject: `${nome}, vamos adiantar sua proposta de crédito`,

@@ -6,38 +6,22 @@ import {
   Check,
   CheckCircle2,
   FileText,
-  Home,
   Loader2,
   Lock,
-  ScrollText,
-  ShieldCheck,
-  Sparkles,
   Trash2,
   UploadCloud,
-  User,
-  Users,
-  Wallet,
-  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { PortalIcon, type PortalIconName } from "./portal-icons";
 import {
   chavesObrigatorias,
-  type DocCategoria,
   type DocItem,
   type DocSection,
 } from "@/lib/portal/checklist";
 
 export type UploadedDoc = { id: string; filename: string; tamanhoBytes: number };
 export type DocsPorTipo = Record<string, UploadedDoc[]>;
-
-const CAT_ICON: Record<DocCategoria, LucideIcon> = {
-  titular: User,
-  renda: Wallet,
-  estado_civil: ScrollText,
-  conjuge: Users,
-  imovel: Home,
-};
 
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.heic,.heif,.webp,image/*,application/pdf";
 
@@ -146,7 +130,7 @@ export function PortalClient({
       {/* Hero */}
       <section className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.045] p-7 shadow-[0_8px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-8">
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-credios-gold/25 bg-credios-gold/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-credios-gold">
-          <Sparkles className="h-3.5 w-3.5" aria-hidden /> Sua proposta já está em andamento
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-credios-gold" aria-hidden /> Sua proposta já está em andamento
         </div>
         <h1 className="font-display text-[26px] font-bold leading-tight text-white sm:text-3xl">
           {firstName}, vamos adiantar a sua proposta
@@ -179,16 +163,18 @@ export function PortalClient({
 
       {/* Tranquilização — pode enviar aos poucos */}
       <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
-        {[
-          { icon: UploadCloud, t: "Envie aos poucos", d: "Mandou o que tinha? Pode fechar e voltar — salvamos tudo." },
-          { icon: ShieldCheck, t: "Seus dados protegidos", d: "Usados só para a análise da sua proposta (LGPD)." },
-          { icon: Sparkles, t: "Só o que o seu caso pede", d: "Lista personalizada pra você, sem papelada à toa." },
-        ].map((b) => (
+        {(
+          [
+            { icon: "enviar", t: "Envie aos poucos", d: "Mandou o que tinha? Pode fechar e voltar — salvamos tudo." },
+            { icon: "seguranca", t: "Seus dados protegidos", d: "Usados só para a análise da sua proposta (LGPD)." },
+            { icon: "personalizado", t: "Só o que o seu caso pede", d: "Lista personalizada pra você, sem papelada à toa." },
+          ] as { icon: PortalIconName; t: string; d: string }[]
+        ).map((b) => (
           <div
             key={b.t}
             className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur"
           >
-            <b.icon className="mb-2 h-[18px] w-[18px] text-credios-blue" aria-hidden />
+            <PortalIcon name={b.icon} className="mb-2 h-5 w-5 text-credios-blue" />
             <p className="text-[13px] font-semibold text-white/85">{b.t}</p>
             <p className="mt-1 text-[12px] leading-snug text-white/50">{b.d}</p>
           </div>
@@ -198,7 +184,6 @@ export function PortalClient({
       {/* Seções */}
       <div className="mt-6 space-y-5">
         {sections.map((section) => {
-          const Icon = CAT_ICON[section.categoria];
           return (
             <section
               key={section.categoria + section.titulo}
@@ -206,7 +191,7 @@ export function PortalClient({
             >
               <div className="mb-4 flex items-start gap-3">
                 <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-credios-blue/15 ring-1 ring-credios-blue/25">
-                  <Icon className="h-[18px] w-[18px] text-credios-blue" aria-hidden />
+                  <PortalIcon name={section.categoria} className="h-5 w-5 text-credios-blue" />
                 </div>
                 <div className="min-w-0">
                   <h2 className="font-display text-base font-semibold text-white">
