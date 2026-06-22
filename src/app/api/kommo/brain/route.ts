@@ -47,17 +47,87 @@ function verifyKommoToken(token: string): {
   } catch {
     return { ok: false, reason: "decode" };
   }
-  const clientId = process.env.KOMMO_CLIENT_ID;
-  if (clientId && claims.aud && claims.aud !== clientId)
-    return { ok: false, reason: "aud", claims };
-  if (typeof claims.exp === "number" && Date.now() / 1000 > claims.exp)
+  // exp/nbf vêm como float (segundos); tolera 60s de skew.
+  if (typeof claims.exp === "number" && Date.now() / 1000 > claims.exp + 60)
     return { ok: false, reason: "exp", claims };
-  if (header.alg === "HS256") {
+
+  // No widget_request o `aud` é a URL do widget (nosso endpoint). Quem identifica
+  // a integração é `client_uuid` (== nosso KOMMO_CLIENT_ID). (Antes comparávamos
+  // aud == client_id — errado, dava 401.)
+  const clientId = process.env.KOMMO_CLIENT_ID;
+  if (clientId && typeof claims.client_uuid === "string" && claims.client_uuid !== clientId)
+    return { ok: false, reason: "client_uuid", claims };
+
+  // Assinatura HMAC: o Kommo assina o widget_request com o client_secret,
+  // tipicamente HS512 (aceita HS256/HS384 também).
+  const algMap: Record<string, string> = { HS256: "sha256", HS384: "sha384", HS512: "sha512" };
+  const hash = typeof header.alg === "string" ? algMap[header.alg] : undefined;
+  if (hash) {
     const secret = process.env.KOMMO_CLIENT_SECRET ?? "";
-    const expected = crypto.createHmac("sha256", secret).update(`${h}.${p}`).digest("base64url");
+    const expected = crypto.createHmac(hash, secret).update(`${h}.${p}`).digest("base64url");
     if (expected !== s) return { ok: false, reason: "assinatura", claims };
   }
   return { ok: true, claims };
+}
+
+/**
+ * Quando o `widget_request` não traz o telefone (o macro {{contact.phone}} costuma
+ * vir vazio em contato de WhatsApp), busca o telefone na API do Kommo a partir do
+ * `entity_id` do JWT (entity_type 1 = contato, 2 = lead). Precisa de KOMMO_TOKEN
+ * válido; falha silenciosa (retorna null) se não der.
+ */
+async function phoneFromKommo(claims: Record<string, unknown> | undefined): Promise<string | null> {
+  if (!claims) return null;
+  const sub = process.env.KOMMO_SUBDOMAIN;
+  const token = process.env.KOMMO_TOKEN;
+  const entityId = claims.entity_id;
+  const entityType = String(claims.entity_type ?? "");
+  if (!sub || !token || !entityId) return null;
+  const base = `https://${sub}.kommo.com/api/v4`;
+  const auth = { Authorization: `Bearer ${token}` };
+
+  const phoneOf = (contact: unknown): string | null => {
+    const fields = (contact as { custom_fields_values?: unknown })?.custom_fields_values;
+    if (!Array.isArray(fields)) return null;
+    for (const f of fields) {
+      const fc = (f as { field_code?: string })?.field_code;
+      if (fc === "PHONE") {
+        const v = (f as { values?: Array<{ value?: unknown }> })?.values?.[0]?.value;
+        if (v) return String(v);
+      }
+    }
+    return null;
+  };
+
+  try {
+    let contactId: number | null = null;
+    if (entityType === "1") {
+      contactId = Number(entityId);
+    } else {
+      // lead (ou outro) → pega o contato principal do lead
+      const r = await fetch(`${base}/leads/${entityId}?with=contacts`, { headers: auth });
+      if (!r.ok) {
+        console.warn("[kommo/brain] API lead falhou:", r.status);
+        return null;
+      }
+      const lead = (await r.json()) as {
+        _embedded?: { contacts?: Array<{ id: number; is_main?: boolean }> };
+      };
+      const contacts = lead._embedded?.contacts ?? [];
+      const main = contacts.find((c) => c.is_main) ?? contacts[0];
+      contactId = main?.id ?? null;
+    }
+    if (!contactId) return null;
+    const rc = await fetch(`${base}/contacts/${contactId}`, { headers: auth });
+    if (!rc.ok) {
+      console.warn("[kommo/brain] API contato falhou:", rc.status);
+      return null;
+    }
+    return phoneOf(await rc.json());
+  } catch (e) {
+    console.error("[kommo/brain] phoneFromKommo erro:", e);
+    return null;
+  }
 }
 
 function pick(obj: unknown, keys: string[]): string | null {
@@ -163,8 +233,9 @@ export async function POST(request: NextRequest) {
   }
 
   const returnUrl = pick(body, ["return_url", "returnUrl"]);
-  const phone = pick(body.data, ["phone", "telefone", "contact_phone", "from"]);
+  const phonePayload = pick(body.data, ["phone", "telefone", "contact_phone", "from"]);
   const mensagem = pick(body.data, ["message", "message_text", "text"]);
+  const claims = v.claims;
 
   if (!returnUrl) {
     console.warn("[kommo/brain] return_url ausente — payload:", JSON.stringify(body).slice(0, 500));
@@ -174,7 +245,11 @@ export async function POST(request: NextRequest) {
   // Ack rápido (<2s). O trabalho pesado vai no after().
   after(async () => {
     try {
+      // Telefone do payload; se veio vazio, busca via API do Kommo pelo entity_id.
+      const phone = phonePayload || (await phoneFromKommo(claims));
+      console.log("[kommo/brain] telefone resolvido:", phone ?? "(vazio)");
       const lead = phone ? await acharLead(phone) : null;
+      console.log("[kommo/brain] lead:", lead ? `${lead.id} (${lead.nome})` : "(não encontrado)");
 
       let link: string | null = null;
       if (lead?.email || lead?.id) {
