@@ -14,7 +14,9 @@ import { LeadBancosCard } from "@/components/leads/lead-bancos-card";
 import { LeadDetailHeader } from "@/components/leads/lead-detail-header";
 import {
   type LeadDetailData,
+  LeadConjugeCard,
   LeadContatoCard,
+  LeadEnderecoImovelCard,
   LeadOperacaoCard,
   LeadOrigemCard,
   LeadParceriaCard,
@@ -85,6 +87,18 @@ export default async function LeadDetailPage({ params }: Props) {
     valorImovelCentavos: masked.valorImovelCentavos,
     saldoDevedorCentavos: masked.saldoDevedorCentavos,
     valorCreditoCentavos: masked.valorCreditoCentavos,
+    // Endereço do imóvel — não é PII sensível, vem direto do row.
+    imovelCep: row.imovelCep ?? null,
+    imovelLogradouro: row.imovelLogradouro ?? null,
+    imovelNumero: row.imovelNumero ?? null,
+    imovelComplemento: row.imovelComplemento ?? null,
+    imovelBairro: row.imovelBairro ?? null,
+    // Cônjuge — CPF/email/WhatsApp são PII, vêm de `masked` (marketing vê ofuscado).
+    conjugeNome: row.conjugeNome ?? null,
+    conjugeCpf: masked.conjugeCpf ?? null,
+    conjugeEmail: masked.conjugeEmail ?? null,
+    conjugeNascimento: row.conjugeNascimento ?? null,
+    conjugeWhatsapp: masked.conjugeWhatsapp ?? null,
     bancoAprovador: masked.bancoAprovador ?? null,
     valorLiberadoCentavos: masked.valorLiberadoCentavos ?? null,
     comissaoCentavos: masked.comissaoCentavos ?? null,
@@ -170,8 +184,10 @@ export default async function LeadDetailPage({ params }: Props) {
         <div className="min-w-0 space-y-6">
           <LeadPessoaisCard lead={lead} canEdit={canEdit} />
           <LeadContatoCard lead={lead} canEdit={canEdit} />
+          <LeadConjugeCard lead={lead} canEdit={canEdit} />
           <LeadParceriaCard lead={lead} />
           <LeadOperacaoCard lead={lead} canEdit={canEdit} />
+          <LeadEnderecoImovelCard lead={lead} canEdit={canEdit} />
 
           {!isMarketing && (
             <Suspense fallback={<SkeletonLeadBancos />}>

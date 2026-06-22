@@ -85,6 +85,18 @@ export const createLeadSchema = z.object({
   saldoDevedorCentavos: cents.nullable().optional(),
   valorCreditoCentavos: cents.nullable().optional(),
 
+  // Endereço do imóvel (garantia) + cônjuge/coobrigado.
+  imovelCep: optionalString,
+  imovelLogradouro: optionalString,
+  imovelNumero: optionalString,
+  imovelComplemento: optionalString,
+  imovelBairro: optionalString,
+  conjugeNome: optionalString,
+  conjugeCpf: optionalString,
+  conjugeEmail: optionalString,
+  conjugeNascimento: optionalString,
+  conjugeWhatsapp: optionalString,
+
   consultorId: z.uuid().nullable().optional(),
 
   origem: optionalString.default("Manual"),

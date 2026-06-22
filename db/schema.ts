@@ -171,6 +171,28 @@ export const leads = pgTable(
     saldoDevedorCentavos: bigint("saldo_devedor_centavos", { mode: "number" }),
     valorCreditoCentavos: bigint("valor_credito_centavos", { mode: "number" }),
 
+    // --- Endereço do imóvel (garantia) ---
+    // Endereço completo do imóvel dado em garantia, capturado no passo de
+    // complemento do simulador (após o lead já estar qualificado). Cidade/estado
+    // do cliente seguem nas colunas de contato acima; aqui fica o imóvel. O CEP
+    // permite autofill (ViaCEP) no site e localização rápida na análise.
+    imovelCep: text("imovel_cep"),
+    imovelLogradouro: text("imovel_logradouro"),
+    imovelNumero: text("imovel_numero"),
+    imovelComplemento: text("imovel_complemento"),
+    imovelBairro: text("imovel_bairro"),
+
+    // --- Cônjuge / coobrigado ---
+    // Em CGI o cônjuge (casado/união estável) participa da garantia por força da
+    // meação — não é dado acessório, é requisito da operação. Capturado de forma
+    // OPCIONAL no complemento do simulador pra adiantar a proposta; preenchido só
+    // quando estadoCivil ∈ {Casado(a), União Estável}.
+    conjugeNome: text("conjuge_nome"),
+    conjugeCpf: text("conjuge_cpf"),
+    conjugeEmail: text("conjuge_email"),
+    conjugeNascimento: date("conjuge_nascimento"),
+    conjugeWhatsapp: text("conjuge_whatsapp"),
+
     // --- Pipeline ---
     // text livre — validado em app-layer contra status_lead_config.key.
     status: text("status").notNull().default("novo"),

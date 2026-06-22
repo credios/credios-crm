@@ -161,6 +161,25 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     updates.saldoDevedorCentavos = patch.saldoDevedorCentavos ?? null;
   if ("valorCreditoCentavos" in rawBody)
     updates.valorCreditoCentavos = patch.valorCreditoCentavos ?? null;
+  // Endereço do imóvel.
+  if ("imovelCep" in rawBody) updates.imovelCep = patch.imovelCep ?? null;
+  if ("imovelLogradouro" in rawBody)
+    updates.imovelLogradouro = patch.imovelLogradouro ?? null;
+  if ("imovelNumero" in rawBody) updates.imovelNumero = patch.imovelNumero ?? null;
+  if ("imovelComplemento" in rawBody)
+    updates.imovelComplemento = patch.imovelComplemento ?? null;
+  if ("imovelBairro" in rawBody) updates.imovelBairro = patch.imovelBairro ?? null;
+  // Cônjuge — CPF/WhatsApp normalizados como os do titular.
+  if ("conjugeNome" in rawBody) updates.conjugeNome = patch.conjugeNome ?? null;
+  if ("conjugeCpf" in rawBody)
+    updates.conjugeCpf = patch.conjugeCpf ? normalizarCpf(patch.conjugeCpf) : null;
+  if ("conjugeEmail" in rawBody) updates.conjugeEmail = patch.conjugeEmail ?? null;
+  if ("conjugeNascimento" in rawBody)
+    updates.conjugeNascimento = patch.conjugeNascimento ?? null;
+  if ("conjugeWhatsapp" in rawBody)
+    updates.conjugeWhatsapp = patch.conjugeWhatsapp
+      ? normalizarWhatsapp(patch.conjugeWhatsapp)
+      : null;
   if ("origem" in rawBody) updates.origem = patch.origem ?? null;
 
   if (Object.keys(updates).length === 0) {

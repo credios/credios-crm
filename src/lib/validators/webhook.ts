@@ -47,6 +47,29 @@ export const webhookLeadPayloadSchema = z
     saldo_devedor: z.coerce.number().nonnegative().optional(),
     valor_credito: z.coerce.number().nonnegative().optional(),
 
+    // ── Endereço do imóvel (garantia) ────────────────────────────────────
+    // Complemento opcional capturado após a qualificação no simulador.
+    imovel_cep: z.string().trim().max(20).optional().or(z.literal("")),
+    imovel_logradouro: z.string().trim().max(200).optional().or(z.literal("")),
+    imovel_numero: z.string().trim().max(20).optional().or(z.literal("")),
+    imovel_complemento: z.string().trim().max(120).optional().or(z.literal("")),
+    imovel_bairro: z.string().trim().max(120).optional().or(z.literal("")),
+
+    // ── Cônjuge / coobrigado ─────────────────────────────────────────────
+    // Opcional; relevante quando estado_civil ∈ {Casado(a), União Estável}.
+    // CPF/WhatsApp são normalizados server-side (digits / E.164).
+    conjuge_nome: z.string().trim().max(200).optional().or(z.literal("")),
+    conjuge_cpf: z.string().trim().optional().or(z.literal("")),
+    conjuge_email: z.string().trim().optional().or(z.literal("")),
+    // Data ISO (YYYY-MM-DD) enviada pelo site; aceita vazio.
+    conjuge_nascimento: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida")
+      .optional()
+      .or(z.literal("")),
+    conjuge_whatsapp: z.string().trim().optional().or(z.literal("")),
+
     // ── Parceria (Portal de Parceiros) ───────────────────────────────────
     // Enviados pelo portal quando o lead é uma indicação de parceiro.
     parceiro_nome: z.string().trim().max(200).optional().or(z.literal("")),

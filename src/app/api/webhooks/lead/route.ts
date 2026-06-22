@@ -143,6 +143,17 @@ export async function POST(request: NextRequest) {
           valorImovelCentavos: setIf(reaisParaCentavos(payload.valor_imovel), existing.valorImovelCentavos),
           saldoDevedorCentavos: setIf(reaisParaCentavos(payload.saldo_devedor), existing.saldoDevedorCentavos),
           valorCreditoCentavos: setIf(reaisParaCentavos(payload.valor_credito), existing.valorCreditoCentavos),
+          // Endereço do imóvel + cônjuge (complemento opcional do simulador).
+          imovelCep: setIf(emptyToNull(payload.imovel_cep ?? null), existing.imovelCep),
+          imovelLogradouro: setIf(emptyToNull(payload.imovel_logradouro ?? null), existing.imovelLogradouro),
+          imovelNumero: setIf(emptyToNull(payload.imovel_numero ?? null), existing.imovelNumero),
+          imovelComplemento: setIf(emptyToNull(payload.imovel_complemento ?? null), existing.imovelComplemento),
+          imovelBairro: setIf(emptyToNull(payload.imovel_bairro ?? null), existing.imovelBairro),
+          conjugeNome: setIf(emptyToNull(payload.conjuge_nome ?? null), existing.conjugeNome),
+          conjugeCpf: setIf(normalizarCpf(emptyToNull(payload.conjuge_cpf ?? null)), existing.conjugeCpf),
+          conjugeEmail: setIf(emptyToNull(payload.conjuge_email ?? null), existing.conjugeEmail),
+          conjugeNascimento: setIf(emptyToNull(payload.conjuge_nascimento ?? null), existing.conjugeNascimento),
+          conjugeWhatsapp: setIf(normalizarWhatsapp(emptyToNull(payload.conjuge_whatsapp ?? null)), existing.conjugeWhatsapp),
           valoresSuspeitos: valoresSuspeitos as never,
           // Preserva o payload original da 1ª etapa e anexa o da 2ª, sem perder
           // histórico de atribuição.
@@ -335,6 +346,17 @@ export async function POST(request: NextRequest) {
       valorImovelCentavos: reaisParaCentavos(payload.valor_imovel),
       saldoDevedorCentavos: reaisParaCentavos(payload.saldo_devedor),
       valorCreditoCentavos: reaisParaCentavos(payload.valor_credito),
+      // ── Endereço do imóvel + cônjuge (complemento opcional do simulador) ─
+      imovelCep: emptyToNull(payload.imovel_cep ?? null),
+      imovelLogradouro: emptyToNull(payload.imovel_logradouro ?? null),
+      imovelNumero: emptyToNull(payload.imovel_numero ?? null),
+      imovelComplemento: emptyToNull(payload.imovel_complemento ?? null),
+      imovelBairro: emptyToNull(payload.imovel_bairro ?? null),
+      conjugeNome: emptyToNull(payload.conjuge_nome ?? null),
+      conjugeCpf: normalizarCpf(emptyToNull(payload.conjuge_cpf ?? null)),
+      conjugeEmail: emptyToNull(payload.conjuge_email ?? null),
+      conjugeNascimento: emptyToNull(payload.conjuge_nascimento ?? null),
+      conjugeWhatsapp: normalizarWhatsapp(emptyToNull(payload.conjuge_whatsapp ?? null)),
       // ── Parceria (Portal de Parceiros) ──────────────────────────────────
       parceiroNome: emptyToNull(payload.parceiro_nome ?? null),
       parceiroPortalId: emptyToNull(payload.parceiro_portal_id ?? null),

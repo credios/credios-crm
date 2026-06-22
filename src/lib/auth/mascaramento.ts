@@ -50,6 +50,10 @@ export type LeadLikeForMasking = {
   bancoAprovador?: string | null;
   valorLiberadoCentavos?: number | null;
   comissaoCentavos?: number | null;
+  // Cônjuge — mesmas regras de PII do titular.
+  conjugeCpf?: string | null;
+  conjugeEmail?: string | null;
+  conjugeWhatsapp?: string | null;
 };
 
 export type MaskedLeadFields = {
@@ -85,6 +89,10 @@ export function maskLeadForPerfil<T extends LeadLikeForMasking>(
       whatsapp: null,
       rendaMensalCentavos: null,
       rendaFaixa: rendaParaFaixa(out.rendaMensalCentavos),
+      // Cônjuge — mesmo tratamento de PII do titular.
+      conjugeCpf: maskCpf(out.conjugeCpf),
+      conjugeEmail: maskEmail(out.conjugeEmail),
+      conjugeWhatsapp: null,
     };
   }
 

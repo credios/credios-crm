@@ -55,6 +55,18 @@ export type LeadDetailData = {
   valorImovelCentavos: number | null;
   saldoDevedorCentavos: number | null;
   valorCreditoCentavos: number | null;
+  // Endereço do imóvel (garantia)
+  imovelCep: string | null;
+  imovelLogradouro: string | null;
+  imovelNumero: string | null;
+  imovelComplemento: string | null;
+  imovelBairro: string | null;
+  // Cônjuge / coobrigado
+  conjugeNome: string | null;
+  conjugeCpf: string | null;
+  conjugeEmail: string | null;
+  conjugeNascimento: string | null;
+  conjugeWhatsapp: string | null;
   bancoAprovador: string | null;
   valorLiberadoCentavos: number | null;
   comissaoCentavos: number | null;
@@ -107,6 +119,21 @@ function reaisToCents(s: string): number | null {
 function centsToReaisStr(cents: number | null | undefined): string {
   if (cents == null) return "";
   return String(cents / 100);
+}
+
+/** "01310100" / "01310-100" → "01310-100". Mantém original se não tiver 8 dígitos. */
+function formatCep(cep: string | null | undefined): string | null {
+  if (!cep) return null;
+  const d = cep.replace(/\D/g, "");
+  if (d.length !== 8) return cep;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+}
+
+/** "YYYY-MM-DD" → "DD/MM/YYYY". Mantém original se não casar. */
+function formatDateBr(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
 
 // ============================================================================
@@ -420,6 +447,159 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
         // permaneceria por inércia).
         saldoDevedorCentavos: situacao === "Financiado" ? reaisToCents(saldoDevedor) : null,
         valorCreditoCentavos: reaisToCents(valorCredito),
+      })}
+      onSavedReset={reset}
+    />
+  );
+}
+
+// ============================================================================
+// Endereço do imóvel (garantia)
+// ============================================================================
+
+export function LeadEnderecoImovelCard({ lead, canEdit }: { lead: LeadDetailData; canEdit: boolean }) {
+  const [cep, setCep] = useState(lead.imovelCep ?? "");
+  const [logradouro, setLogradouro] = useState(lead.imovelLogradouro ?? "");
+  const [numero, setNumero] = useState(lead.imovelNumero ?? "");
+  const [complemento, setComplemento] = useState(lead.imovelComplemento ?? "");
+  const [bairro, setBairro] = useState(lead.imovelBairro ?? "");
+
+  function reset() {
+    setCep(lead.imovelCep ?? "");
+    setLogradouro(lead.imovelLogradouro ?? "");
+    setNumero(lead.imovelNumero ?? "");
+    setComplemento(lead.imovelComplemento ?? "");
+    setBairro(lead.imovelBairro ?? "");
+  }
+
+  const hasData = Boolean(
+    lead.imovelCep ||
+      lead.imovelLogradouro ||
+      lead.imovelNumero ||
+      lead.imovelComplemento ||
+      lead.imovelBairro,
+  );
+  // Sem endereço e sem permissão de editar → não polui a ficha com um card de "—".
+  if (!hasData && !canEdit) return null;
+
+  return (
+    <LeadEditableCard
+      title="Endereço do imóvel"
+      description="Imóvel dado em garantia"
+      canEdit={canEdit}
+      leadId={lead.id}
+      view={[
+        { label: "CEP", value: formatCep(lead.imovelCep) },
+        { label: "Logradouro", value: lead.imovelLogradouro },
+        { label: "Número", value: lead.imovelNumero },
+        { label: "Complemento", value: lead.imovelComplemento },
+        { label: "Bairro", value: lead.imovelBairro },
+      ]}
+      edit={
+        <FormGrid>
+          <FormField label="CEP" htmlFor="ed-imovel-cep">
+            <Input id="ed-imovel-cep" value={cep} onChange={(e) => setCep(e.currentTarget.value)} placeholder="00000-000" inputMode="numeric" />
+          </FormField>
+          <FormField label="Número" htmlFor="ed-imovel-numero">
+            <Input id="ed-imovel-numero" value={numero} onChange={(e) => setNumero(e.currentTarget.value)} />
+          </FormField>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="ed-imovel-logradouro">Logradouro</Label>
+            <Input id="ed-imovel-logradouro" value={logradouro} onChange={(e) => setLogradouro(e.currentTarget.value)} placeholder="Rua, avenida..." />
+          </div>
+          <FormField label="Complemento" htmlFor="ed-imovel-complemento">
+            <Input id="ed-imovel-complemento" value={complemento} onChange={(e) => setComplemento(e.currentTarget.value)} placeholder="Apto, bloco..." />
+          </FormField>
+          <FormField label="Bairro" htmlFor="ed-imovel-bairro">
+            <Input id="ed-imovel-bairro" value={bairro} onChange={(e) => setBairro(e.currentTarget.value)} />
+          </FormField>
+        </FormGrid>
+      }
+      buildPayload={() => ({
+        imovelCep: cep.replace(/\D/g, "") || null,
+        imovelLogradouro: logradouro.trim() || null,
+        imovelNumero: numero.trim() || null,
+        imovelComplemento: complemento.trim() || null,
+        imovelBairro: bairro.trim() || null,
+      })}
+      onSavedReset={reset}
+    />
+  );
+}
+
+// ============================================================================
+// Cônjuge / coobrigado
+// ============================================================================
+
+const ESTADOS_CIVIS_COM_CONJUGE = new Set(["Casado(a)", "União Estável"]);
+
+export function LeadConjugeCard({ lead, canEdit }: { lead: LeadDetailData; canEdit: boolean }) {
+  const [nome, setNome] = useState(lead.conjugeNome ?? "");
+  const [cpf, setCpf] = useState(lead.conjugeCpf ?? "");
+  const [nascimento, setNascimento] = useState(lead.conjugeNascimento ?? "");
+  const [email, setEmail] = useState(lead.conjugeEmail ?? "");
+  const [whatsapp, setWhatsapp] = useState(lead.conjugeWhatsapp ?? "");
+
+  function reset() {
+    setNome(lead.conjugeNome ?? "");
+    setCpf(lead.conjugeCpf ?? "");
+    setNascimento(lead.conjugeNascimento ?? "");
+    setEmail(lead.conjugeEmail ?? "");
+    setWhatsapp(lead.conjugeWhatsapp ?? "");
+  }
+
+  const hasData = Boolean(
+    lead.conjugeNome ||
+      lead.conjugeCpf ||
+      lead.conjugeEmail ||
+      lead.conjugeNascimento ||
+      lead.conjugeWhatsapp,
+  );
+  const relevante =
+    lead.estadoCivil != null && ESTADOS_CIVIS_COM_CONJUGE.has(lead.estadoCivil);
+  // Faz sentido quando o lead é casado/união estável (meação) ou quando já há
+  // dados do cônjuge. Para solteiros sem dados, o card não aparece.
+  if (!relevante && !hasData) return null;
+
+  return (
+    <LeadEditableCard
+      title="Cônjuge / coobrigado"
+      description="Participa da garantia (meação)"
+      canEdit={canEdit}
+      leadId={lead.id}
+      view={[
+        { label: "Nome", value: lead.conjugeNome },
+        { label: "CPF", value: lead.conjugeCpf ? formatCpf(lead.conjugeCpf) : null },
+        { label: "Nascimento", value: formatDateBr(lead.conjugeNascimento) },
+        { label: "Email", value: lead.conjugeEmail },
+        { label: "WhatsApp", value: lead.conjugeWhatsapp ? formatPhoneBr(lead.conjugeWhatsapp) : null },
+      ]}
+      edit={
+        <FormGrid>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="ed-conj-nome">Nome completo</Label>
+            <Input id="ed-conj-nome" value={nome} onChange={(e) => setNome(e.currentTarget.value)} />
+          </div>
+          <FormField label="CPF" htmlFor="ed-conj-cpf">
+            <Input id="ed-conj-cpf" value={cpf} onChange={(e) => setCpf(e.currentTarget.value)} placeholder="000.000.000-00" />
+          </FormField>
+          <FormField label="Data de nascimento" htmlFor="ed-conj-nasc">
+            <Input id="ed-conj-nasc" type="date" value={nascimento} onChange={(e) => setNascimento(e.currentTarget.value)} />
+          </FormField>
+          <FormField label="Email" htmlFor="ed-conj-email">
+            <Input id="ed-conj-email" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
+          </FormField>
+          <FormField label="WhatsApp" htmlFor="ed-conj-wa">
+            <Input id="ed-conj-wa" type="tel" value={whatsapp} onChange={(e) => setWhatsapp(e.currentTarget.value)} placeholder="+5547999999999" />
+          </FormField>
+        </FormGrid>
+      }
+      buildPayload={() => ({
+        conjugeNome: nome.trim() || null,
+        conjugeCpf: cpf.trim() || null,
+        conjugeNascimento: nascimento.trim() || null,
+        conjugeEmail: email.trim() || null,
+        conjugeWhatsapp: whatsapp.trim() || null,
       })}
       onSavedReset={reset}
     />
