@@ -20,17 +20,8 @@ import { generatePortalToken, portalUrl } from "@/lib/portal/token";
  * Fase B (IA livre) liga o Claude aqui, com guardrails. Fase A é roteiro fixo.
  */
 
-const HORARIO = "seg–sex, 8h–17h";
-
-function brl(centavos: number | null | undefined): string | null {
-  if (centavos == null) return null;
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
-    centavos / 100,
-  );
-}
-
-/** Valida o JWT do widget_request: aud == client_id, não expirado, e assinatura
- *  HS256 com o client_secret (se for esse o alg). Loga o motivo em falha. */
+/** Valida o JWT do widget_request: assinatura HMAC (HS256/384/512) com o
+ *  client_secret, não expirado, e client_uuid == KOMMO_CLIENT_ID. Loga o motivo. */
 function verifyKommoToken(token: string): {
   ok: boolean;
   reason?: string;
@@ -191,22 +182,25 @@ async function acharLead(phone: string) {
 function montarResposta(
   lead: Awaited<ReturnType<typeof acharLead>>,
   link: string | null,
-): string {
+): string[] {
+  // O handler `show` do Kommo limita `value` a 80 chars, então a resposta sai em
+  // bolhas curtas (uma por elemento). Cada linha é mantida ≤ 80.
   const nome = lead?.nome ? lead.nome.split(/\s+/)[0] : "";
-  const valor = brl(lead?.valorCreditoCentavos);
-  const cidade = lead?.cidade;
-  const saudacao = `Oi${nome ? `, ${nome}` : ""}! 👋 Aqui é o assistente virtual da Credios.`;
-  const confirma = lead
-    ? `Confirmando rapidinho: você fez uma simulação de crédito com garantia de imóvel${
-        cidade ? ` em ${cidade}` : ""
-      }${valor ? `, buscando ${valor}` : ""}, certo?`
-    : `Recebemos o seu contato sobre crédito com garantia de imóvel.`;
-  const tranquiliza = `A sua proposta já está sendo trabalhada, e um consultor vai te chamar no horário comercial (${HORARIO}). 🙂`;
-  const docs = link
-    ? `Para adiantar, você já pode enviar os seus documentos com segurança por aqui:\n${link}`
-    : "";
-  const rodape = `É tudo gratuito e sem compromisso.`;
-  return [saudacao, confirma, tranquiliza, docs, rodape].filter(Boolean).join("\n\n");
+  const out: string[] = [];
+  out.push(`Oi${nome ? `, ${nome}` : ""}! Sou o assistente virtual da Credios. 👋`);
+  out.push(
+    lead
+      ? `Sua proposta de crédito com garantia de imóvel já está em análise 🙂`
+      : `Recebemos seu contato sobre crédito com garantia de imóvel 🙂`,
+  );
+  if (link) {
+    out.push(`Um consultor logo entra em contato. Pra adiantar, envie seus docs aqui:`);
+    out.push(link);
+  } else {
+    out.push(`Um consultor logo entra em contato com você. É sem compromisso.`);
+  }
+  // Trava de segurança: nunca passar de 80 (o link tem ~77).
+  return out.map((s) => (s.length > 80 ? s.slice(0, 80) : s));
 }
 
 export async function POST(request: NextRequest) {
@@ -261,7 +255,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const resposta = montarResposta(lead, link);
+      const bolhas = montarResposta(lead, link);
 
       // Registra na timeline do lead (entrada + saída).
       if (lead) {
@@ -278,13 +272,14 @@ export async function POST(request: NextRequest) {
           leadId: lead.id,
           autorId: null,
           tipo: "whatsapp_enviado",
-          conteudo: resposta,
+          conteudo: bolhas.join("\n"),
           metadata: { canal: "kommo_bot", automatico: true } as never,
         });
       }
 
       // Devolve a resposta pro Salesbot injetar no WhatsApp. A return_url é um
       // endpoint /api/v4 autenticado → precisa do Bearer (long-lived token).
+      // Uma bolha por `show` (cada `value` ≤ 80 chars, limite do Kommo).
       try {
         const resp = await fetch(returnUrl, {
           method: "POST",
@@ -294,9 +289,10 @@ export async function POST(request: NextRequest) {
           },
           body: JSON.stringify({
             data: { handled: true },
-            execute_handlers: [
-              { handler: "show", params: { type: "text", value: resposta } },
-            ],
+            execute_handlers: bolhas.map((value) => ({
+              handler: "show",
+              params: { type: "text", value },
+            })),
           }),
         });
         const respText = await resp.text().catch(() => "");
