@@ -69,6 +69,9 @@ export const webhookLeadPayloadSchema = z
       .optional()
       .or(z.literal("")),
     conjuge_whatsapp: z.string().trim().optional().or(z.literal("")),
+    // notify=false → enriquecimento silencioso (etapa parcial do simulador): o
+    // CRM atualiza o lead mas NÃO dispara o e-mail de "Cadastro completo".
+    notify: z.coerce.boolean().optional(),
 
     // ── Parceria (Portal de Parceiros) ───────────────────────────────────
     // Enviados pelo portal quando o lead é uma indicação de parceiro.

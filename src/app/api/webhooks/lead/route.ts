@@ -191,23 +191,28 @@ export async function POST(request: NextRequest) {
           enrichMeta,
         ),
       );
-      after(async () => {
-        const admins = await db
-          .select({ email: usersTable.email })
-          .from(usersTable)
-          .where(sql`${usersTable.perfil} = 'admin' AND ${usersTable.ativo} = true`);
-        const recipients = admins.map((a) => a.email).filter(Boolean);
-        if (enrichedLead.consultorId) {
-          const [c] = await db
+      // Enriquecimento parcial (etapa 4 do simulador) chega com notify=false:
+      // atualiza o lead em silêncio. O e-mail de "Cadastro completo" sai só no
+      // enriquecimento final (etapa 5, notify ausente/true) — evita e-mail dobrado.
+      if (payload.notify !== false) {
+        after(async () => {
+          const admins = await db
             .select({ email: usersTable.email })
             .from(usersTable)
-            .where(eq(usersTable.id, enrichedLead.consultorId))
-            .limit(1);
-          if (c?.email) recipients.push(c.email);
-        }
-        const unique = [...new Set(recipients)];
-        if (unique.length > 0) await sendLeadEnrichedEmail(enrichedLead, unique);
-      });
+            .where(sql`${usersTable.perfil} = 'admin' AND ${usersTable.ativo} = true`);
+          const recipients = admins.map((a) => a.email).filter(Boolean);
+          if (enrichedLead.consultorId) {
+            const [c] = await db
+              .select({ email: usersTable.email })
+              .from(usersTable)
+              .where(eq(usersTable.id, enrichedLead.consultorId))
+              .limit(1);
+            if (c?.email) recipients.push(c.email);
+          }
+          const unique = [...new Set(recipients)];
+          if (unique.length > 0) await sendLeadEnrichedEmail(enrichedLead, unique);
+        });
+      }
 
       return NextResponse.json(
         { leadId: existing.id, enriched: true },
