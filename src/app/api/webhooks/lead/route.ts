@@ -6,6 +6,7 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import {
   duplicidadesPendentes,
   interacoes,
+  leadPortalTokens,
   leads,
   trackingUnknowns,
   users as usersTable,
@@ -16,6 +17,8 @@ import { dispatchCapi } from "@/lib/capi/dispatch";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
+import { sendPortalEmail } from "@/lib/portal/email";
+import { generatePortalToken, portalUrl } from "@/lib/portal/token";
 import {
   sendLeadAssignedEmail,
   sendLeadEnrichedEmail,
@@ -56,6 +59,39 @@ function hashPayload(body: unknown): string {
       return acc;
     }, {});
   return crypto.createHash("sha256").update(JSON.stringify(sorted)).digest("hex");
+}
+
+/**
+ * Convida o cliente pro portal de documentos quando a simulação é concluída:
+ * gera um token, devolve a URL (pra página de sucesso do site) e dispara o
+ * e-mail "vamos adiantar sua proposta" — UMA vez por lead (só se ainda não havia
+ * token). Pula no enriquecimento parcial/silencioso (notify=false) e quando não
+ * há e-mail. Falhas não quebram o webhook.
+ */
+async function invitePortal(opts: {
+  leadId: string;
+  nome: string;
+  email: string | null;
+  notify: boolean | undefined;
+}): Promise<string | null> {
+  if (opts.notify === false || !opts.email) return null;
+  try {
+    const prior = await db
+      .select({ id: leadPortalTokens.id })
+      .from(leadPortalTokens)
+      .where(eq(leadPortalTokens.leadId, opts.leadId))
+      .limit(1);
+    const { token } = await generatePortalToken(opts.leadId);
+    const url = portalUrl(token);
+    if (prior.length === 0) {
+      const email = opts.email;
+      after(() => sendPortalEmail({ nome: opts.nome, email, url }));
+    }
+    return url;
+  } catch (err) {
+    console.error("[webhook] invitePortal falhou:", err);
+    return null;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -214,8 +250,15 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      const portalUrlEnriched = await invitePortal({
+        leadId: existing.id,
+        nome: enrichedLead.nome,
+        email: enrichedLead.email,
+        notify: payload.notify,
+      });
+
       return NextResponse.json(
-        { leadId: existing.id, enriched: true },
+        { leadId: existing.id, enriched: true, portalUrl: portalUrlEnriched },
         { status: 200 },
       );
     }
@@ -572,8 +615,22 @@ export async function POST(request: NextRequest) {
     }),
   );
 
+  // Lead novo já com e-mail (ex.: simulador Google Ads, fluxo único): convida
+  // pro portal e devolve a URL pra página de sucesso do site.
+  const portalUrlCreated = await invitePortal({
+    leadId: newLead.id,
+    nome: newLead.nome,
+    email: newLead.email,
+    notify: payload.notify,
+  });
+
   return NextResponse.json(
-    { leadId: newLead.id, duplicate: false, possivelDuplicidadeCpf: leadExistenteId },
+    {
+      leadId: newLead.id,
+      duplicate: false,
+      possivelDuplicidadeCpf: leadExistenteId,
+      portalUrl: portalUrlCreated,
+    },
     { status: 201 },
   );
 }
