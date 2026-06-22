@@ -70,6 +70,40 @@ function pick(obj: unknown, keys: string[]): string | null {
   return null;
 }
 
+/**
+ * Lê o corpo do widget_request de forma robusta. O Kommo NÃO manda JSON: manda
+ * `application/x-www-form-urlencoded`, com chaves aninhadas tipo `data[phone]`.
+ * Tenta JSON primeiro; se falhar, faz parse de form-urlencoded reconstruindo o
+ * objeto `data`. Nunca lança — pior caso retorna {}.
+ */
+function parseBody(raw: string): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    const params = new URLSearchParams(raw);
+    const out: Record<string, unknown> = {};
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of params.entries()) {
+      const nested = k.match(/^data\[(.+)\]$/);
+      if (nested) {
+        data[nested[1]] = v;
+      } else if (k === "data") {
+        // `data` pode vir como string JSON.
+        try {
+          Object.assign(data, JSON.parse(v) as Record<string, unknown>);
+        } catch {
+          out.data = v;
+        }
+      } else {
+        out[k] = v;
+      }
+    }
+    if (Object.keys(data).length > 0) out.data = data;
+    return out;
+  }
+}
+
 /** Acha o lead pelo telefone (casa pelos últimos 8 dígitos, lead mais recente). */
 async function acharLead(phone: string) {
   const digits = phone.replace(/\D/g, "");
@@ -106,15 +140,20 @@ function montarResposta(
 }
 
 export async function POST(request: NextRequest) {
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ error: "invalid json" }, { status: 400 });
-  }
+  const rawText = await request.text();
+  const contentType = request.headers.get("content-type") ?? "";
 
-  // Log do payload bruto pra calibrar o contrato real do widget_request.
-  console.log("[kommo/brain] payload:", JSON.stringify(body).slice(0, 2000));
+  // Loga o corpo CRU + content-type pra calibrar o contrato real do Kommo
+  // (que manda form-urlencoded, não JSON).
+  console.log(
+    "[kommo/brain] content-type:",
+    contentType,
+    "| raw:",
+    rawText.slice(0, 1500),
+  );
+
+  const body = parseBody(rawText);
+  console.log("[kommo/brain] parsed:", JSON.stringify(body).slice(0, 1500));
 
   const token = typeof body.token === "string" ? body.token : "";
   const v = verifyKommoToken(token);
