@@ -6,12 +6,17 @@ import {
   interacoes,
   leadAnotacoes,
   leadBancos,
+  leadDocumentos,
   leads as leadsTable,
   mensagensTemplate,
   users as usersTable,
 } from "../../../../../db/schema";
 import { LeadBancosCard } from "@/components/leads/lead-bancos-card";
 import { LeadDetailHeader } from "@/components/leads/lead-detail-header";
+import {
+  LeadDocumentosCard,
+  type LeadDoc,
+} from "@/components/leads/lead-documentos-card";
 import {
   type LeadDetailData,
   LeadConjugeCard,
@@ -195,6 +200,16 @@ export default async function LeadDetailPage({ params }: Props) {
             </Suspense>
           )}
 
+          {!isMarketing && (
+            <Suspense fallback={<SkeletonLeadBancos />}>
+              <DocumentosBlock
+                leadId={lead.id}
+                canGerarLink={canEdit}
+                leadTemEmail={Boolean(row.email)}
+              />
+            </Suspense>
+          )}
+
           <LeadOrigemCard lead={lead} />
 
           {/* Card de simulação — só pra perfis que veem dados não-mascarados.
@@ -335,6 +350,54 @@ async function BancosBlock({
   }
 
   return <LeadBancosCard leadId={leadId} rows={rows} canEdit={canEdit} />;
+}
+
+async function DocumentosBlock({
+  leadId,
+  canGerarLink,
+  leadTemEmail,
+}: {
+  leadId: string;
+  canGerarLink: boolean;
+  leadTemEmail: boolean;
+}) {
+  const rows = await db
+    .select({
+      id: leadDocumentos.id,
+      tipo: leadDocumentos.tipo,
+      categoria: leadDocumentos.categoria,
+      rotulo: leadDocumentos.rotulo,
+      filenameOriginal: leadDocumentos.filenameOriginal,
+      tamanhoBytes: leadDocumentos.tamanhoBytes,
+      origem: leadDocumentos.origem,
+      createdAt: leadDocumentos.createdAt,
+    })
+    .from(leadDocumentos)
+    .where(eq(leadDocumentos.leadId, leadId))
+    .orderBy(leadDocumentos.categoria, desc(leadDocumentos.createdAt))
+    .catch(() => null);
+
+  if (rows === null) {
+    return (
+      <div className="surface-solid rounded-xl p-5 text-sm text-muted-foreground">
+        Não foi possível carregar documentos agora. Recarregue a página.
+      </div>
+    );
+  }
+
+  const docs: LeadDoc[] = rows.map((r) => ({
+    ...r,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
+  return (
+    <LeadDocumentosCard
+      leadId={leadId}
+      docs={docs}
+      canGerarLink={canGerarLink}
+      leadTemEmail={leadTemEmail}
+    />
+  );
 }
 
 async function MensagensBlock(props: {

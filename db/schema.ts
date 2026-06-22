@@ -371,6 +371,73 @@ export const interacoes = pgTable(
 );
 
 // ============================================================================
+// lead_portal_tokens — link mágico do portal de documentos (acesso público)
+// ============================================================================
+//
+// Token de alta entropia gerado por lead. Guardamos SÓ o hash (sha256) — o
+// valor cru vive apenas na URL enviada ao cliente. Expirável (cliente pode
+// enviar aos poucos dentro da validade) e revogável.
+
+export const leadPortalTokens = pgTable(
+  "lead_portal_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revogadoEm: timestamp("revogado_em", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [index("idx_portal_tokens_lead").on(table.leadId)],
+);
+
+// ============================================================================
+// lead_documentos — documentos enviados (pelo cliente via portal ou consultor)
+// ============================================================================
+//
+// O arquivo vive no bucket privado `documentos-leads` (Supabase Storage); aqui
+// fica só o metadado. `tipo` é a chave estruturada da checklist — é o que
+// permite nomenclatura automática e zip organizado depois (Objetivo 4).
+
+export const leadDocumentos = pgTable(
+  "lead_documentos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    tipo: text("tipo").notNull(),
+    // Agrupamento: "titular" | "renda" | "estado_civil" | "conjuge" | "imovel".
+    categoria: text("categoria").notNull(),
+    // Rótulo legível no momento do upload (snapshot — sobrevive a mudança da checklist).
+    rotulo: text("rotulo").notNull(),
+    storagePath: text("storage_path").notNull(),
+    filenameOriginal: text("filename_original"),
+    mime: text("mime"),
+    tamanhoBytes: bigint("tamanho_bytes", { mode: "number" }),
+    // "portal" (cliente) ou "consultor".
+    origem: text("origem").notNull().default("portal"),
+    uploadedPor: uuid("uploaded_por").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_documentos_lead").on(table.leadId, sql`${table.createdAt} DESC`),
+  ],
+);
+
+// ============================================================================
 // regras_roteamento — configuráveis pelo Admin
 // ============================================================================
 
