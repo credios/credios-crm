@@ -1,8 +1,17 @@
 // Seed dos 3 templates de playbook inicial — mensagens "fixas" que o
 // consultor envia em sequência logo nos primeiros contatos.
 //
+// Ordem do atendimento (atualizada em 2026-06-22): saudação → convite para
+// ligação → envio da simulação. A ligação passou a acontecer assim que o lead
+// responde a primeira mensagem.
+//
 // Idempotente: se já existir template com o mesmo `nome`, faz UPDATE do
 // conteúdo + statusAplicavel + ordem; senão INSERT.
+//
+// Conteúdo/status/ordem reconciliados com produção em 2026-06-22. A fonte real
+// é o banco (editável em Configurações → Mensagens); rodar este script apenas
+// re-sincroniza estes 3 templates ao estado abaixo — ele NÃO mexe nos demais
+// templates criados pela interface.
 //
 // Run: npm run db:seed:playbook
 
@@ -22,30 +31,28 @@ const PLAYBOOK_INICIAL: Template[] = [
   {
     nome: "1. Saudação inicial e confirmação de dados",
     ordem: 1,
-    statusAplicavel: ["novo", "conversa_inicial", "aguardando_resposta"],
+    statusAplicavel: ["novo", "conversa_inicial"],
     conteudo: `{{saudacao}}, {{primeiro_nome}}! Tudo bem?
 
 Aqui é o {{primeiro_nome_consultor}}, da CREDIOS. Vi que você solicitou uma simulação de crédito com garantia de imóvel.
 
 Só pra confirmar os dados que você informou:
-• Imóvel avaliado em aproximadamente R$ {{valor_imovel}}
-• Crédito desejado de R$ {{valor_credito}}
+• Imóvel avaliado em aproximadamente {{valor_imovel}}
+• Crédito desejado de {{valor_credito}}
 
 Está correto?`,
   },
   {
-    nome: "2. Envio da simulação em PDF",
+    nome: "2. Convite para ligação",
     ordem: 2,
     statusAplicavel: ["novo", "conversa_inicial", "aguardando_resposta"],
-    conteudo: `{{primeiro_nome}}, segue a sua simulação!
-
-Preparei esse PDF com as condições que melhor se encaixam no seu perfil. Dá uma olhada com calma — ali você vai ver valores de parcela, taxas, prazos e o valor líquido que você receberia.`,
+    conteudo: `Perfeito, {{primeiro_nome}}, podemos falar rapidamente por telefone para entender melhor sua demanda, seu objetivo e podermos avançar da melhor maneira possível?`,
   },
   {
-    nome: "3. Convite para ligação",
+    nome: "3. Envio da simulação em PDF",
     ordem: 3,
     statusAplicavel: ["novo", "conversa_inicial", "aguardando_resposta"],
-    conteudo: `Podemos falar rapidamente por telefone para entender melhor sua demanda, seu objetivo e podermos avançar da melhor maneira possível?`,
+    conteudo: `Perfeito. Vou te enviar uma simulação em PDF agora mesmo.`,
   },
 ];
 
