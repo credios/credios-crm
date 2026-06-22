@@ -1,0 +1,14 @@
+{
+  "widget": {
+    "name": "Credios Assistant (AI)",
+    "description": "Connects Salesbot to the Credios WhatsApp brain: identifies the lead, confirms data, sends the document portal link and reassures the customer outside business hours.",
+    "short_description": "Credios WhatsApp AI assistant"
+  },
+  "salesbot": {
+    "brain_name": "Credios Assistant (AI)",
+    "brain_url": "Brain URL"
+  },
+  "settings": {
+    "brain_url": "Brain URL (optional — uses default if blank)"
+  }
+}

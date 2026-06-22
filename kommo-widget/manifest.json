@@ -1,0 +1,33 @@
+{
+  "widget": {
+    "name": "widget.name",
+    "description": "widget.description",
+    "short_description": "widget.short_description",
+    "version": "1.3.0",
+    "interface_version": 2,
+    "init_once": false,
+    "locale": ["pt", "en", "es", "tr", "id"],
+    "installation": true
+  },
+  "locations": ["salesbot_designer", "settings"],
+  "settings": {
+    "url": {
+      "name": "settings.brain_url",
+      "type": "text",
+      "required": false
+    }
+  },
+  "salesbot_designer": {
+    "credios_brain": {
+      "name": "salesbot.brain_name",
+      "settings": {
+        "url": {
+          "name": "salesbot.brain_url",
+          "type": "url",
+          "default_value": "https://crm.credios.com.br/api/kommo/brain",
+          "manual": true
+        }
+      }
+    }
+  }
+}
