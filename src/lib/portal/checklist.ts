@@ -153,35 +153,36 @@ export function buildChecklist(lead: ChecklistLead): DocSection[] {
   };
 
   if (ocup === "empresario") {
-    renda.descricao = "Como você é empresário(a), a renda é comprovada pela empresa.";
+    renda.descricao =
+      "Como você é empresário(a), a renda é comprovada pela empresa. Neste momento, estes documentos são opcionais.";
     renda.items.push(
       {
         key: "contrato_social",
         categoria: "renda",
         rotulo: "Contrato social",
         descricao: "Última alteração consolidada da empresa.",
-        obrigatorio: true,
+        obrigatorio: false,
       },
       {
         key: "doc_socio_adm",
         categoria: "renda",
         rotulo: "RG ou CNH do sócio administrador",
         descricao: "Documento de identificação de quem administra a empresa.",
-        obrigatorio: true,
+        obrigatorio: false,
       },
       {
         key: "balanco_dre",
         categoria: "renda",
         rotulo: "Balanço e DRE do último ano",
         descricao: "Demonstrações contábeis do exercício mais recente.",
-        obrigatorio: true,
+        obrigatorio: false,
       },
       {
         key: "extrato_pj",
         categoria: "renda",
         rotulo: "Extratos PJ — últimos 3 meses",
         descricao: "Conta da empresa com maior movimentação.",
-        obrigatorio: true,
+        obrigatorio: false,
         multiplos: true,
       },
       {
@@ -189,16 +190,18 @@ export function buildChecklist(lead: ChecklistLead): DocSection[] {
         categoria: "renda",
         rotulo: "Balancete atualizado",
         descricao: "Balancete do exercício corrente.",
-        obrigatorio: true,
+        obrigatorio: false,
       },
       {
         key: "declaracao_faturamento",
         categoria: "renda",
         rotulo: "Declaração de faturamento — últimos 12 meses",
         descricao: "Assinada pelo contador da empresa.",
-        obrigatorio: true,
+        obrigatorio: false,
       },
     );
+    renda.nota =
+      "Estes documentos não são obrigatórios para começar — já iniciamos a aprovação do seu crédito sem eles. Mas ajudam bastante na análise e podem ser solicitados pelos bancos mais à frente. Se já tiver em mãos, enviar agora adianta tudo; caso algum seja necessário, a gente te avisa.";
   } else if (ocup === "clt") {
     renda.items.push({
       key: "holerites",

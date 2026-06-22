@@ -32,10 +32,14 @@ export async function sendPortalEmail(input: {
   const nome = primeiroNome(input.nome);
 
   const bodyHtml = `
+    <p style="margin:0 0 16px;color:#475467;font-size:16px;line-height:1.65;font-family:${FONT}">
+      A <strong style="color:#0f1b3d">Credios</strong> é uma consultoria gratuita, 100% focada em
+      crédito com garantia de imóvel: buscamos a melhor proposta entre 15+ bancos parceiros e
+      cuidamos de tudo com você. Você não paga nada — somos remunerados pelos bancos.
+    </p>
     <p style="margin:0 0 18px;color:#475467;font-size:16px;line-height:1.65;font-family:${FONT}">
-      <strong style="color:#0f1b3d">Sua proposta já está sendo trabalhada.</strong> Para
-      acelerar a análise e buscar as melhores condições com os bancos parceiros, reunimos
-      num só lugar, com segurança, a lista exata de documentos do seu caso.
+      <strong style="color:#0f1b3d">Sua proposta já está sendo trabalhada.</strong> Para acelerar
+      a análise, reunimos num só lugar, com segurança, a lista exata de documentos do seu caso.
     </p>
     <p style="margin:0 0 12px;color:#475467;font-size:16px;line-height:1.65;font-family:${FONT}">
       Você não precisa de tudo agora:
@@ -62,8 +66,9 @@ export async function sendPortalEmail(input: {
   `;
 
   const html = renderClientEmail({
-    preheader: "Adiante sua proposta — envie seus documentos com segurança, no seu tempo.",
+    preheader: "Recebemos sua simulação — adiante sua proposta enviando seus documentos com segurança.",
     title: `${nome}, vamos adiantar sua proposta`,
+    intro: "Recebemos a sua simulação — e já estamos cuidando dela.",
     bodyHtml,
     cta: { href: input.url, label: "Enviar meus documentos" },
     footer:
