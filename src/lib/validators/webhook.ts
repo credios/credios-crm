@@ -69,6 +69,10 @@ export const webhookLeadPayloadSchema = z
       .optional()
       .or(z.literal("")),
     conjuge_whatsapp: z.string().trim().optional().or(z.literal("")),
+    // Composição de renda pelo cônjuge.
+    conjuge_compoe_renda: z.coerce.boolean().optional(),
+    conjuge_renda: z.coerce.number().nonnegative().optional(),
+    conjuge_ocupacao: z.string().trim().optional().or(z.literal("")),
     // notify=false → enriquecimento silencioso (etapa parcial do simulador): o
     // CRM atualiza o lead mas NÃO dispara o e-mail de "Cadastro completo".
     notify: z.coerce.boolean().optional(),

@@ -67,6 +67,9 @@ export type LeadDetailData = {
   conjugeEmail: string | null;
   conjugeNascimento: string | null;
   conjugeWhatsapp: string | null;
+  conjugeCompoeRenda: boolean | null;
+  conjugeRendaCentavos: number | null;
+  conjugeOcupacao: string | null;
   bancoAprovador: string | null;
   valorLiberadoCentavos: number | null;
   comissaoCentavos: number | null;
@@ -573,6 +576,9 @@ export function LeadConjugeCard({ lead, canEdit }: { lead: LeadDetailData; canEd
         { label: "Nascimento", value: formatDateBr(lead.conjugeNascimento) },
         { label: "Email", value: lead.conjugeEmail },
         { label: "WhatsApp", value: lead.conjugeWhatsapp ? formatPhoneBr(lead.conjugeWhatsapp) : null },
+        { label: "Compõe renda?", value: lead.conjugeCompoeRenda == null ? null : lead.conjugeCompoeRenda ? "Sim" : "Não" },
+        { label: "Renda do cônjuge", value: lead.conjugeRendaCentavos != null ? formatBrlFromCents(lead.conjugeRendaCentavos) : null },
+        { label: "Ocupação do cônjuge", value: lead.conjugeOcupacao },
       ]}
       edit={
         <FormGrid>

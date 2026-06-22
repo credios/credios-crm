@@ -192,6 +192,12 @@ export const leads = pgTable(
     conjugeEmail: text("conjuge_email"),
     conjugeNascimento: date("conjuge_nascimento"),
     conjugeWhatsapp: text("conjuge_whatsapp"),
+    // Composição de renda pelo cônjuge — capturado no simulador OU no portal de
+    // documentos (quando o cliente pulou a última etapa). Quando true, pedimos
+    // também os documentos de renda do cônjuge.
+    conjugeCompoeRenda: boolean("conjuge_compoe_renda"),
+    conjugeRendaCentavos: bigint("conjuge_renda_centavos", { mode: "number" }),
+    conjugeOcupacao: text("conjuge_ocupacao"),
 
     // --- Pipeline ---
     // text livre — validado em app-layer contra status_lead_config.key.

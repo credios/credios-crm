@@ -48,6 +48,8 @@ export type ChecklistLead = {
   situacaoImovel: string | null;
   conjugeEmail: string | null;
   conjugeWhatsapp: string | null;
+  conjugeCompoeRenda: boolean | null;
+  conjugeOcupacao: string | null;
 };
 
 type EstadoCivil =
@@ -92,6 +94,37 @@ function normOcupacao(v: string | null, tipoPessoa: string | null): Ocupacao {
   if (s === "Aposentado") return "aposentado";
   if (s === "Autônomo") return "autonomo";
   return "outro";
+}
+
+/** Documentos de renda do cônjuge — quando ele compõe renda. Por ocupação. */
+function buildConjugeRendaSection(ocupacao: string | null): DocSection {
+  const ocup = normOcupacao(ocupacao, null);
+  const sec: DocSection = {
+    categoria: "conjuge",
+    titulo: "Renda do cônjuge",
+    descricao: "Comprovação de renda de quem vai compor a renda com você.",
+    items: [],
+  };
+  if (ocup === "empresario") {
+    sec.items.push(
+      { key: "conjuge_contrato_social", categoria: "conjuge", rotulo: "Contrato social (empresa do cônjuge)", descricao: "Última alteração consolidada.", obrigatorio: false },
+      { key: "conjuge_balanco_dre", categoria: "conjuge", rotulo: "Balanço e DRE do último ano (empresa do cônjuge)", descricao: "Demonstrações contábeis mais recentes.", obrigatorio: false },
+      { key: "conjuge_extrato_pj", categoria: "conjuge", rotulo: "Extratos PJ do cônjuge — últimos 3 meses", descricao: "Conta da empresa com maior movimentação.", obrigatorio: false },
+      { key: "conjuge_declaracao_faturamento", categoria: "conjuge", rotulo: "Declaração de faturamento (12 meses) do cônjuge", descricao: "Assinada pelo contador.", obrigatorio: false },
+    );
+    sec.nota = "Opcionais para começar — ajudam na análise e podem ser solicitados pelos bancos mais à frente.";
+  } else if (ocup === "clt") {
+    sec.items.push({ key: "conjuge_holerites", categoria: "conjuge", rotulo: "Últimos 3 holerites do cônjuge", descricao: "Contracheques mais recentes.", obrigatorio: true });
+  } else if (ocup === "servidor") {
+    sec.items.push({ key: "conjuge_holerites", categoria: "conjuge", rotulo: "Últimos 3 contracheques do cônjuge", descricao: "Demonstrativos de pagamento dos últimos 3 meses.", obrigatorio: true });
+  } else if (ocup === "aposentado") {
+    sec.items.push({ key: "conjuge_proventos", categoria: "conjuge", rotulo: "Comprovantes de proventos do cônjuge", descricao: "Extrato/demonstrativo do INSS/previdência dos últimos 3 meses.", obrigatorio: true });
+  } else if (ocup === "autonomo") {
+    sec.items.push({ key: "conjuge_extratos", categoria: "conjuge", rotulo: "Extratos bancários do cônjuge — últimos 3 meses", descricao: "De preferência da conta com maior movimentação.", obrigatorio: true });
+  } else {
+    sec.nota = "Seu consultor confirma com você quais documentos de renda do cônjuge enviar.";
+  }
+  return sec;
 }
 
 export function buildChecklist(lead: ChecklistLead): DocSection[] {
@@ -273,6 +306,12 @@ export function buildChecklist(lead: ChecklistLead): DocSection[] {
         ? "Já temos o e-mail e o celular do seu cônjuge. ✓"
         : "Seu consultor vai confirmar o e-mail e o celular do seu cônjuge no contato.",
     });
+
+    // Renda do cônjuge — só quando ele vai compor renda (marcado no simulador
+    // ou no próprio portal).
+    if (lead.conjugeCompoeRenda) {
+      sections.push(buildConjugeRendaSection(lead.conjugeOcupacao));
+    }
   } else if (civil === "solteiro") {
     sections.push({
       categoria: "estado_civil",
@@ -338,6 +377,14 @@ export function buildChecklist(lead: ChecklistLead): DocSection[] {
       },
     ],
   });
+
+  // Todo item aceita múltiplos arquivos (cliente manda CNH em 2 fotos, matrícula
+  // em várias etc.). No download, o sistema junta tudo num PDF na ordem de envio.
+  for (const s of sections) {
+    for (const item of s.items) {
+      if (!item.multiplos) item.multiplos = true;
+    }
+  }
 
   return sections;
 }

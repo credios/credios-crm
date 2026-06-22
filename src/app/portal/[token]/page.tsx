@@ -35,6 +35,8 @@ export default async function PortalPage({ params }: Props) {
       situacaoImovel: leadsTable.situacaoImovel,
       conjugeEmail: leadsTable.conjugeEmail,
       conjugeWhatsapp: leadsTable.conjugeWhatsapp,
+      conjugeCompoeRenda: leadsTable.conjugeCompoeRenda,
+      conjugeOcupacao: leadsTable.conjugeOcupacao,
     })
     .from(leadsTable)
     .where(eq(leadsTable.id, leadId))
@@ -68,6 +70,12 @@ export default async function PortalPage({ params }: Props) {
 
   const firstName = lead.nome.trim().split(/\s+/)[0] || lead.nome;
 
+  // Casado/união estável que ainda NÃO respondeu se o cônjuge compõe renda
+  // (pulou a última etapa do simulador) → o portal pergunta.
+  const isCasadoUniao =
+    lead.estadoCivil === "Casado(a)" || lead.estadoCivil === "União Estável";
+  const perguntarConjugeRenda = isCasadoUniao && lead.conjugeCompoeRenda == null;
+
   return (
     <PortalShell>
       <PortalClient
@@ -75,6 +83,7 @@ export default async function PortalPage({ params }: Props) {
         firstName={firstName}
         sections={sections}
         initialDocs={docsPorTipo}
+        perguntarConjugeRenda={perguntarConjugeRenda}
       />
     </PortalShell>
   );

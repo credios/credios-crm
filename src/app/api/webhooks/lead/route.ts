@@ -190,6 +190,9 @@ export async function POST(request: NextRequest) {
           conjugeEmail: setIf(emptyToNull(payload.conjuge_email ?? null), existing.conjugeEmail),
           conjugeNascimento: setIf(emptyToNull(payload.conjuge_nascimento ?? null), existing.conjugeNascimento),
           conjugeWhatsapp: setIf(normalizarWhatsapp(emptyToNull(payload.conjuge_whatsapp ?? null)), existing.conjugeWhatsapp),
+          conjugeCompoeRenda: setIf(payload.conjuge_compoe_renda ?? null, existing.conjugeCompoeRenda),
+          conjugeRendaCentavos: setIf(reaisParaCentavos(payload.conjuge_renda), existing.conjugeRendaCentavos),
+          conjugeOcupacao: setIf(emptyToNull(payload.conjuge_ocupacao ?? null), existing.conjugeOcupacao),
           valoresSuspeitos: valoresSuspeitos as never,
           // Preserva o payload original da 1ª etapa e anexa o da 2ª, sem perder
           // histórico de atribuição.
@@ -405,6 +408,9 @@ export async function POST(request: NextRequest) {
       conjugeEmail: emptyToNull(payload.conjuge_email ?? null),
       conjugeNascimento: emptyToNull(payload.conjuge_nascimento ?? null),
       conjugeWhatsapp: normalizarWhatsapp(emptyToNull(payload.conjuge_whatsapp ?? null)),
+      conjugeCompoeRenda: payload.conjuge_compoe_renda ?? null,
+      conjugeRendaCentavos: reaisParaCentavos(payload.conjuge_renda),
+      conjugeOcupacao: emptyToNull(payload.conjuge_ocupacao ?? null),
       // ── Parceria (Portal de Parceiros) ──────────────────────────────────
       parceiroNome: emptyToNull(payload.parceiro_nome ?? null),
       parceiroPortalId: emptyToNull(payload.parceiro_portal_id ?? null),

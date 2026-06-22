@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, FileText, Link2, Loader2, Mail } from "lucide-react";
+import { Archive, Download, FileText, Link2, Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -31,11 +31,13 @@ const CAT_LABEL: Record<string, string> = {
   imovel: "Imóvel",
 };
 
-function fmtSize(b: number | null): string {
-  if (!b) return "";
-  if (b < 1024 * 1024) return `${Math.round(b / 1024)} KB`;
-  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
-}
+type TipoGroup = {
+  tipo: string;
+  categoria: string;
+  rotulo: string;
+  count: number;
+  origem: string;
+};
 
 export function LeadDocumentosCard({
   leadId,
@@ -69,11 +71,8 @@ export function LeadDocumentosCard({
         return;
       }
       if (enviarEmail) {
-        if (json.emailSent) {
-          toast.success("E-mail enviado ao cliente com o link do portal.");
-        } else {
-          toast.error(json.emailError ?? "Link gerado, mas o e-mail não saiu.");
-        }
+        if (json.emailSent) toast.success("E-mail enviado ao cliente com o link do portal.");
+        else toast.error(json.emailError ?? "Link gerado, mas o e-mail não saiu.");
       } else {
         await navigator.clipboard.writeText(json.url).catch(() => {});
         toast.success("Link do portal copiado para a área de transferência.");
@@ -85,8 +84,23 @@ export function LeadDocumentosCard({
     }
   }
 
-  const grupos = docs.reduce<Record<string, LeadDoc[]>>((acc, d) => {
-    (acc[d.categoria] ??= []).push(d);
+  // Agrupa por TIPO (um tipo pode ter vários arquivos), preservando categorias.
+  const tiposMap = new Map<string, TipoGroup>();
+  for (const d of docs) {
+    const e = tiposMap.get(d.tipo);
+    if (e) e.count++;
+    else
+      tiposMap.set(d.tipo, {
+        tipo: d.tipo,
+        categoria: d.categoria,
+        rotulo: d.rotulo,
+        count: 1,
+        origem: d.origem,
+      });
+  }
+  const tipos = [...tiposMap.values()];
+  const porCategoria = tipos.reduce<Record<string, TipoGroup[]>>((acc, t) => {
+    (acc[t.categoria] ??= []).push(t);
     return acc;
   }, {});
 
@@ -96,25 +110,16 @@ export function LeadDocumentosCard({
         <CardTitle className="flex items-center gap-2 text-base">
           <FileText className="size-4 text-muted-foreground" aria-hidden />
           Documentos
-          {docs.length > 0 && (
+          {tipos.length > 0 && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              {docs.length}
+              {tipos.length}
             </span>
           )}
         </CardTitle>
         {canGerarLink && (
-          <div className="flex shrink-0 gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => gerar(false)}
-              disabled={busy !== null}
-            >
-              {busy === "link" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Link2 className="size-3.5" />
-              )}
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => gerar(false)} disabled={busy !== null}>
+              {busy === "link" ? <Loader2 className="size-3.5 animate-spin" /> : <Link2 className="size-3.5" />}
               Copiar link
             </Button>
             <Button
@@ -123,53 +128,51 @@ export function LeadDocumentosCard({
               disabled={busy !== null || !leadTemEmail}
               title={leadTemEmail ? undefined : "Lead sem e-mail cadastrado"}
             >
-              {busy === "email" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Mail className="size-3.5" />
-              )}
+              {busy === "email" ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
               Enviar por e-mail
             </Button>
           </div>
         )}
       </CardHeader>
       <CardContent>
-        {docs.length === 0 ? (
+        {tipos.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Nenhum documento recebido ainda. Gere o link do portal e envie ao
-            cliente — ele envia tudo por lá, com segurança.
+            Nenhum documento recebido ainda. Gere o link do portal e envie ao cliente —
+            ele envia tudo por lá, com segurança.
           </p>
         ) : (
           <div className="space-y-4">
-            {Object.entries(grupos).map(([categoria, lista]) => (
+            <a
+              href={`/api/leads/${leadId}/documentos-zip`}
+              className="inline-flex items-center gap-2 rounded-md border border-border-soft bg-card px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              <Archive className="size-4 text-primary" /> Baixar tudo (.zip)
+            </a>
+
+            {Object.entries(porCategoria).map(([categoria, grupos]) => (
               <div key={categoria}>
                 <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {CAT_LABEL[categoria] ?? categoria}
                 </p>
                 <ul className="space-y-1.5">
-                  {lista.map((d) => (
+                  {grupos.map((g) => (
                     <li
-                      key={d.id}
+                      key={g.tipo}
                       className="flex items-center gap-3 rounded-lg border border-border-soft bg-card px-3 py-2"
                     >
                       <FileText className="size-4 shrink-0 text-primary" aria-hidden />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {d.rotulo}
-                        </p>
+                        <p className="truncate text-sm font-medium text-foreground">{g.rotulo}</p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {d.filenameOriginal ?? "documento"}
-                          {fmtSize(d.tamanhoBytes) && ` · ${fmtSize(d.tamanhoBytes)}`}
-                          {d.origem === "consultor" && " · anexado pelo consultor"}
+                          {g.count} {g.count === 1 ? "arquivo" : "arquivos"}
+                          {g.origem === "consultor" && " · anexado pelo consultor"}
                         </p>
                       </div>
                       <a
-                        href={`/api/leads/${leadId}/documentos/${d.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={`/api/leads/${leadId}/documentos-pdf?tipo=${encodeURIComponent(g.tipo)}`}
                         className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                       >
-                        <Download className="size-3.5" /> Baixar
+                        <Download className="size-3.5" /> Baixar PDF
                       </a>
                     </li>
                   ))}

@@ -32,16 +32,156 @@ function fmtSize(b: number): string {
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const INPUT_DARK =
+  "w-full h-11 rounded-xl border border-white/15 bg-white/[0.04] px-3.5 text-[14px] text-white placeholder:text-white/30 transition-colors focus:border-credios-blue/60 focus:outline-none focus:ring-2 focus:ring-credios-blue/20";
+const OCUPACOES_CONJUGE = ["CLT", "Autônomo", "Empresário", "Servidor Público", "Aposentado", "Outro"];
+
+function formatBrlInput(v: string): string {
+  const n = parseInt(v.replace(/\D/g, ""), 10) || 0;
+  return n === 0 ? "" : "R$ " + n.toLocaleString("pt-BR");
+}
+
+/** Pergunta opcional, no portal, se o cônjuge compõe renda — quando o cliente
+ *  pulou a última etapa do simulador. Ao confirmar, recarrega (a checklist
+ *  recalcula no servidor com os docs de renda do cônjuge, se for o caso). */
+function ConjugeRendaAsk({ token }: { token: string }) {
+  const [compoe, setCompoe] = useState<boolean | null>(null);
+  const [renda, setRenda] = useState("");
+  const [ocupacao, setOcupacao] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const podeEnviar =
+    compoe === false || (compoe === true && renda.trim() !== "" && ocupacao !== "");
+
+  async function submit() {
+    if (compoe === null || !podeEnviar) return;
+    setBusy(true);
+    try {
+      const rendaNum = Number(renda.replace(/\D/g, "")) || 0;
+      const res = await fetch(`/api/portal/${token}/conjuge-renda`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          compoe,
+          renda: compoe ? rendaNum : undefined,
+          ocupacao: compoe ? ocupacao : undefined,
+        }),
+      });
+      if (!res.ok) {
+        toast.error("Não consegui salvar agora. Tente de novo.");
+        setBusy(false);
+        return;
+      }
+      window.location.reload();
+    } catch {
+      toast.error("Falha de conexão. Tente novamente.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-[24px] border border-credios-gold/25 bg-credios-gold/[0.05] p-5 backdrop-blur-xl sm:p-6">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-credios-gold/15 ring-1 ring-credios-gold/25">
+          <PortalIcon name="conjuge" className="h-5 w-5 text-credios-gold" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="font-display text-base font-semibold text-white">
+            Seu cônjuge vai compor renda?
+          </h2>
+          <p className="mt-0.5 text-[13px] leading-snug text-white/55">
+            Se o seu cônjuge também tem renda, ela pode somar à sua e aumentar o valor aprovado.
+            Você decide — é opcional.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        {(
+          [
+            [true, "Sim, vai compor"],
+            [false, "Não"],
+          ] as const
+        ).map(([val, label]) => (
+          <button
+            key={String(val)}
+            type="button"
+            onClick={() => setCompoe(val)}
+            className={`cursor-pointer rounded-2xl border p-3 text-sm font-semibold transition-colors ${
+              compoe === val
+                ? "border-credios-gold/60 bg-credios-gold/10 text-credios-gold"
+                : "border-white/10 bg-white/[0.02] text-white/70 hover:border-white/20"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {compoe === true && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-white/70">
+              Renda mensal do cônjuge
+            </label>
+            <input
+              inputMode="numeric"
+              value={renda}
+              onChange={(e) => setRenda(formatBrlInput(e.target.value))}
+              placeholder="R$ 8.000"
+              className={INPUT_DARK}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[13px] font-medium text-white/70">
+              Ocupação do cônjuge
+            </label>
+            <select
+              value={ocupacao}
+              onChange={(e) => setOcupacao(e.target.value)}
+              className={`${INPUT_DARK} cursor-pointer`}
+            >
+              <option value="" className="bg-[#0d1d40]">Selecione…</option>
+              {OCUPACOES_CONJUGE.map((o) => (
+                <option key={o} value={o} className="bg-[#0d1d40]">{o}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {compoe !== null && (
+        <button
+          type="button"
+          disabled={!podeEnviar || busy}
+          onClick={submit}
+          className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-credios-blue to-blue-600 px-5 py-3 text-sm font-semibold text-white transition-[filter] duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Salvando…
+            </>
+          ) : (
+            "Confirmar"
+          )}
+        </button>
+      )}
+    </section>
+  );
+}
+
 export function PortalClient({
   token,
   firstName,
   sections,
   initialDocs,
+  perguntarConjugeRenda,
 }: {
   token: string;
   firstName: string;
   sections: DocSection[];
   initialDocs: DocsPorTipo;
+  perguntarConjugeRenda?: boolean;
 }) {
   const [docs, setDocs] = useState<DocsPorTipo>(initialDocs);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -180,6 +320,13 @@ export function PortalClient({
           </div>
         ))}
       </div>
+
+      {/* Pergunta de composição de renda do cônjuge (quando pulou o simulador) */}
+      {perguntarConjugeRenda && (
+        <div className="mt-5">
+          <ConjugeRendaAsk token={token} />
+        </div>
+      )}
 
       {/* Seções */}
       <div className="mt-6 space-y-5">
