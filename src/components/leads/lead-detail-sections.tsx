@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Handshake } from "lucide-react";
+import { Handshake, MessageCircle } from "lucide-react";
 
 import { LeadEditableCard } from "./lead-editable-card";
 import {
@@ -70,6 +70,14 @@ export type LeadDetailData = {
   conjugeCompoeRenda: boolean | null;
   conjugeRendaCentavos: number | null;
   conjugeOcupacao: string | null;
+  // Qualificação por WhatsApp (Heloísa / IA)
+  qualifObjetivo: string | null;
+  qualifTitularidade: string | null;
+  qualifImovelRegularizado: string | null;
+  qualifPendenciaJuridica: string | null;
+  qualifUrgencia: string | null;
+  qualifWhatsappStatus: string | null;
+  qualifWhatsappEm: string | null;
   bancoAprovador: string | null;
   valorLiberadoCentavos: number | null;
   comissaoCentavos: number | null;
@@ -668,6 +676,84 @@ export function LeadParceriaCard({ lead }: { lead: LeadDetailData }) {
             </div>
           )}
         </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+const QUALIF_REGULARIZADO: Record<string, string> = {
+  sim: "Sim",
+  nao: "Não",
+  nao_sei: "Não sei",
+};
+const QUALIF_URGENCIA: Record<string, string> = {
+  ate_30_dias: "Até 30 dias",
+  "1_3_meses": "1 a 3 meses",
+  sem_pressa: "Sem pressa",
+};
+
+/** Qualificação levantada pela Heloísa (IA) no WhatsApp — somente leitura. */
+export function LeadQualificacaoCard({ lead }: { lead: LeadDetailData }) {
+  const temAlgo =
+    lead.qualifWhatsappStatus ||
+    lead.qualifObjetivo ||
+    lead.qualifTitularidade ||
+    lead.qualifImovelRegularizado ||
+    lead.qualifPendenciaJuridica ||
+    lead.qualifUrgencia;
+  if (!temAlgo) return null;
+
+  const concluida = lead.qualifWhatsappStatus === "concluida";
+  const linhas: { label: string; value: string | null }[] = [
+    { label: "Objetivo do crédito", value: lead.qualifObjetivo },
+    { label: "Titularidade do imóvel", value: lead.qualifTitularidade },
+    {
+      label: "Documentação regular",
+      value: lead.qualifImovelRegularizado
+        ? (QUALIF_REGULARIZADO[lead.qualifImovelRegularizado] ?? lead.qualifImovelRegularizado)
+        : null,
+    },
+    { label: "Pendência jurídica", value: lead.qualifPendenciaJuridica },
+    {
+      label: "Urgência",
+      value: lead.qualifUrgencia
+        ? (QUALIF_URGENCIA[lead.qualifUrgencia] ?? lead.qualifUrgencia)
+        : null,
+    },
+  ].filter((l) => l.value);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <MessageCircle className="size-4 text-muted-foreground" aria-hidden />
+          Qualificação por WhatsApp
+          <span
+            className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium ${
+              concluida
+                ? "bg-credios-blue/10 text-credios-blue"
+                : "bg-muted text-muted-foreground"
+            }`}
+          >
+            {concluida ? "Concluída" : "Em andamento"}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {linhas.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            A Heloísa iniciou a conversa, mas ainda não levantou os dados.
+          </p>
+        ) : (
+          <dl className="space-y-2.5 text-sm sm:grid sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-1.5 sm:space-y-0">
+            {linhas.map((l) => (
+              <div key={l.label} className="flex flex-col gap-0.5 sm:contents">
+                <dt className="text-xs text-muted-foreground sm:text-sm">{l.label}</dt>
+                <dd className="min-w-0 whitespace-pre-wrap font-medium">{l.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </CardContent>
     </Card>
   );

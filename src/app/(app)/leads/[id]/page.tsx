@@ -26,6 +26,7 @@ import {
   LeadOrigemCard,
   LeadParceriaCard,
   LeadPessoaisCard,
+  LeadQualificacaoCard,
 } from "@/components/leads/lead-detail-sections";
 import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
 import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
@@ -107,6 +108,13 @@ export default async function LeadDetailPage({ params }: Props) {
     conjugeCompoeRenda: row.conjugeCompoeRenda ?? null,
     conjugeRendaCentavos: row.conjugeRendaCentavos ?? null,
     conjugeOcupacao: row.conjugeOcupacao ?? null,
+    qualifObjetivo: row.qualifObjetivo ?? null,
+    qualifTitularidade: row.qualifTitularidade ?? null,
+    qualifImovelRegularizado: row.qualifImovelRegularizado ?? null,
+    qualifPendenciaJuridica: row.qualifPendenciaJuridica ?? null,
+    qualifUrgencia: row.qualifUrgencia ?? null,
+    qualifWhatsappStatus: row.qualifWhatsappStatus ?? null,
+    qualifWhatsappEm: row.qualifWhatsappEm ? row.qualifWhatsappEm.toISOString() : null,
     bancoAprovador: masked.bancoAprovador ?? null,
     valorLiberadoCentavos: masked.valorLiberadoCentavos ?? null,
     comissaoCentavos: masked.comissaoCentavos ?? null,
@@ -196,6 +204,7 @@ export default async function LeadDetailPage({ params }: Props) {
           <LeadParceriaCard lead={lead} />
           <LeadOperacaoCard lead={lead} canEdit={canEdit} />
           <LeadEnderecoImovelCard lead={lead} canEdit={canEdit} />
+          <LeadQualificacaoCard lead={lead} />
 
           {!isMarketing && (
             <Suspense fallback={<SkeletonLeadBancos />}>
