@@ -14,7 +14,6 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/version", // só retorna o SHA do commit — info já pública no GitHub
   "/portal", // gate: token do portal de documentos (validado no handler)
   "/api/portal", // gate: token do portal (upload/validação no handler)
-  "/api/kommo", // gate: JWT do widget_request do Kommo (validado no handler)
   "/api/whatsapp", // gate: verify token (GET) + assinatura X-Hub-Signature-256 do Meta
 ];
 

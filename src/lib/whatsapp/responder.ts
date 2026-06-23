@@ -6,7 +6,7 @@ import {
   conversarComHeloisa,
   type HeloisaTurn,
   type Mensagem,
-} from "@/lib/kommo/heloisa";
+} from "@/lib/whatsapp/heloisa";
 import { isSystemTerminal } from "@/lib/status/canonical";
 
 const SIMULADOR_URL = "https://credios.com.br/simulador";
