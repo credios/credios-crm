@@ -338,6 +338,11 @@ export async function POST(request: NextRequest) {
       } else if (lead.status === "desqualificado") {
         bolhas = msgDesqualificado(lead);
         respostaLog = bolhas.join("\n");
+      } else if (!mensagem || !mensagem.trim()) {
+        // Áudio, imagem ou sticker chegam sem texto ({{message_text}} vazio) —
+        // a Heloísa não consegue ler. Pede gentilmente pra mandar por texto.
+        bolhas = ["Pode me mandar por texto? Assim consigo te ajudar certinho 🙂"];
+        respostaLog = bolhas.join("\n");
       } else {
         // Lead ativo → Heloísa (IA). Se o Claude falhar (chave/rate limit/
         // instabilidade), cai num fallback determinístico em vez de ficar mudo.
