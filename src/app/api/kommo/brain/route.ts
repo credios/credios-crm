@@ -1,12 +1,16 @@
 import crypto from "node:crypto";
 
-import { desc, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import { interacoes, leads } from "../../../../../db/schema";
 import { db } from "@/lib/db";
-import { generatePortalToken, portalUrl } from "@/lib/portal/token";
 import { isSystemTerminal } from "@/lib/status/canonical";
+import {
+  conversarComHeloisa,
+  type HeloisaTurn,
+  type Mensagem,
+} from "@/lib/kommo/heloisa";
 
 // Simulador no site (lead não identificado é convidado a se cadastrar).
 const SIMULADOR_URL = "https://credios.com.br/simulador";
@@ -217,36 +221,66 @@ function msgDesqualificado(lead: Lead): string[] {
   ];
 }
 
-/** Lead ativo → confirma a proposta + (se houver) link do portal de documentos. */
-function msgAtivo(lead: Lead, link: string | null): string[] {
+/** Fallback determinístico do lead ativo quando a Heloísa (IA) não responde. */
+function msgFallbackAtivo(lead: Lead): string[] {
   const nome = primeiroNome(lead);
-  const out = [
-    `Oi${nome ? `, ${nome}` : ""}! Sou o assistente virtual da Credios. 👋`,
-    "Sua proposta de crédito com garantia de imóvel já está em análise 🙂",
+  return [
+    `Oi${nome ? `, ${nome}` : ""}! Aqui é a Heloísa, da Credios 🙂`,
+    "Sua proposta de crédito com garantia de imóvel já está em análise.",
+    "Um consultor entra em contato com você em breve.",
   ];
-  if (link) {
-    out.push("Um consultor logo entra em contato. Pra adiantar, envie seus docs aqui:");
-    out.push(link);
-  } else {
-    out.push("Um consultor logo entra em contato com você. É sem compromisso.");
-  }
-  return out;
 }
 
-/**
- * Roteia a resposta pelo estado do lead. O handler `show` do Kommo limita `value`
- * a 80 chars, então devolvemos um array de bolhas curtas (uma por `show`).
- */
-function montarResposta(
-  lead: Awaited<ReturnType<typeof acharLead>>,
-  link: string | null,
-): string[] {
-  let out: string[];
-  if (!lead) out = msgNaoIdentificado();
-  else if (lead.status === "desqualificado") out = msgDesqualificado(lead);
-  else out = msgAtivo(lead, link);
-  // Trava de segurança: nunca passar de 80 (o link tem ~77).
-  return out.map((s) => (s.length > 80 ? s.slice(0, 80) : s));
+/** Reconstrói o histórico da conversa (últimas 30 trocas) pra dar contexto à IA. */
+async function carregarHistorico(leadId: string): Promise<Mensagem[]> {
+  const rows = await db
+    .select({ tipo: interacoes.tipo, conteudo: interacoes.conteudo })
+    .from(interacoes)
+    .where(
+      and(
+        eq(interacoes.leadId, leadId),
+        inArray(interacoes.tipo, ["whatsapp_recebido", "whatsapp_enviado"]),
+      ),
+    )
+    .orderBy(desc(interacoes.criadoEm))
+    .limit(30);
+  return rows.reverse().map((r) => ({
+    role: r.tipo === "whatsapp_recebido" ? ("user" as const) : ("assistant" as const),
+    content: r.conteudo ?? "",
+  }));
+}
+
+/** Grava os campos de qualificação que a Heloísa descobriu + o status. */
+async function persistirQualificacao(leadId: string, turn: HeloisaTurn): Promise<void> {
+  const q = turn.qualificacao;
+  const set: Partial<typeof leads.$inferInsert> = {};
+  if (q.objetivo) set.qualifObjetivo = q.objetivo;
+  if (q.titularidade) set.qualifTitularidade = q.titularidade;
+  if (q.imovel_regularizado) set.qualifImovelRegularizado = q.imovel_regularizado;
+  if (q.pendencia_juridica) set.qualifPendenciaJuridica = q.pendencia_juridica;
+  if (q.urgencia) set.qualifUrgencia = q.urgencia;
+  set.qualifWhatsappStatus = turn.encerrar ? "concluida" : "em_andamento";
+  if (turn.encerrar) set.qualifWhatsappEm = new Date();
+  await db.update(leads).set(set).where(eq(leads.id, leadId));
+}
+
+/** Quebra a resposta em bolhas ≤ 80 chars (limite do handler `show` do Kommo). */
+function chunkBolhas(texto: string): string[] {
+  const limpo = texto.trim();
+  if (!limpo) return ["🙂"];
+  const out: string[] = [];
+  let atual = "";
+  for (const p of limpo.split(/\s+/)) {
+    const cand = atual ? `${atual} ${p}` : p;
+    if (cand.length <= 80) {
+      atual = cand;
+    } else {
+      if (atual) out.push(atual);
+      atual = p.length <= 80 ? p : p.slice(0, 80);
+    }
+  }
+  if (atual) out.push(atual);
+  return out.length ? out : [limpo.slice(0, 80)];
 }
 
 export async function POST(request: NextRequest) {
@@ -294,19 +328,39 @@ export async function POST(request: NextRequest) {
         lead ? `${lead.id} (${lead.nome}) status=${lead.status}` : "(não encontrado)",
       );
 
-      // Link do portal só pra lead ativo (não-terminal). Desqualificado/perdido/
-      // fechado não recebem convite de documentos.
-      let link: string | null = null;
-      if (lead && !isSystemTerminal(lead.status)) {
+      // Roteia pelo estado do lead: não-identificado e desqualificado são
+      // determinísticos; lead ativo conversa com a Heloísa (IA — Fase B).
+      let bolhas: string[];
+      let respostaLog: string;
+      if (!lead) {
+        bolhas = msgNaoIdentificado();
+        respostaLog = bolhas.join("\n");
+      } else if (lead.status === "desqualificado") {
+        bolhas = msgDesqualificado(lead);
+        respostaLog = bolhas.join("\n");
+      } else {
+        // Lead ativo → Heloísa (IA). Se o Claude falhar (chave/rate limit/
+        // instabilidade), cai num fallback determinístico em vez de ficar mudo.
         try {
-          const { token: t } = await generatePortalToken(lead.id);
-          link = portalUrl(t);
+          const historico = await carregarHistorico(lead.id);
+          const turn = await conversarComHeloisa(lead, historico, mensagem ?? "");
+          bolhas = chunkBolhas(turn.resposta);
+          respostaLog = turn.resposta;
+          await persistirQualificacao(lead.id, turn);
+          console.log(
+            "[kommo/brain] heloisa:",
+            turn.encerrar ? "ENCERROU" : "em andamento",
+            "| qualif:",
+            JSON.stringify(turn.qualificacao),
+          );
         } catch (e) {
-          console.error("[kommo/brain] token portal falhou:", e);
+          console.error("[kommo/brain] heloisa falhou — fallback:", e);
+          bolhas = msgFallbackAtivo(lead);
+          respostaLog = bolhas.join("\n");
         }
       }
-
-      const bolhas = montarResposta(lead, link);
+      // Trava de segurança: nunca passar de 80 (limite do handler `show`).
+      bolhas = bolhas.map((s) => (s.length > 80 ? s.slice(0, 80) : s));
 
       // Registra na timeline do lead (entrada + saída).
       if (lead) {
@@ -323,7 +377,7 @@ export async function POST(request: NextRequest) {
           leadId: lead.id,
           autorId: null,
           tipo: "whatsapp_enviado",
-          conteudo: bolhas.join("\n"),
+          conteudo: respostaLog,
           metadata: { canal: "kommo_bot", automatico: true } as never,
         });
       }

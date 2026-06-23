@@ -199,6 +199,16 @@ export const leads = pgTable(
     conjugeRendaCentavos: bigint("conjuge_renda_centavos", { mode: "number" }),
     conjugeOcupacao: text("conjuge_ocupacao"),
 
+    // --- Qualificação por WhatsApp (Heloísa / IA — Objetivo 3 Fase B) ---
+    // Preenchidos pela IA durante a conversa de qualificação no WhatsApp.
+    qualifObjetivo: text("qualif_objetivo"),
+    qualifTitularidade: text("qualif_titularidade"),
+    qualifImovelRegularizado: text("qualif_imovel_regularizado"),
+    qualifPendenciaJuridica: text("qualif_pendencia_juridica"),
+    qualifUrgencia: text("qualif_urgencia"),
+    qualifWhatsappStatus: text("qualif_whatsapp_status"), // em_andamento | concluida
+    qualifWhatsappEm: timestamp("qualif_whatsapp_em", { withTimezone: true }),
+
     // --- Pipeline ---
     // text livre — validado em app-layer contra status_lead_config.key.
     status: text("status").notNull().default("novo"),
