@@ -96,6 +96,12 @@ async function persistirQualificacao(leadId: string, turn: HeloisaTurn): Promise
   await db.update(leads).set(set).where(eq(leads.id, leadId));
 }
 
+/** Detecta o botão "Agora não" do template proativo (opt-out). */
+function ehOptOut(texto: string): boolean {
+  const t = texto.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return t === "agora nao";
+}
+
 /** Conta as mensagens que o cliente mandou DEPOIS de uma data (pós-conclusão). */
 async function contarRecebidasApos(leadId: string, desde: Date): Promise<number> {
   const rows = await db
@@ -142,6 +148,15 @@ export async function responderMensagem(
       : 99;
     resposta = pos >= 3 ? null : "O consultor já vai entrar em contato com você 🙂";
     console.log("[whatsapp] pós-conclusão:", pos, resposta ? "(fecho)" : "(SILÊNCIO)");
+  } else if (ehOptOut(mensagem)) {
+    // Botão "Agora não" do template proativo → encerra educadamente; sem mais proativo.
+    resposta =
+      "Sem problema! 🙂 Obrigada pelo seu contato. Não vou te enviar mais mensagens por aqui — quando quiser retomar a sua proposta de crédito com garantia de imóvel, é só me chamar. Um abraço!";
+    await db
+      .update(leads)
+      .set({ qualifWhatsappStatus: "optout" })
+      .where(eq(leads.id, lead.id));
+    console.log("[whatsapp] opt-out (Agora não)");
   } else if (!mensagem.trim()) {
     // Áudio/imagem/sticker chegam sem texto.
     resposta = "Pode me mandar por texto? Assim consigo te ajudar certinho 🙂";

@@ -96,7 +96,8 @@ async function invitePortal(opts: {
 }
 
 // Template aprovado (WABA) que abre a conversa proativa da Heloísa.
-const TEMPLATE_PROATIVO = "proposta_recebida_confirmar";
+// Variável {{1}} = primeiro nome. Botões: "Confirmar" / "Agora não".
+const TEMPLATE_PROATIVO = "novo_modelo_do_whatsapp_22_06_2026_14_55_ja7gtf";
 const TEMPLATE_PROATIVO_LANG = "pt_BR";
 
 /**
@@ -139,7 +140,7 @@ function dispararProativoWhatsapp(opts: {
         leadId: opts.leadId,
         autorId: null,
         tipo: "whatsapp_enviado",
-        conteudo: `Oi${primeiroNome ? `, ${primeiroNome}` : ""}! Aqui é a Heloísa, da Credios 👋 Recebemos o seu pedido de simulação de crédito com garantia de imóvel. Posso confirmar alguns dados rapidinho pra agilizar a sua proposta? É gratuito e sem compromisso.`,
+        conteudo: `Oi${primeiroNome ? `, ${primeiroNome}` : ""}! Aqui é a Credios 👋 Recebemos o seu pedido de simulação de crédito com garantia de imóvel. Posso confirmar alguns dados rapidinho pra agilizar a sua proposta? É gratuito e sem compromisso.`,
         metadata: { canal: "whatsapp_ia", automatico: true, proativo: true } as never,
       });
       console.log("[webhook] proativo whatsapp enviado pra", to);

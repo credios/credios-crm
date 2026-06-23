@@ -16,7 +16,14 @@ import { responderMensagem } from "@/lib/whatsapp/responder";
  */
 
 // Tipos mínimos do payload do Meta (evita `any`).
-type MetaMessage = { from?: string; id?: string; type?: string; text?: { body?: string } };
+type MetaMessage = {
+  from?: string;
+  id?: string;
+  type?: string;
+  text?: { body?: string };
+  button?: { text?: string; payload?: string }; // resposta de botão de template
+  interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
+};
 type MetaChange = { value?: { messages?: MetaMessage[] } };
 type MetaEntry = { changes?: MetaChange[] };
 type MetaPayload = { entry?: MetaEntry[] };
@@ -60,7 +67,12 @@ export async function POST(request: NextRequest) {
     for (const change of entry.changes ?? []) {
       for (const m of change.value?.messages ?? []) {
         if (!m.from) continue;
-        const text = m.type === "text" ? (m.text?.body ?? "") : "";
+        // texto livre OU resposta de botão do template ("Confirmar"/"Agora não").
+        let text = "";
+        if (m.type === "text") text = m.text?.body ?? "";
+        else if (m.type === "button") text = m.button?.text ?? m.button?.payload ?? "";
+        else if (m.type === "interactive")
+          text = m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? "";
         mensagens.push({ from: m.from, text });
       }
     }
