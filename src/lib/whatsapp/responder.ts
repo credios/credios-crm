@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { interacoes, leads } from "../../../db/schema";
 import { db } from "@/lib/db";
@@ -96,24 +96,52 @@ async function persistirQualificacao(leadId: string, turn: HeloisaTurn): Promise
   await db.update(leads).set(set).where(eq(leads.id, leadId));
 }
 
+/** Conta as mensagens que o cliente mandou DEPOIS de uma data (pós-conclusão). */
+async function contarRecebidasApos(leadId: string, desde: Date): Promise<number> {
+  const rows = await db
+    .select({ id: interacoes.id })
+    .from(interacoes)
+    .where(
+      and(
+        eq(interacoes.leadId, leadId),
+        eq(interacoes.tipo, "whatsapp_recebido"),
+        gt(interacoes.criadoEm, desde),
+      ),
+    );
+  return rows.length;
+}
+
 /**
  * Decide a resposta pra uma mensagem do cliente e registra na timeline do lead.
  * Canal-agnóstico: hoje usado pelo webhook do WhatsApp (Meta Cloud API). Roteia:
  * não-identificado → simulador; desqualificado → recusa; ativo → Heloísa (IA).
- * Retorna o texto pronto pra enviar (sem corte de 80 — WhatsApp não tem isso).
+ * Quando a qualificação já foi concluída, responde a no máx. 3 mensagens com um
+ * fecho breve e depois SILENCIA (retorna null = não envia nada). Sem corte de 80.
  */
-export async function responderMensagem(phone: string, mensagem: string): Promise<string> {
+export async function responderMensagem(
+  phone: string,
+  mensagem: string,
+): Promise<string | null> {
   const lead = await acharLead(phone);
   console.log(
     "[whatsapp] lead:",
-    lead ? `${lead.id} (${lead.nome}) status=${lead.status}` : "(não encontrado)",
+    lead
+      ? `${lead.id} (${lead.nome}) status=${lead.status} qualif=${lead.qualifWhatsappStatus}`
+      : "(não encontrado)",
   );
 
-  let resposta: string;
+  let resposta: string | null;
   if (!lead) {
     resposta = msgNaoIdentificado();
   } else if (lead.status === "desqualificado") {
     resposta = msgDesqualificado(lead);
+  } else if (lead.qualifWhatsappStatus === "concluida") {
+    // Qualificação encerrada: fecho breve por até 3 mensagens; depois, silêncio.
+    const pos = lead.qualifWhatsappEm
+      ? await contarRecebidasApos(lead.id, lead.qualifWhatsappEm)
+      : 99;
+    resposta = pos >= 3 ? null : "O consultor já vai entrar em contato com você 🙂";
+    console.log("[whatsapp] pós-conclusão:", pos, resposta ? "(fecho)" : "(SILÊNCIO)");
   } else if (!mensagem.trim()) {
     // Áudio/imagem/sticker chegam sem texto.
     resposta = "Pode me mandar por texto? Assim consigo te ajudar certinho 🙂";
@@ -135,7 +163,7 @@ export async function responderMensagem(phone: string, mensagem: string): Promis
     }
   }
 
-  // Timeline do lead (entrada + saída).
+  // Timeline: entrada sempre; saída só se houve resposta (null = silêncio).
   if (lead) {
     if (mensagem.trim()) {
       await db.insert(interacoes).values({
@@ -146,13 +174,15 @@ export async function responderMensagem(phone: string, mensagem: string): Promis
         metadata: { canal: "whatsapp_ia" } as never,
       });
     }
-    await db.insert(interacoes).values({
-      leadId: lead.id,
-      autorId: null,
-      tipo: "whatsapp_enviado",
-      conteudo: resposta,
-      metadata: { canal: "whatsapp_ia", automatico: true } as never,
-    });
+    if (resposta) {
+      await db.insert(interacoes).values({
+        leadId: lead.id,
+        autorId: null,
+        tipo: "whatsapp_enviado",
+        conteudo: resposta,
+        metadata: { canal: "whatsapp_ia", automatico: true } as never,
+      });
+    }
   }
 
   return resposta;

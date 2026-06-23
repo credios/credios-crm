@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       try {
         console.log("[whatsapp] recebido de", msg.from, "| texto:", msg.text.slice(0, 200));
         const resposta = await responderMensagem(msg.from, msg.text);
-        await enviarTextoWhatsApp(msg.from, resposta);
+        if (resposta) await enviarTextoWhatsApp(msg.from, resposta);
       } catch (e) {
         console.error("[whatsapp] erro processando mensagem:", e);
       }

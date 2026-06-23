@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import {
@@ -19,6 +19,7 @@ import { formatProperName } from "@/lib/formatters/proper-name";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { sendPortalEmail } from "@/lib/portal/email";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
+import { enviarTemplateWhatsApp } from "@/lib/whatsapp/meta";
 import {
   sendLeadAssignedEmail,
   sendLeadEnrichedEmail,
@@ -92,6 +93,65 @@ async function invitePortal(opts: {
     console.error("[webhook] invitePortal falhou:", err);
     return null;
   }
+}
+
+// Template aprovado (WABA) que abre a conversa proativa da Heloísa.
+const TEMPLATE_PROATIVO = "proposta_recebida_confirmar";
+const TEMPLATE_PROATIVO_LANG = "pt_BR";
+
+/**
+ * Dispara o template proativo (Heloísa) pro WhatsApp do lead — abre a conversa
+ * assim que a simulação conclui. Só na conclusão (notify !== false), com whatsapp,
+ * e UMA vez (claim atômico em qualif_whatsapp_status). Se o cliente responder, o
+ * webhook do WhatsApp assume a qualificação. Roda no after() (não bloqueia).
+ */
+function dispararProativoWhatsapp(opts: {
+  leadId: string;
+  nome: string;
+  whatsapp: string | null;
+  notify: boolean | undefined;
+  qualifStatusAtual: string | null;
+}): void {
+  if (opts.notify === false || !opts.whatsapp || opts.qualifStatusAtual) return;
+  const to = opts.whatsapp.replace(/\D/g, "");
+  if (to.length < 10) return;
+  const primeiroNome = opts.nome ? opts.nome.split(/\s+/)[0] : "";
+  after(async () => {
+    // Claim atômico: marca o status e só envia se ganhou a corrida (era nulo) —
+    // evita disparo duplo em webhooks concorrentes (create + enriquecimento).
+    const claimed = await db
+      .update(leads)
+      .set({ qualifWhatsappStatus: "template_enviado" })
+      .where(and(eq(leads.id, opts.leadId), isNull(leads.qualifWhatsappStatus)))
+      .returning({ id: leads.id });
+    if (claimed.length === 0) return;
+    try {
+      const { ok } = await enviarTemplateWhatsApp(
+        to,
+        TEMPLATE_PROATIVO,
+        TEMPLATE_PROATIVO_LANG,
+        [primeiroNome],
+      );
+      if (!ok) throw new Error("template não aceito pelo Meta");
+      // Registra a abertura como turno da Heloísa, pra ela continuar de onde o
+      // template parou (não re-cumprimentar) quando o cliente responder.
+      await db.insert(interacoes).values({
+        leadId: opts.leadId,
+        autorId: null,
+        tipo: "whatsapp_enviado",
+        conteudo: `Oi${primeiroNome ? `, ${primeiroNome}` : ""}! Aqui é a Heloísa, da Credios 👋 Recebemos o seu pedido de simulação de crédito com garantia de imóvel. Posso confirmar alguns dados rapidinho pra agilizar a sua proposta? É gratuito e sem compromisso.`,
+        metadata: { canal: "whatsapp_ia", automatico: true, proativo: true } as never,
+      });
+      console.log("[webhook] proativo whatsapp enviado pra", to);
+    } catch (e) {
+      // Reverte o status pra permitir nova tentativa num webhook futuro.
+      console.error("[webhook] proativo whatsapp falhou — revertendo:", e);
+      await db
+        .update(leads)
+        .set({ qualifWhatsappStatus: null })
+        .where(eq(leads.id, opts.leadId));
+    }
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -258,6 +318,14 @@ export async function POST(request: NextRequest) {
         nome: enrichedLead.nome,
         email: enrichedLead.email,
         notify: payload.notify,
+      });
+
+      dispararProativoWhatsapp({
+        leadId: existing.id,
+        nome: enrichedLead.nome,
+        whatsapp: enrichedLead.whatsapp,
+        notify: payload.notify,
+        qualifStatusAtual: existing.qualifWhatsappStatus,
       });
 
       return NextResponse.json(
@@ -628,6 +696,14 @@ export async function POST(request: NextRequest) {
     nome: newLead.nome,
     email: newLead.email,
     notify: payload.notify,
+  });
+
+  dispararProativoWhatsapp({
+    leadId: newLead.id,
+    nome: newLead.nome,
+    whatsapp: newLead.whatsapp,
+    notify: payload.notify,
+    qualifStatusAtual: newLead.qualifWhatsappStatus,
   });
 
   return NextResponse.json(
