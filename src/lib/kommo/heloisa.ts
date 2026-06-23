@@ -12,7 +12,10 @@ const MODEL = "claude-sonnet-4-6";
 // fallback do cérebro), não no load do módulo (que derrubaria o endpoint todo).
 let _anthropic: Anthropic | null = null;
 function anthropic(): Anthropic {
-  if (!_anthropic) _anthropic = new Anthropic(); // lê ANTHROPIC_API_KEY do ambiente
+  // maxRetries: o SDK re-tenta sozinho em 429/5xx/529 (overload) com backoff
+  // exponencial. Rodamos no after() do webhook (sem o teto de 5s do Meta), então
+  // dá pra ter paciência e aguentar picos de sobrecarga da API.
+  if (!_anthropic) _anthropic = new Anthropic({ maxRetries: 5 });
   return _anthropic;
 }
 
