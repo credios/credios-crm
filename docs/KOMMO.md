@@ -243,12 +243,17 @@ O cérebro loga: `content-type` + `raw`, `parsed`, `telefone resolvido`, `lead`,
 
 ## 11. Próximas fases
 
-- **Fase B (IA):** Claude no cérebro gerando respostas naturais + qualificação
-  (estilo Avanti) + guardrails. Entrega via passo nativo de mensagem (§6) pra sair
-  do teto de 80 chars. **Roteamento por estado do lead, tudo server-side:**
-  - lead **não encontrado** (`acharLead` null) → link do simulador + intro Credios;
-  - lead **desqualificado** (`lead.status` / `lead.motivoDesqualificacao`) → recusa educada;
-  - lead **qualificado** → confirma + portal (comportamento atual).
+- **Roteamento por estado do lead — JÁ IMPLEMENTADO (determinístico, server-side):**
+  - **Seleção do lead** (`acharLead`): casa pelos últimos 8 dígitos; se o número tem
+    vários leads, prefere o **ativo** (não-terminal) mais recente; senão o mais recente.
+  - lead **não encontrado** → convida a simular (`SIMULADOR_URL`) + deixa claro que
+    não foi identificado;
+  - lead **desqualificado** (`status === "desqualificado"`) → recusa educada, sem link;
+  - lead **ativo** → confirma proposta + link do portal.
+  - (`fechado`/`perdido` hoje caem em "ativo" sem link — refinar se necessário.)
+- **Fase B (IA):** trocar os textos fixos por **Claude** gerando respostas naturais +
+  qualificação (estilo Avanti) + guardrails. Entrega via **passo nativo de mensagem**
+  (§6) pra sair do teto de 80 chars. A árvore de roteamento acima já é a base.
 - **Fase C (proativo):** CRM empurra lead pro Kommo + dispara template WABA fora do
   horário comercial.
 

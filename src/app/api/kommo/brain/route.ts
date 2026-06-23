@@ -6,6 +6,10 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import { interacoes, leads } from "../../../../../db/schema";
 import { db } from "@/lib/db";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
+import { isSystemTerminal } from "@/lib/status/canonical";
+
+// Simulador no site (lead não identificado é convidado a se cadastrar).
+const SIMULADOR_URL = "https://credios.com.br/simulador";
 
 /**
  * "Cérebro" do atendimento WhatsApp (Objetivo 3 — Fase A, determinística).
@@ -165,40 +169,82 @@ function parseBody(raw: string): Record<string, unknown> {
   }
 }
 
-/** Acha o lead pelo telefone (casa pelos últimos 8 dígitos, lead mais recente). */
+/**
+ * Acha o lead pelo telefone (casa pelos últimos 8 dígitos). Quando o número está
+ * em mais de um lead, prefere o **ativo** (não-terminal) mais recente; se nenhum
+ * ativo, devolve o mais recente (provavelmente terminal: desqualificado/perdido/
+ * fechado), pra a resposta poder tratar esse caso.
+ */
 async function acharLead(phone: string) {
   const digits = phone.replace(/\D/g, "");
   const last8 = digits.slice(-8);
   if (last8.length < 8) return null;
-  const [lead] = await db
+  const rows = await db
     .select()
     .from(leads)
     .where(sql`regexp_replace(${leads.whatsapp}, '\\D', '', 'g') LIKE ${"%" + last8}`)
-    .orderBy(desc(leads.createdAt))
-    .limit(1);
-  return lead ?? null;
+    .orderBy(desc(leads.createdAt));
+  if (rows.length === 0) return null;
+  const ativoMaisRecente = rows.find((l) => !isSystemTerminal(l.status));
+  return ativoMaisRecente ?? rows[0];
 }
 
+type Lead = NonNullable<Awaited<ReturnType<typeof acharLead>>>;
+
+function primeiroNome(lead: Lead): string {
+  return lead.nome ? lead.nome.split(/\s+/)[0] : "";
+}
+
+/** Lead não encontrado no CRM → convida a simular e deixa claro que não achamos. */
+function msgNaoIdentificado(): string[] {
+  return [
+    "Oi! Sou o assistente virtual da Credios. 👋",
+    "Não localizei um cadastro seu por aqui.",
+    "Faça sua simulação (rápida e gratuita) em:",
+    SIMULADOR_URL,
+    "Assim que preencher, um consultor já entra em contato 🙂",
+  ];
+}
+
+/** Lead desqualificado → recusa educada, sem link nem promessa de contato. */
+function msgDesqualificado(lead: Lead): string[] {
+  const nome = primeiroNome(lead);
+  return [
+    `Oi${nome ? `, ${nome}` : ""}! Sou o assistente virtual da Credios. 👋`,
+    "Obrigado pelo seu contato e interesse no crédito com garantia 🙏",
+    "Neste momento, não conseguimos seguir com a sua solicitação.",
+    "Se algo mudar, a gente te avisa. Um abraço!",
+  ];
+}
+
+/** Lead ativo → confirma a proposta + (se houver) link do portal de documentos. */
+function msgAtivo(lead: Lead, link: string | null): string[] {
+  const nome = primeiroNome(lead);
+  const out = [
+    `Oi${nome ? `, ${nome}` : ""}! Sou o assistente virtual da Credios. 👋`,
+    "Sua proposta de crédito com garantia de imóvel já está em análise 🙂",
+  ];
+  if (link) {
+    out.push("Um consultor logo entra em contato. Pra adiantar, envie seus docs aqui:");
+    out.push(link);
+  } else {
+    out.push("Um consultor logo entra em contato com você. É sem compromisso.");
+  }
+  return out;
+}
+
+/**
+ * Roteia a resposta pelo estado do lead. O handler `show` do Kommo limita `value`
+ * a 80 chars, então devolvemos um array de bolhas curtas (uma por `show`).
+ */
 function montarResposta(
   lead: Awaited<ReturnType<typeof acharLead>>,
   link: string | null,
 ): string[] {
-  // O handler `show` do Kommo limita `value` a 80 chars, então a resposta sai em
-  // bolhas curtas (uma por elemento). Cada linha é mantida ≤ 80.
-  const nome = lead?.nome ? lead.nome.split(/\s+/)[0] : "";
-  const out: string[] = [];
-  out.push(`Oi${nome ? `, ${nome}` : ""}! Sou o assistente virtual da Credios. 👋`);
-  out.push(
-    lead
-      ? `Sua proposta de crédito com garantia de imóvel já está em análise 🙂`
-      : `Recebemos seu contato sobre crédito com garantia de imóvel 🙂`,
-  );
-  if (link) {
-    out.push(`Um consultor logo entra em contato. Pra adiantar, envie seus docs aqui:`);
-    out.push(link);
-  } else {
-    out.push(`Um consultor logo entra em contato com você. É sem compromisso.`);
-  }
+  let out: string[];
+  if (!lead) out = msgNaoIdentificado();
+  else if (lead.status === "desqualificado") out = msgDesqualificado(lead);
+  else out = msgAtivo(lead, link);
   // Trava de segurança: nunca passar de 80 (o link tem ~77).
   return out.map((s) => (s.length > 80 ? s.slice(0, 80) : s));
 }
@@ -243,10 +289,15 @@ export async function POST(request: NextRequest) {
       const phone = phonePayload || (await phoneFromKommo(claims));
       console.log("[kommo/brain] telefone resolvido:", phone ?? "(vazio)");
       const lead = phone ? await acharLead(phone) : null;
-      console.log("[kommo/brain] lead:", lead ? `${lead.id} (${lead.nome})` : "(não encontrado)");
+      console.log(
+        "[kommo/brain] lead:",
+        lead ? `${lead.id} (${lead.nome}) status=${lead.status}` : "(não encontrado)",
+      );
 
+      // Link do portal só pra lead ativo (não-terminal). Desqualificado/perdido/
+      // fechado não recebem convite de documentos.
       let link: string | null = null;
-      if (lead?.email || lead?.id) {
+      if (lead && !isSystemTerminal(lead.status)) {
         try {
           const { token: t } = await generatePortalToken(lead.id);
           link = portalUrl(t);
