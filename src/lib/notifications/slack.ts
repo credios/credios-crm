@@ -68,3 +68,33 @@ export async function sendLeadAssignedSlack(
     return { ok: false, reason: err instanceof Error ? err.message : "erro" };
   }
 }
+
+/**
+ * Posta um alerta operacional num canal do Slack (ex.: #tecnologia). O canal vem
+ * de `SLACK_ALERT_CHANNEL` (id `C…` ou "#nome"), default "#tecnologia". O bot
+ * precisa do scope `chat:write` e estar no canal (ou `chat:write.public`).
+ * No-op silencioso sem `SLACK_BOT_TOKEN`; nunca lança (uso em cron/after).
+ */
+export async function sendSlackAlert(text: string): Promise<SlackResult> {
+  if (!token) return { ok: false, reason: "SLACK_BOT_TOKEN ausente" };
+  const channel = process.env.SLACK_ALERT_CHANNEL ?? "#tecnologia";
+  try {
+    const res = await fetch(`${SLACK_API}/chat.postMessage`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "content-type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify({ channel, text }),
+    });
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    if (!data.ok) {
+      console.error("[slack-alert] postMessage error:", data.error);
+      return { ok: false, reason: data.error ?? "erro Slack" };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[slack-alert] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}

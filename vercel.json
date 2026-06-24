@@ -9,6 +9,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/whatsapp-health",
+      "schedule": "0 */2 * * *"
+    },
+    {
       "path": "/api/cron/refresh-mvs",
       "schedule": "*/30 * * * *"
     }
