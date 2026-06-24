@@ -4,6 +4,7 @@ import { after, NextResponse, type NextRequest } from "next/server";
 
 import { enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
 import { responderMensagem } from "@/lib/whatsapp/responder";
+import { transcreverAudioWhatsapp } from "@/lib/whatsapp/transcrever";
 
 /**
  * Webhook do WhatsApp (Meta Cloud API) — Objetivo 3, arquitetura direta.
@@ -23,6 +24,7 @@ type MetaMessage = {
   text?: { body?: string };
   button?: { text?: string; payload?: string }; // resposta de botão de template
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
+  audio?: { id?: string; mime_type?: string }; // nota de voz / áudio
 };
 type MetaChange = { value?: { messages?: MetaMessage[] } };
 type MetaEntry = { changes?: MetaChange[] };
@@ -61,29 +63,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 
-  // Extrai mensagens entrantes (texto; áudio/imagem viram texto vazio → a Heloísa pede texto).
-  const mensagens: { from: string; text: string }[] = [];
+  // Extrai mensagens entrantes: texto livre, resposta de botão, ou áudio (nota de
+  // voz → guarda o media_id pra transcrever no after()). Outros tipos → texto vazio.
+  const mensagens: { from: string; text: string; audioId?: string }[] = [];
   for (const entry of body.entry ?? []) {
     for (const change of entry.changes ?? []) {
       for (const m of change.value?.messages ?? []) {
         if (!m.from) continue;
-        // texto livre OU resposta de botão do template ("Confirmar"/"Agora não").
         let text = "";
+        let audioId: string | undefined;
         if (m.type === "text") text = m.text?.body ?? "";
         else if (m.type === "button") text = m.button?.text ?? m.button?.payload ?? "";
         else if (m.type === "interactive")
           text = m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? "";
-        mensagens.push({ from: m.from, text });
+        else if (m.type === "audio") audioId = m.audio?.id;
+        mensagens.push({ from: m.from, text, audioId });
       }
     }
   }
 
-  // Ack rápido (<5s, senão o Meta re-envia). Processamento pesado no after().
+  // Ack rápido (<5s, senão o Meta re-envia). Processamento pesado no after():
+  // transcrição do áudio + Heloísa. Áudio que falha vira "" → fallback "manda texto".
   after(async () => {
     for (const msg of mensagens) {
       try {
-        console.log("[whatsapp] recebido de", msg.from, "| texto:", msg.text.slice(0, 200));
-        const resposta = await responderMensagem(msg.from, msg.text);
+        const texto = msg.audioId
+          ? await transcreverAudioWhatsapp(msg.audioId)
+          : msg.text;
+        console.log(
+          "[whatsapp] recebido de",
+          msg.from,
+          msg.audioId ? "| (áudio) " : "| texto:",
+          texto.slice(0, 200),
+        );
+        const resposta = await responderMensagem(msg.from, texto);
         if (resposta) await enviarTextoWhatsApp(msg.from, resposta);
       } catch (e) {
         console.error("[whatsapp] erro processando mensagem:", e);

@@ -5,6 +5,44 @@
 const GRAPH = "https://graph.facebook.com/v21.0";
 
 /**
+ * Baixa uma mídia (áudio, imagem, etc.) recebida no WhatsApp. São 2 passos: o
+ * media_id devolve uma URL temporária; a URL devolve os bytes (ambos exigem o
+ * Bearer da WABA). Usado pra transcrever áudios. Retorna null em qualquer falha.
+ */
+export async function baixarMidiaWhatsApp(
+  mediaId: string,
+): Promise<{ data: ArrayBuffer; mime: string } | null> {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!token) {
+    console.error("[whatsapp] credenciais ausentes (mídia não baixada)");
+    return null;
+  }
+  try {
+    const metaResp = await fetch(`${GRAPH}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!metaResp.ok) {
+      console.error("[whatsapp] media meta falhou:", metaResp.status);
+      return null;
+    }
+    const { url, mime_type } = (await metaResp.json()) as {
+      url?: string;
+      mime_type?: string;
+    };
+    if (!url) return null;
+    const bin = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!bin.ok) {
+      console.error("[whatsapp] media download falhou:", bin.status);
+      return null;
+    }
+    return { data: await bin.arrayBuffer(), mime: mime_type ?? "audio/ogg" };
+  } catch (e) {
+    console.error("[whatsapp] media erro:", e);
+    return null;
+  }
+}
+
+/**
  * Envia uma mensagem de TEMPLATE aprovado (WABA) — obrigatório pra INICIAR uma
  * conversa (cliente ainda não falou; fora da janela de 24h). `variaveis` mapeia
  * os {{1}}, {{2}}... do corpo do template, na ordem.
