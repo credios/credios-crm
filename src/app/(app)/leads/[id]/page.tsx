@@ -1,4 +1,4 @@
-import { aliasedTable, and, desc, eq, sql } from "drizzle-orm";
+import { aliasedTable, and, desc, eq, inArray, sql } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 
@@ -30,6 +30,7 @@ import {
 } from "@/components/leads/lead-detail-sections";
 import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
 import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
+import { LeadWhatsappConversa } from "@/components/leads/lead-whatsapp-conversa";
 import { MensagensSugeridas } from "@/components/leads/mensagens-sugeridas";
 import { ValoresSuspeitosBanner } from "@/components/leads/valores-suspeitos-banner";
 import {
@@ -206,6 +207,14 @@ export default async function LeadDetailPage({ params }: Props) {
           <LeadEnderecoImovelCard lead={lead} canEdit={canEdit} />
           <LeadQualificacaoCard lead={lead} />
 
+          {/* Conversa do WhatsApp (Heloísa ↔ cliente). PII em texto livre →
+              oculta pra marketing, igual à timeline. */}
+          {!isMarketing && (
+            <Suspense fallback={<SkeletonLeadBancos />}>
+              <WhatsappConversaBlock leadId={lead.id} />
+            </Suspense>
+          )}
+
           {!isMarketing && (
             <Suspense fallback={<SkeletonLeadBancos />}>
               <BancosBlock leadId={lead.id} canEdit={canManageBank} />
@@ -334,6 +343,40 @@ async function HeaderBlock(props: {
         </p>
       )}
     </>
+  );
+}
+
+async function WhatsappConversaBlock({ leadId }: { leadId: string }) {
+  // Ambas as pontas da conversa (recebido + enviado), em ordem cronológica.
+  const rows = await db
+    .select({
+      id: interacoes.id,
+      tipo: interacoes.tipo,
+      conteudo: interacoes.conteudo,
+      criadoEm: interacoes.criadoEm,
+    })
+    .from(interacoes)
+    .where(
+      and(
+        eq(interacoes.leadId, leadId),
+        inArray(interacoes.tipo, ["whatsapp_recebido", "whatsapp_enviado"]),
+      ),
+    )
+    .orderBy(interacoes.criadoEm)
+    .limit(200)
+    .catch(() => null);
+
+  if (rows === null || rows.length === 0) return null;
+
+  return (
+    <LeadWhatsappConversa
+      mensagens={rows.map((r) => ({
+        id: r.id,
+        tipo: r.tipo,
+        conteudo: r.conteudo,
+        criadoEm: r.criadoEm.toISOString(),
+      }))}
+    />
   );
 }
 
