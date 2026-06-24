@@ -2251,3 +2251,120 @@ export async function fetchKpisConsultor(
     },
   };
 }
+
+// ============================================================================
+// MQL / SQL — funil de qualificação (marketing → vendas)
+//   MQL = lead ATRIBUÍDO a um consultor (passou o roteamento; minimamente
+//         qualificado à primeira vista).
+//   SQL = MQL que o comercial NÃO desqualificou — ou seja, aceito como
+//         oportunidade real (pode estar em andamento, perdido ou fechado).
+// Cohort por created_at (entrada), respeitando os filtros do dashboard.
+// ============================================================================
+
+export type MqlSqlResumo = {
+  leads: number; // total recebidos no período
+  mql: number; // atribuídos
+  sql: number; // mql e NÃO desqualificado
+  desqualificados: number; // mql e desqualificado
+  fechados: number; // ganhos (subconjunto de sql)
+  perdidos: number; // perdidos (subconjunto de sql)
+};
+
+export const fetchMqlSql = cache(async function fetchMqlSql(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<MqlSqlResumo> {
+  return unstable_cache(
+    () => fetchMqlSqlUncached(filters, period),
+    cacheKeyFor("reports:mql-sql", filters, period),
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+});
+
+async function fetchMqlSqlUncached(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<MqlSqlResumo> {
+  const cb = baseConds(filters);
+  const atribuido = sql`${leads.atribuidoEm} is not null`;
+  const [row] = await db
+    .select({
+      leads: sql<number>`count(*)::int`,
+      mql: sql<number>`(count(*) filter (where ${atribuido}))::int`,
+      sql: sql<number>`(count(*) filter (where ${atribuido} and ${leads.status} <> 'desqualificado'))::int`,
+      desqualificados: sql<number>`(count(*) filter (where ${atribuido} and ${leads.status} = 'desqualificado'))::int`,
+      fechados: sql<number>`(count(*) filter (where ${atribuido} and ${leads.status} = 'fechado'))::int`,
+      perdidos: sql<number>`(count(*) filter (where ${atribuido} and ${leads.status} = 'perdido'))::int`,
+    })
+    .from(leads)
+    .where(
+      and(gte(leads.createdAt, period.from), lte(leads.createdAt, period.to), ...cb),
+    );
+  return {
+    leads: Number(row?.leads ?? 0),
+    mql: Number(row?.mql ?? 0),
+    sql: Number(row?.sql ?? 0),
+    desqualificados: Number(row?.desqualificados ?? 0),
+    fechados: Number(row?.fechados ?? 0),
+    perdidos: Number(row?.perdidos ?? 0),
+  };
+}
+
+export type MqlSqlOrigemRow = {
+  origem: string;
+  leads: number;
+  mql: number;
+  sql: number;
+  fechados: number;
+  taxaAceite: number; // sql / mql — qualidade do lead
+  winRate: number; // fechados / sql — eficiência de vendas
+};
+
+export const fetchMqlSqlPorOrigem = cache(async function fetchMqlSqlPorOrigem(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<MqlSqlOrigemRow[]> {
+  return unstable_cache(
+    () => fetchMqlSqlPorOrigemUncached(filters, period),
+    cacheKeyFor("reports:mql-sql-origem", filters, period),
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+});
+
+async function fetchMqlSqlPorOrigemUncached(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<MqlSqlOrigemRow[]> {
+  const cb = baseConds(filters);
+  const atribuido = sql`${leads.atribuidoEm} is not null`;
+  const origemExpr = sql<string>`coalesce(nullif(${leads.origem}, ''), 'Sem origem')`;
+  const rows = await db
+    .select({
+      origem: origemExpr,
+      leads: sql<number>`count(*)::int`,
+      mql: sql<number>`(count(*) filter (where ${atribuido}))::int`,
+      sql: sql<number>`(count(*) filter (where ${atribuido} and ${leads.status} <> 'desqualificado'))::int`,
+      fechados: sql<number>`(count(*) filter (where ${atribuido} and ${leads.status} = 'fechado'))::int`,
+    })
+    .from(leads)
+    .where(
+      and(gte(leads.createdAt, period.from), lte(leads.createdAt, period.to), ...cb),
+    )
+    .groupBy(origemExpr)
+    .orderBy(sql`count(*) desc`)
+    .limit(12);
+  return rows.map((r) => {
+    const mql = Number(r.mql);
+    const sqlCount = Number(r.sql);
+    const fechados = Number(r.fechados);
+    return {
+      origem: String(r.origem),
+      leads: Number(r.leads),
+      mql,
+      sql: sqlCount,
+      fechados,
+      taxaAceite: mql > 0 ? sqlCount / mql : 0,
+      winRate: sqlCount > 0 ? fechados / sqlCount : 0,
+    };
+  });
+}

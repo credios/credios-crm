@@ -22,6 +22,7 @@ import { TempoMedioChart } from "@/components/relatorios/charts/tempo-medio";
 import { VolumePorDiaChart } from "@/components/relatorios/charts/volume-por-dia";
 import { DistribuicaoCards } from "@/components/relatorios/distribuicao-cards";
 import { KpiCard } from "@/components/relatorios/kpi-card";
+import { MqlSqlFunil } from "@/components/relatorios/mql-sql-funil";
 import { ReportFilters } from "@/components/relatorios/report-filters";
 import { Badge } from "@/components/ui/badge";
 import { logAction } from "@/lib/audit";
@@ -41,6 +42,8 @@ import {
   fetchEsfriandoGlobal,
   fetchKpis,
   fetchLossReasons,
+  fetchMqlSql,
+  fetchMqlSqlPorOrigem,
   fetchOrigemROI,
   fetchOrigensDistintas,
   fetchPerformanceConsultores,
@@ -145,6 +148,14 @@ export default async function RelatoriosPage({ searchParams }: Props) {
 
       <Suspense fallback={<SectionSkeleton h={320} />}>
         <FunilSection filters={filters} period={period} />
+      </Suspense>
+
+      <Suspense fallback={<SectionSkeleton h={460} />}>
+        <MqlSqlSection
+          filters={filters}
+          period={period}
+          compPeriod={compPeriod}
+        />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton h={320} />}>
@@ -366,6 +377,31 @@ async function FunilSection({
   return renderSection("Funil de conversão", async () => {
     const stages = await fetchConversionRates(filters, period);
     return <ConversionFunnel stages={stages} />;
+  });
+}
+
+async function MqlSqlSection({
+  filters,
+  period,
+  compPeriod,
+}: {
+  filters: RFilters;
+  period: PeriodRange;
+  compPeriod: PeriodRange | null;
+}) {
+  return renderSection("MQL / SQL", async () => {
+    const [resumo, resumoPrev, porOrigem] = await Promise.all([
+      fetchMqlSql(filters, period),
+      compPeriod ? fetchMqlSql(filters, compPeriod) : Promise.resolve(null),
+      fetchMqlSqlPorOrigem(filters, period),
+    ]);
+    return (
+      <MqlSqlFunil
+        resumo={resumo}
+        resumoPrev={resumoPrev}
+        porOrigem={porOrigem}
+      />
+    );
   });
 }
 
