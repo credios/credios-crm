@@ -25,7 +25,6 @@ import {
   sendLeadEnrichedEmail,
   sendNewLeadEmail,
 } from "@/lib/notifications/email";
-import { sendLeadAssignedSlack } from "@/lib/notifications/slack";
 import { contextFromWebhook } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
 import { aplicarRoteamento } from "@/lib/routing/engine";
@@ -630,7 +629,6 @@ export async function POST(request: NextRequest) {
         .limit(1);
       if (consultor?.email) {
         await sendLeadAssignedEmail(newLead, consultor.email, consultor.nome);
-        await sendLeadAssignedSlack(newLead, consultor.email, consultor.nome);
       }
     });
   }

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
-import { sendSlackAlert } from "@/lib/notifications/slack";
+import { sendWhatsappHealthEmail } from "@/lib/notifications/email";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  * o número automático. Critério: leads cuja ÚLTIMA mensagem de WhatsApp é do
  * cliente (`whatsapp_recebido`), recebida entre 30min e 3h atrás, SEM resposta
  * depois — excluindo silêncio intencional (concluída / opt-out) e leads terminais.
- * Se achar, alerta no Slack (#tecnologia). Auth via CRON_SECRET (Vercel Cron).
+ * Se achar, alerta por e-mail (WHATSAPP_ALERT_EMAIL). Auth via CRON_SECRET (Vercel Cron).
  */
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -48,17 +48,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, pendentes: 0 });
   }
 
-  const exemplos = lista
-    .slice(0, 5)
-    .map((p) => `• ${p.nome ?? "(sem nome)"}`)
-    .join("\n");
-  await sendSlackAlert(
-    `⚠️ *Heloísa (WhatsApp) pode estar sem responder.*\n` +
-      `${lista.length} cliente(s) com mensagem sem resposta há 30min+.\n${exemplos}\n\n` +
-      `Cheque o token do Meta (\`WHATSAPP_ACCESS_TOKEN\`) e o status do número. ` +
-      `A conversa aparece na ficha do lead no CRM.`,
-  );
+  const exemplos = lista.slice(0, 5).map((p) => p.nome ?? "(sem nome)");
+  await sendWhatsappHealthEmail(lista.length, exemplos);
 
-  console.log(`[cron health] pendentes=${lista.length} — alerta enviado ao Slack`);
+  console.log(`[cron health] pendentes=${lista.length} — alerta enviado por e-mail`);
   return NextResponse.json({ ok: true, pendentes: lista.length });
 }

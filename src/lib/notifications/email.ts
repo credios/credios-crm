@@ -105,6 +105,40 @@ export async function sendLeadAssignedEmail(
   }
 }
 
+/**
+ * Alerta operacional por e-mail: o atendimento automático do WhatsApp (Heloísa)
+ * pode estar sem responder. Disparado pelo cron de health-check. Destinatário em
+ * `WHATSAPP_ALERT_EMAIL` (default gabriel.meirelles@credios.com.br).
+ */
+export async function sendWhatsappHealthEmail(
+  pendentes: number,
+  exemplos: string[],
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  const to = process.env.WHATSAPP_ALERT_EMAIL ?? "gabriel.meirelles@credios.com.br";
+  const subject = `⚠️ Heloísa (WhatsApp) pode estar sem responder — ${pendentes} cliente(s)`;
+  const itens = exemplos.map((e) => `<li>${e}</li>`).join("");
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a;line-height:1.5">
+      <h2 style="color:#b91c1c;margin-bottom:8px">⚠️ Atendimento automático do WhatsApp pode estar com problema</h2>
+      <p><strong>${pendentes} cliente(s)</strong> mandaram mensagem e a Heloísa não respondeu (há 30min+). Isso costuma indicar token do Meta expirado, instabilidade do Meta, ou erro no bot.</p>
+      ${itens ? `<ul>${itens}</ul>` : ""}
+      <p><strong>O que verificar:</strong> o token <code>WHATSAPP_ACCESS_TOKEN</code> na Vercel e o status do número no Meta. A conversa de cada lead aparece na ficha dele no CRM.</p>
+      <p style="color:#666;font-size:13px;margin-top:16px">Alerta automático do health-check da Heloísa (roda a cada 2h).</p>
+    </div>`;
+  try {
+    const result = await resend.emails.send({ from, to, replyTo, subject, html });
+    if (result.error) {
+      console.error("[email-health] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-health] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
 // ============================================================================
 // Construção do bloco de detalhes do lead (compartilhado entre emails)
 // ============================================================================
