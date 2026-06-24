@@ -465,6 +465,11 @@ function DocRow({
                 Opcional
               </span>
             )}
+            {item.multiplos && (
+              <span className="rounded-full border border-credios-blue/30 bg-credios-blue/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-credios-blue/90">
+                Vários arquivos
+              </span>
+            )}
             {temAlgum && (
               <Check className="h-4 w-4 text-emerald-400" aria-hidden />
             )}
