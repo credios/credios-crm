@@ -5,6 +5,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/proativo-whatsapp",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/refresh-mvs",
       "schedule": "*/30 * * * *"
     }

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import {
@@ -19,7 +19,7 @@ import { formatProperName } from "@/lib/formatters/proper-name";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { sendPortalEmail } from "@/lib/portal/email";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
-import { enviarTemplateWhatsApp } from "@/lib/whatsapp/meta";
+import { enviarProativoWhatsapp } from "@/lib/whatsapp/proativo";
 import {
   sendLeadAssignedEmail,
   sendLeadEnrichedEmail,
@@ -95,64 +95,34 @@ async function invitePortal(opts: {
   }
 }
 
-// Template aprovado (WABA) que abre a conversa proativa da Heloísa.
-// Variável {{1}} = primeiro nome. Botões: "Confirmar" / "Agora não".
-const TEMPLATE_PROATIVO = "novo_modelo_do_whatsapp_22_06_2026_14_55_ja7gtf";
-const TEMPLATE_PROATIVO_LANG = "pt_BR";
-
 /**
- * Dispara o template proativo (Heloísa) pro WhatsApp do lead — abre a conversa
- * assim que a simulação conclui. Só na conclusão (notify !== false), com whatsapp,
- * e UMA vez (claim atômico em qualif_whatsapp_status). Se o cliente responder, o
- * webhook do WhatsApp assume a qualificação. Roda no after() (não bloqueia).
+ * Agenda o template proativo da Heloísa SÓ quando a simulação está COMPLETA.
+ *
+ * "Completa" = tem `objetivoCredito` preenchido. O mini-form da 1ª etapa (money
+ * page) captura só nome+telefone+valores e NÃO tem objetivo — então não dispara
+ * aqui; quem para na 1ª etapa é alcançado pelo cron (15 min). Já o fluxo único
+ * (Google Ads) e o enriquecimento final (etapa 5, notify≠false) chegam completos
+ * e disparam na hora. Idempotência fica no claim atômico de enviarProativoWhatsapp.
+ * Roda no after() (não bloqueia a resposta do webhook).
  */
-function dispararProativoWhatsapp(opts: {
+function agendarProativoSeCompleto(opts: {
   leadId: string;
   nome: string;
   whatsapp: string | null;
   notify: boolean | undefined;
+  completo: boolean;
   qualifStatusAtual: string | null;
 }): void {
-  if (opts.notify === false || !opts.whatsapp || opts.qualifStatusAtual) return;
-  const to = opts.whatsapp.replace(/\D/g, "");
-  if (to.length < 10) return;
-  const primeiroNome = opts.nome ? opts.nome.split(/\s+/)[0] : "";
-  after(async () => {
-    // Claim atômico: marca o status e só envia se ganhou a corrida (era nulo) —
-    // evita disparo duplo em webhooks concorrentes (create + enriquecimento).
-    const claimed = await db
-      .update(leads)
-      .set({ qualifWhatsappStatus: "template_enviado" })
-      .where(and(eq(leads.id, opts.leadId), isNull(leads.qualifWhatsappStatus)))
-      .returning({ id: leads.id });
-    if (claimed.length === 0) return;
-    try {
-      const { ok } = await enviarTemplateWhatsApp(
-        to,
-        TEMPLATE_PROATIVO,
-        TEMPLATE_PROATIVO_LANG,
-        [primeiroNome],
-      );
-      if (!ok) throw new Error("template não aceito pelo Meta");
-      // Registra a abertura como turno da Heloísa, pra ela continuar de onde o
-      // template parou (não re-cumprimentar) quando o cliente responder.
-      await db.insert(interacoes).values({
-        leadId: opts.leadId,
-        autorId: null,
-        tipo: "whatsapp_enviado",
-        conteudo: `Oi${primeiroNome ? `, ${primeiroNome}` : ""}! Aqui é a Credios 👋 Recebemos o seu pedido de simulação de crédito com garantia de imóvel. Posso confirmar alguns dados rapidinho pra agilizar a sua proposta? É gratuito e sem compromisso.`,
-        metadata: { canal: "whatsapp_ia", automatico: true, proativo: true } as never,
-      });
-      console.log("[webhook] proativo whatsapp enviado pra", to);
-    } catch (e) {
-      // Reverte o status pra permitir nova tentativa num webhook futuro.
-      console.error("[webhook] proativo whatsapp falhou — revertendo:", e);
-      await db
-        .update(leads)
-        .set({ qualifWhatsappStatus: null })
-        .where(eq(leads.id, opts.leadId));
-    }
-  });
+  if (opts.notify === false || !opts.completo || !opts.whatsapp || opts.qualifStatusAtual) {
+    return;
+  }
+  after(() =>
+    enviarProativoWhatsapp({
+      leadId: opts.leadId,
+      nome: opts.nome,
+      whatsapp: opts.whatsapp,
+    }),
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -321,11 +291,12 @@ export async function POST(request: NextRequest) {
         notify: payload.notify,
       });
 
-      dispararProativoWhatsapp({
+      agendarProativoSeCompleto({
         leadId: existing.id,
         nome: enrichedLead.nome,
         whatsapp: enrichedLead.whatsapp,
         notify: payload.notify,
+        completo: !!enrichedLead.objetivoCredito,
         qualifStatusAtual: existing.qualifWhatsappStatus,
       });
 
@@ -699,11 +670,12 @@ export async function POST(request: NextRequest) {
     notify: payload.notify,
   });
 
-  dispararProativoWhatsapp({
+  agendarProativoSeCompleto({
     leadId: newLead.id,
     nome: newLead.nome,
     whatsapp: newLead.whatsapp,
     notify: payload.notify,
+    completo: !!newLead.objetivoCredito,
     qualifStatusAtual: newLead.qualifWhatsappStatus,
   });
 

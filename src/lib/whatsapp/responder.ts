@@ -8,6 +8,7 @@ import {
   type Mensagem,
 } from "@/lib/whatsapp/heloisa";
 import { isSystemTerminal } from "@/lib/status/canonical";
+import { generatePortalToken, portalUrl } from "@/lib/portal/token";
 
 const SIMULADOR_URL = "https://credios.com.br/simulador";
 
@@ -96,6 +97,24 @@ async function persistirQualificacao(leadId: string, turn: HeloisaTurn): Promise
   await db.update(leads).set(set).where(eq(leads.id, leadId));
 }
 
+/**
+ * Anexa o link do portal de documentos à mensagem de encerramento da Heloísa.
+ * Gera um token fresco (o raw só existe na hora) e devolve a URL pública. Reforça
+ * o benefício (acelera análise/aprovação). Se NEXT_PUBLIC_APP_URL não estiver
+ * setado, devolve a resposta sem link (não quebra o encerramento).
+ */
+async function anexarLinkDocumentos(leadId: string, resposta: string): Promise<string> {
+  try {
+    const { token } = await generatePortalToken(leadId);
+    const url = portalUrl(token);
+    if (!url.startsWith("http")) return resposta;
+    return `${resposta}\n\n📄 Pra adiantar a análise e acelerar a aprovação, deixe seus documentos prontos por aqui:\n${url}`;
+  } catch (e) {
+    console.error("[whatsapp] link de documentos falhou:", e);
+    return resposta;
+  }
+}
+
 /** Detecta o botão "Agora não" do template proativo (opt-out). */
 function ehOptOut(texto: string): boolean {
   const t = texto.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
@@ -166,6 +185,8 @@ export async function responderMensagem(
       const turn = await conversarComHeloisa(lead, historico, mensagem);
       resposta = turn.resposta;
       await persistirQualificacao(lead.id, turn);
+      // No encerramento, manda o link do portal de documentos (acelera a aprovação).
+      if (turn.encerrar) resposta = await anexarLinkDocumentos(lead.id, resposta);
       console.log(
         "[whatsapp] heloisa:",
         turn.encerrar ? "ENCERROU" : "em andamento",
