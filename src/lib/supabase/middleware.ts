@@ -15,6 +15,9 @@ const PUBLIC_PATH_PREFIXES = [
   "/portal", // gate: token do portal de documentos (validado no handler)
   "/api/portal", // gate: token do portal (upload/validação no handler)
   "/api/whatsapp", // gate: verify token (GET) + assinatura X-Hub-Signature-256 do Meta
+  "/privacidade", // página legal pública (Meta/LGPD) — sem dados sensíveis
+  "/termos", // página legal pública
+  "/exclusao-de-dados", // página legal pública (instruções de exclusão)
 ];
 
 // Rotas que, se acessadas por usuário já autenticado, devem ser redirecionadas para a app.
