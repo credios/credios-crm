@@ -139,6 +139,47 @@ export async function sendWhatsappHealthEmail(
   }
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Alerta de FALHA PROATIVA: o bot tentou abrir conversa com leads e o Meta
+ * rejeitou TODOS os envios. Disparado pelo cron proativo (a cada 5 min, com
+ * throttle de 2h). Cobre o ponto cego do health-check reativo — uma queda do
+ * proativo não gera resposta de cliente, então nada a detectaria de outra forma.
+ */
+export async function sendProativoFailureEmail(
+  candidatos: number,
+  erro: string,
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  const to = process.env.WHATSAPP_ALERT_EMAIL ?? "gabriel.meirelles@credios.com.br";
+  const subject = `🚨 Bot WhatsApp NÃO está enviando — ${candidatos} lead(s) sem abertura`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a;line-height:1.5">
+      <h2 style="color:#b91c1c;margin-bottom:8px">🚨 O bot proativo da Heloísa parou de enviar</h2>
+      <p>Nos últimos minutos, <strong>${candidatos} lead(s)</strong> deveriam receber a mensagem de abertura e <strong>nenhum</strong> foi enviado — o Meta rejeitou os envios. Novos leads não estão sendo abordados.</p>
+      <p style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px"><strong>Erro do Meta:</strong><br><code style="font-size:12px;word-break:break-word">${escapeHtml(erro)}</code></p>
+      <p><strong>O que costuma ser:</strong> token <code>WHATSAPP_ACCESS_TOKEN</code> expirado (190), app despublicado/restrito (131030 / policy) ou conta/billing do Meta (13104x).</p>
+      <p style="color:#666;font-size:13px;margin-top:16px">Alerta automático do cron proativo (a cada 5 min; no máx. 1 e-mail a cada 2h).</p>
+    </div>`;
+  try {
+    const result = await resend.emails.send({ from, to, replyTo, subject, html });
+    if (result.error) {
+      console.error("[email-proativo] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-proativo] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
 // ============================================================================
 // Construção do bloco de detalhes do lead (compartilhado entre emails)
 // ============================================================================

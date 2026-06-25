@@ -52,12 +52,16 @@ export async function enviarTemplateWhatsApp(
   templateName: string,
   languageCode: string,
   variaveis: string[] = [],
-): Promise<{ ok: boolean; status: number }> {
+): Promise<{ ok: boolean; status: number; error?: string }> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !phoneId) {
     console.error("[whatsapp] credenciais ausentes (template não enviado)");
-    return { ok: false, status: 0 };
+    return {
+      ok: false,
+      status: 0,
+      error: "credenciais ausentes (WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID)",
+    };
   }
   const components =
     variaveis.length > 0
@@ -80,11 +84,12 @@ export async function enviarTemplateWhatsApp(
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
       console.error("[whatsapp] template falhou:", resp.status, body.slice(0, 400));
+      return { ok: false, status: resp.status, error: `${resp.status} ${body.slice(0, 300)}` };
     }
-    return { ok: resp.ok, status: resp.status };
+    return { ok: true, status: resp.status };
   } catch (e) {
     console.error("[whatsapp] template erro:", e);
-    return { ok: false, status: 0 };
+    return { ok: false, status: 0, error: e instanceof Error ? e.message : "erro de rede" };
   }
 }
 

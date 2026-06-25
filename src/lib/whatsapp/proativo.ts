@@ -19,7 +19,8 @@ export function aberturaProativa(primeiroNome: string): string {
  * status e só envia se ganhou a corrida (qualif_whatsapp_status era null) — evita
  * disparo duplo entre webhooks concorrentes e o cron. Registra a abertura como
  * turno da Heloísa pra ela continuar de onde o template parou. Em falha de envio,
- * reverte o status pra permitir nova tentativa. Retorna true só se enviou.
+ * reverte o status pra permitir nova tentativa. Retorna `{ sent }` true só se
+ * enviou; em falha de ENVIO, `error` traz o motivo do Meta (pra alerta/diagnóstico).
  *
  * Usado por: webhook de lead (na CONCLUSÃO da simulação) e cron (fallback de
  * 15 min pra quem deu o WhatsApp mas não concluiu).
@@ -28,10 +29,10 @@ export async function enviarProativoWhatsapp(opts: {
   leadId: string;
   nome: string | null;
   whatsapp: string | null;
-}): Promise<boolean> {
-  if (!opts.whatsapp) return false;
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!opts.whatsapp) return { sent: false };
   const to = opts.whatsapp.replace(/\D/g, "");
-  if (to.length < 10) return false;
+  if (to.length < 10) return { sent: false };
   const primeiroNome = opts.nome ? opts.nome.split(/\s+/)[0] : "";
 
   const claimed = await db
@@ -39,16 +40,17 @@ export async function enviarProativoWhatsapp(opts: {
     .set({ qualifWhatsappStatus: "template_enviado" })
     .where(and(eq(leads.id, opts.leadId), isNull(leads.qualifWhatsappStatus)))
     .returning({ id: leads.id });
-  if (claimed.length === 0) return false;
+  // Sem claim = outra execução (cron/webhook) já pegou esse lead. Não é erro.
+  if (claimed.length === 0) return { sent: false };
 
   try {
-    const { ok } = await enviarTemplateWhatsApp(
+    const { ok, error } = await enviarTemplateWhatsApp(
       to,
       TEMPLATE_PROATIVO,
       TEMPLATE_PROATIVO_LANG,
       [primeiroNome],
     );
-    if (!ok) throw new Error("template não aceito pelo Meta");
+    if (!ok) throw new Error(error ?? "template não aceito pelo Meta");
     await db.insert(interacoes).values({
       leadId: opts.leadId,
       autorId: null,
@@ -57,13 +59,13 @@ export async function enviarProativoWhatsapp(opts: {
       metadata: { canal: "whatsapp_ia", automatico: true, proativo: true } as never,
     });
     console.log("[proativo] template enviado pra", to);
-    return true;
+    return { sent: true };
   } catch (e) {
     console.error("[proativo] falhou — revertendo status:", e);
     await db
       .update(leads)
       .set({ qualifWhatsappStatus: null })
       .where(eq(leads.id, opts.leadId));
-    return false;
+    return { sent: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
