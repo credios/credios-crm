@@ -1,4 +1,4 @@
-import { ArrowRight, Compass, MessageSquare, Route, Users, Workflow } from "lucide-react";
+import { ArrowRight, Compass, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -43,6 +43,13 @@ const SECTIONS = [
     description:
       "Catálogo de fontes (channel × source), aliases e quarantine de leads com origem desconhecida.",
     icon: Compass,
+  },
+  {
+    href: "/configuracoes/google-ads",
+    title: "Conversões Google Ads",
+    description:
+      "Acompanhar as conversões offline enviadas ao Google Ads (qualificado e fechado), status de envio e falhas.",
+    icon: Target,
   },
 ];
 
