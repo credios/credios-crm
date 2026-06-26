@@ -10,6 +10,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads/bancos";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { updateStatusSchema } from "@/lib/validators/lead";
@@ -167,6 +168,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   // Notifica o Portal de Parceiros (no-op para leads que não vieram dele).
   if (updated) {
     after(() => notifyPartnerPortal(updated, data.status));
+    // Conversões offline p/ Google Ads (no-op se não configurado / lead não-Ads).
+    after(() => onLeadStageChange(updated, data.status));
   }
 
   return NextResponse.json({ data: updated });

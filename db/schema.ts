@@ -11,6 +11,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -897,5 +898,59 @@ export const savedLeadViews = pgTable(
       table.userId,
       sql`${table.createdAt} DESC`,
     ),
+  ],
+);
+
+// ============================================================================
+// google_ads_conversions — fila/auditoria de conversões offline enviadas ao
+// Google Ads (offline conversion import via GCLID). Cada linha = um evento de
+// conversão por lead (idempotência via UNIQUE(lead_id, conversion_action)).
+//
+// Fluxo: o hook de mudança de status (src/app/api/leads/[id]/status) insere a
+// linha como `pending` e tenta o upload em background (after()) via Data Manager
+// API. O cron /api/cron/google-ads-retry reprocessa `pending`/`failed`. A Data
+// Manager API não suporta retração; quando um lead qualificado vira
+// `desqualificado`, a linha é marcada `retract_unsupported` (auditoria, sem
+// chamada de API). Ver src/lib/google-ads/.
+// ============================================================================
+
+export const googleAdsConversions = pgTable(
+  "google_ads_conversions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    /** 'qualified' | 'closed' — qual das 2 ações de conversão do Google. */
+    conversionAction: text("conversion_action").notNull(),
+    /** = lead_id. Chave de idempotência/retração do lado do Google Ads. */
+    orderId: text("order_id").notNull(),
+    gclid: text("gclid"),
+    wbraid: text("wbraid"),
+    gbraid: text("gbraid"),
+    /** Valor da conversão em centavos (convertido p/ BRL no upload). */
+    valueCents: bigint("value_cents", { mode: "number" }),
+    currency: text("currency").notNull().default("BRL"),
+    /** Hora do evento de conversão (mudança de status). */
+    conversionAt: timestamp("conversion_at", { withTimezone: true }).notNull(),
+    /** pending | uploaded | failed | retract_unsupported */
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+    retractedAt: timestamp("retracted_at", { withTimezone: true }),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uq_gads_conv_lead_action").on(
+      table.leadId,
+      table.conversionAction,
+    ),
+    index("idx_gads_conv_status").on(table.status),
   ],
 );

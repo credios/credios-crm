@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/refresh-mvs",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/google-ads-retry",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
