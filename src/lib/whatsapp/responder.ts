@@ -141,6 +141,22 @@ async function contarRecebidasApos(leadId: string, desde: Date): Promise<number>
   return rows.length;
 }
 
+/** Já enviamos a recusa educada a este lead desqualificado? (evita repetir). */
+async function jaAvisouDesqualificado(leadId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: interacoes.id })
+    .from(interacoes)
+    .where(
+      and(
+        eq(interacoes.leadId, leadId),
+        eq(interacoes.tipo, "whatsapp_enviado"),
+        sql`${interacoes.metadata} ->> 'desqualificado_aviso' = 'true'`,
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
 /**
  * Decide a resposta pra uma mensagem do cliente e registra na timeline do lead.
  * Canal-agnóstico: hoje usado pelo webhook do WhatsApp (Meta Cloud API). Roteia:
@@ -162,10 +178,19 @@ export async function responderMensagem(
   );
 
   let resposta: string | null;
+  let respostaTag: Record<string, unknown> | null = null; // metadata extra do enviado
   if (!lead) {
     resposta = msgNaoIdentificado();
   } else if (lead.status === "desqualificado") {
-    resposta = msgDesqualificado(lead);
+    // Desqualificado: avisa UMA vez (educado) e depois SILENCIA — sem repetir a
+    // recusa a cada mensagem nem gerar custo à toa. (É estática, não usa a IA.)
+    if (await jaAvisouDesqualificado(lead.id)) {
+      resposta = null;
+      console.log("[whatsapp] desqualificado já avisado → SILÊNCIO");
+    } else {
+      resposta = msgDesqualificado(lead);
+      respostaTag = { desqualificado_aviso: true };
+    }
   } else if (lead.qualifWhatsappStatus === "concluida") {
     // Qualificação encerrada: fecho breve por até 3 mensagens; depois, silêncio.
     const pos = lead.qualifWhatsappEm
@@ -234,7 +259,7 @@ export async function responderMensagem(
         autorId: null,
         tipo: "whatsapp_enviado",
         conteudo: resposta,
-        metadata: { canal: "whatsapp_ia", automatico: true } as never,
+        metadata: { canal: "whatsapp_ia", automatico: true, ...(respostaTag ?? {}) } as never,
       });
     }
   }
