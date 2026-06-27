@@ -107,7 +107,12 @@ async function anexarLinkDocumentos(leadId: string, resposta: string): Promise<s
   try {
     const { token } = await generatePortalToken(leadId);
     const url = portalUrl(token);
-    if (!url.startsWith("http")) return resposta;
+    if (!url.startsWith("http")) {
+      // Sem NEXT_PUBLIC_APP_URL no build → URL relativa. Não dropa o passo em
+      // silêncio (era o bug do fecho sem link): garante a menção à documentação.
+      console.error("[whatsapp] portalUrl sem http (NEXT_PUBLIC_APP_URL?) — fallback sem link");
+      return `${resposta}\n\nO consultor vai te enviar o link para você adiantar a documentação e acelerar a análise.`;
+    }
     return `${resposta}\n\n📄 Pra adiantar a análise e acelerar a aprovação, deixe seus documentos prontos por aqui:\n${url}`;
   } catch (e) {
     console.error("[whatsapp] link de documentos falhou:", e);
@@ -146,6 +151,7 @@ async function contarRecebidasApos(leadId: string, desde: Date): Promise<number>
 export async function responderMensagem(
   phone: string,
   mensagem: string,
+  opts?: { eraAudio?: boolean },
 ): Promise<string | null> {
   const lead = await acharLead(phone);
   console.log(
@@ -177,8 +183,10 @@ export async function responderMensagem(
       .where(eq(leads.id, lead.id));
     console.log("[whatsapp] opt-out (Agora não)");
   } else if (!mensagem.trim()) {
-    // Áudio/imagem/sticker chegam sem texto.
-    resposta = "Pode me mandar por texto? Assim consigo te ajudar certinho 🙂";
+    // Áudio/imagem/sticker sem texto, ou transcrição do áudio falhou.
+    resposta = opts?.eraAudio
+      ? "Recebi seu áudio, mas não consegui escutar certinho por aqui 🙏 Pode me mandar por texto?"
+      : "Pode me mandar por texto? Assim consigo te ajudar certinho 🙂";
   } else {
     try {
       const historico = await carregarHistorico(lead.id);
@@ -201,13 +209,23 @@ export async function responderMensagem(
 
   // Timeline: entrada sempre; saída só se houve resposta (null = silêncio).
   if (lead) {
-    if (mensagem.trim()) {
+    // Registra a entrada: o texto, ou um marcador quando foi um áudio que não
+    // deu pra transcrever (antes isso sumia da timeline — só aparecia a resposta).
+    const conteudoRecebido = mensagem.trim()
+      ? mensagem
+      : opts?.eraAudio
+        ? "🎤 (áudio recebido — não consegui transcrever)"
+        : null;
+    if (conteudoRecebido) {
       await db.insert(interacoes).values({
         leadId: lead.id,
         autorId: null,
         tipo: "whatsapp_recebido",
-        conteudo: mensagem,
-        metadata: { canal: "whatsapp_ia" } as never,
+        conteudo: conteudoRecebido,
+        metadata: {
+          canal: "whatsapp_ia",
+          audio_falhou: !mensagem.trim() && !!opts?.eraAudio,
+        } as never,
       });
     }
     if (resposta) {
@@ -222,4 +240,31 @@ export async function responderMensagem(
   }
 
   return resposta;
+}
+
+/**
+ * Registra na timeline do lead que o Meta reportou FALHA DE ENTREGA de uma
+ * mensagem (webhook de status `failed`). Antes, "enviado mas não entregue" era
+ * invisível — o app só sabia do 200 do envio, nunca do resultado da entrega.
+ * Correlaciona pelo telefone do destinatário (recipient_id do Meta).
+ */
+export async function registrarFalhaEntrega(
+  phone: string,
+  info: { codigo?: number; titulo?: string; detalhe?: string },
+): Promise<void> {
+  const motivo =
+    [info.codigo, info.titulo].filter(Boolean).join(" — ") || "motivo não informado";
+  const lead = await acharLead(phone);
+  console.warn(
+    `[whatsapp] entrega FALHOU p/ ${phone}: ${motivo}` +
+      (lead ? ` (lead ${lead.id})` : " (lead não encontrado)"),
+  );
+  if (!lead) return;
+  await db.insert(interacoes).values({
+    leadId: lead.id,
+    autorId: null,
+    tipo: "evento_sistema",
+    conteudo: `⚠️ WhatsApp não entregue pelo Meta: ${motivo}${info.detalhe ? ` — ${info.detalhe}` : ""}`,
+    metadata: { canal: "whatsapp_ia", status: "failed", codigo: info.codigo ?? null } as never,
+  });
 }

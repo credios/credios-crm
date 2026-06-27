@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import { enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
-import { responderMensagem } from "@/lib/whatsapp/responder";
+import { registrarFalhaEntrega, responderMensagem } from "@/lib/whatsapp/responder";
 import { transcreverAudioWhatsapp } from "@/lib/whatsapp/transcrever";
 
 /**
@@ -26,7 +26,13 @@ type MetaMessage = {
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
   audio?: { id?: string; mime_type?: string }; // nota de voz / áudio
 };
-type MetaChange = { value?: { messages?: MetaMessage[] } };
+type MetaStatus = {
+  id?: string;
+  status?: string; // sent | delivered | read | failed
+  recipient_id?: string;
+  errors?: { code?: number; title?: string; message?: string; error_data?: { details?: string } }[];
+};
+type MetaChange = { value?: { messages?: MetaMessage[]; statuses?: MetaStatus[] } };
 type MetaEntry = { changes?: MetaChange[] };
 type MetaPayload = { entry?: MetaEntry[] };
 
@@ -66,6 +72,7 @@ export async function POST(request: NextRequest) {
   // Extrai mensagens entrantes: texto livre, resposta de botão, ou áudio (nota de
   // voz → guarda o media_id pra transcrever no after()). Outros tipos → texto vazio.
   const mensagens: { from: string; text: string; audioId?: string }[] = [];
+  const falhasEntrega: { to: string; codigo?: number; titulo?: string; detalhe?: string }[] = [];
   for (const entry of body.entry ?? []) {
     for (const change of entry.changes ?? []) {
       for (const m of change.value?.messages ?? []) {
@@ -78,6 +85,19 @@ export async function POST(request: NextRequest) {
           text = m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? "";
         else if (m.type === "audio") audioId = m.audio?.id;
         mensagens.push({ from: m.from, text, audioId });
+      }
+      // Status de entrega do Meta: só 'failed' importa (sent/delivered/read = ruído).
+      // Antes era ignorado — "enviado mas não entregue" ficava invisível.
+      for (const s of change.value?.statuses ?? []) {
+        if (s.status === "failed" && s.recipient_id) {
+          const err = s.errors?.[0];
+          falhasEntrega.push({
+            to: s.recipient_id,
+            codigo: err?.code,
+            titulo: err?.title,
+            detalhe: err?.error_data?.details ?? err?.message,
+          });
+        }
       }
     }
   }
@@ -96,10 +116,24 @@ export async function POST(request: NextRequest) {
           msg.audioId ? "| (áudio) " : "| texto:",
           texto.slice(0, 200),
         );
-        const resposta = await responderMensagem(msg.from, texto);
+        const resposta = await responderMensagem(msg.from, texto, {
+          eraAudio: !!msg.audioId,
+        });
         if (resposta) await enviarTextoWhatsApp(msg.from, resposta);
       } catch (e) {
         console.error("[whatsapp] erro processando mensagem:", e);
+      }
+    }
+    // Falhas de entrega reportadas pelo Meta → registra na ficha do lead.
+    for (const f of falhasEntrega) {
+      try {
+        await registrarFalhaEntrega(f.to, {
+          codigo: f.codigo,
+          titulo: f.titulo,
+          detalhe: f.detalhe,
+        });
+      } catch (e) {
+        console.error("[whatsapp] erro registrando falha de entrega:", e);
       }
     }
   });
