@@ -3,7 +3,12 @@ import crypto from "node:crypto";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import { enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
-import { registrarFalhaEntrega, responderMensagem } from "@/lib/whatsapp/responder";
+import {
+  marcarWamidUltimoEnviado,
+  registrarEntregaStatus,
+  registrarFalhaEntrega,
+  responderMensagem,
+} from "@/lib/whatsapp/responder";
 import { transcreverAudioWhatsapp } from "@/lib/whatsapp/transcrever";
 
 /**
@@ -72,7 +77,12 @@ export async function POST(request: NextRequest) {
   // Extrai mensagens entrantes: texto livre, resposta de botão, ou áudio (nota de
   // voz → guarda o media_id pra transcrever no after()). Outros tipos → texto vazio.
   const mensagens: { from: string; text: string; audioId?: string }[] = [];
-  const falhasEntrega: { to: string; codigo?: number; titulo?: string; detalhe?: string }[] = [];
+  const statusEntrega: {
+    wamid: string;
+    status: "delivered" | "read" | "failed";
+    to?: string;
+    erro?: string;
+  }[] = [];
   for (const entry of body.entry ?? []) {
     for (const change of entry.changes ?? []) {
       for (const m of change.value?.messages ?? []) {
@@ -86,17 +96,18 @@ export async function POST(request: NextRequest) {
         else if (m.type === "audio") audioId = m.audio?.id;
         mensagens.push({ from: m.from, text, audioId });
       }
-      // Status de entrega do Meta: só 'failed' importa (sent/delivered/read = ruído).
-      // Antes era ignorado — "enviado mas não entregue" ficava invisível.
+      // Status de ENTREGA do Meta. Rastreamos delivered/read/failed (o 'sent' já
+      // sabemos do envio). 'failed' carrega o motivo (ex.: 131026 = nº inválido).
       for (const s of change.value?.statuses ?? []) {
-        if (s.status === "failed" && s.recipient_id) {
+        if (!s.id || !s.status) continue;
+        if (s.status === "delivered" || s.status === "read" || s.status === "failed") {
           const err = s.errors?.[0];
-          falhasEntrega.push({
-            to: s.recipient_id,
-            codigo: err?.code,
-            titulo: err?.title,
-            detalhe: err?.error_data?.details ?? err?.message,
-          });
+          const erro =
+            s.status === "failed"
+              ? [err?.code, err?.title].filter(Boolean).join(" — ") +
+                (err?.error_data?.details ? ` (${err.error_data.details})` : "")
+              : undefined;
+          statusEntrega.push({ wamid: s.id, status: s.status, to: s.recipient_id, erro });
         }
       }
     }
@@ -119,21 +130,24 @@ export async function POST(request: NextRequest) {
         const resposta = await responderMensagem(msg.from, texto, {
           eraAudio: !!msg.audioId,
         });
-        if (resposta) await enviarTextoWhatsApp(msg.from, resposta);
+        if (resposta) {
+          const env = await enviarTextoWhatsApp(msg.from, resposta);
+          if (env.id) await marcarWamidUltimoEnviado(msg.from, env.id);
+        }
       } catch (e) {
         console.error("[whatsapp] erro processando mensagem:", e);
       }
     }
-    // Falhas de entrega reportadas pelo Meta → registra na ficha do lead.
-    for (const f of falhasEntrega) {
+    // Status de entrega do Meta → atualiza a mensagem (casa por wamid). 'failed'
+    // sem wamid casado cai no registro por telefone (não perde a falha).
+    for (const s of statusEntrega) {
       try {
-        await registrarFalhaEntrega(f.to, {
-          codigo: f.codigo,
-          titulo: f.titulo,
-          detalhe: f.detalhe,
-        });
+        const casou = await registrarEntregaStatus(s.wamid, s.status, s.erro);
+        if (!casou && s.status === "failed" && s.to) {
+          await registrarFalhaEntrega(s.to, { detalhe: s.erro });
+        }
       } catch (e) {
-        console.error("[whatsapp] erro registrando falha de entrega:", e);
+        console.error("[whatsapp] erro registrando status de entrega:", e);
       }
     }
   });

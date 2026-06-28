@@ -44,7 +44,7 @@ export async function enviarProativoWhatsapp(opts: {
   if (claimed.length === 0) return { sent: false };
 
   try {
-    const { ok, error } = await enviarTemplateWhatsApp(
+    const { ok, error, id } = await enviarTemplateWhatsApp(
       to,
       TEMPLATE_PROATIVO,
       TEMPLATE_PROATIVO_LANG,
@@ -56,7 +56,8 @@ export async function enviarProativoWhatsapp(opts: {
       autorId: null,
       tipo: "whatsapp_enviado",
       conteudo: aberturaProativa(primeiroNome),
-      metadata: { canal: "whatsapp_ia", automatico: true, proativo: true } as never,
+      // wamid: id da msg no Meta — chave pra casar o status de ENTREGA depois.
+      metadata: { canal: "whatsapp_ia", automatico: true, proativo: true, wamid: id ?? null } as never,
     });
     console.log("[proativo] template enviado pra", to);
     return { sent: true };

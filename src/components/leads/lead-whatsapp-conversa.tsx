@@ -7,6 +7,7 @@ export type WhatsappMensagem = {
   tipo: string; // whatsapp_recebido (cliente) | whatsapp_enviado (Heloísa)
   conteudo: string | null;
   criadoEm: string; // ISO
+  entrega?: string | null; // delivered | read | failed (status do Meta)
 };
 
 function horario(iso: string): string {
@@ -16,6 +17,13 @@ function horario(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function entregaLabel(e: string): string {
+  if (e === "read") return "✓✓ lido";
+  if (e === "delivered") return "✓✓ entregue";
+  if (e === "failed") return "⚠️ não entregue";
+  return "";
 }
 
 /**
@@ -60,6 +68,18 @@ export function LeadWhatsappConversa({ mensagens }: { mensagens: WhatsappMensage
                     }`}
                   >
                     {daHeloisa ? "Heloísa" : "Cliente"} · {horario(m.criadoEm)}
+                    {daHeloisa && m.entrega ? (
+                      <>
+                        {" · "}
+                        <span
+                          className={
+                            m.entrega === "failed" ? "font-medium text-red-600" : ""
+                          }
+                        >
+                          {entregaLabel(m.entrega)}
+                        </span>
+                      </>
+                    ) : null}
                   </p>
                 </div>
               </div>

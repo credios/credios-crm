@@ -52,7 +52,7 @@ export async function enviarTemplateWhatsApp(
   templateName: string,
   languageCode: string,
   variaveis: string[] = [],
-): Promise<{ ok: boolean; status: number; error?: string }> {
+): Promise<{ ok: boolean; status: number; error?: string; id?: string }> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !phoneId) {
@@ -86,7 +86,8 @@ export async function enviarTemplateWhatsApp(
       console.error("[whatsapp] template falhou:", resp.status, body.slice(0, 400));
       return { ok: false, status: resp.status, error: `${resp.status} ${body.slice(0, 300)}` };
     }
-    return { ok: true, status: resp.status };
+    const data = (await resp.json().catch(() => null)) as { messages?: { id?: string }[] } | null;
+    return { ok: true, status: resp.status, id: data?.messages?.[0]?.id };
   } catch (e) {
     console.error("[whatsapp] template erro:", e);
     return { ok: false, status: 0, error: e instanceof Error ? e.message : "erro de rede" };
@@ -96,7 +97,7 @@ export async function enviarTemplateWhatsApp(
 export async function enviarTextoWhatsApp(
   to: string,
   texto: string,
-): Promise<{ ok: boolean; status: number }> {
+): Promise<{ ok: boolean; status: number; id?: string }> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !phoneId) {
@@ -122,8 +123,10 @@ export async function enviarTextoWhatsApp(
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
       console.error("[whatsapp] envio falhou:", resp.status, body.slice(0, 300));
+      return { ok: false, status: resp.status };
     }
-    return { ok: resp.ok, status: resp.status };
+    const data = (await resp.json().catch(() => null)) as { messages?: { id?: string }[] } | null;
+    return { ok: true, status: resp.status, id: data?.messages?.[0]?.id };
   } catch (e) {
     console.error("[whatsapp] envio erro:", e);
     return { ok: false, status: 0 };

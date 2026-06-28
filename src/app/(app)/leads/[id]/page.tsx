@@ -354,6 +354,7 @@ async function WhatsappConversaBlock({ leadId }: { leadId: string }) {
       tipo: interacoes.tipo,
       conteudo: interacoes.conteudo,
       criadoEm: interacoes.criadoEm,
+      metadata: interacoes.metadata,
     })
     .from(interacoes)
     .where(
@@ -375,6 +376,7 @@ async function WhatsappConversaBlock({ leadId }: { leadId: string }) {
         tipo: r.tipo,
         conteudo: r.conteudo,
         criadoEm: r.criadoEm.toISOString(),
+        entrega: (r.metadata as { entrega?: string } | null)?.entrega ?? null,
       }))}
     />
   );

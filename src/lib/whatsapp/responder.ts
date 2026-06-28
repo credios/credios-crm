@@ -293,3 +293,57 @@ export async function registrarFalhaEntrega(
     metadata: { canal: "whatsapp_ia", status: "failed", codigo: info.codigo ?? null } as never,
   });
 }
+
+/**
+ * Atualiza o status de ENTREGA (delivered/read/failed) de uma mensagem enviada,
+ * casando pelo `wamid` que o Meta devolveu no envio. Retorna true se casou
+ * alguma interação. É a base da visibilidade "enviado × entregue × lido × falhou".
+ */
+export async function registrarEntregaStatus(
+  wamid: string,
+  status: "delivered" | "read" | "failed",
+  erro?: string,
+): Promise<boolean> {
+  const patch: Record<string, unknown> = { entrega: status };
+  if (erro) patch.entrega_erro = erro;
+  const rows = await db
+    .update(interacoes)
+    .set({
+      metadata: sql`coalesce(${interacoes.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+    })
+    .where(sql`${interacoes.metadata} ->> 'wamid' = ${wamid}`)
+    .returning({ id: interacoes.id });
+  return rows.length > 0;
+}
+
+/**
+ * No path REATIVO, o envio acontece no webhook DEPOIS de a interação ser criada,
+ * então o wamid não está disponível na hora. Aqui guardamos o wamid na última
+ * mensagem enviada ao lead (a que acabou de sair) pra rastrear a entrega dela.
+ */
+export async function marcarWamidUltimoEnviado(
+  phone: string,
+  wamid: string,
+): Promise<void> {
+  const lead = await acharLead(phone);
+  if (!lead) return;
+  const ult = await db
+    .select({ id: interacoes.id })
+    .from(interacoes)
+    .where(
+      and(
+        eq(interacoes.leadId, lead.id),
+        eq(interacoes.tipo, "whatsapp_enviado"),
+        sql`${interacoes.metadata} ->> 'wamid' IS NULL`,
+      ),
+    )
+    .orderBy(desc(interacoes.criadoEm))
+    .limit(1);
+  if (!ult.length) return;
+  await db
+    .update(interacoes)
+    .set({
+      metadata: sql`coalesce(${interacoes.metadata}, '{}'::jsonb) || ${JSON.stringify({ wamid })}::jsonb`,
+    })
+    .where(eq(interacoes.id, ult[0]!.id));
+}
