@@ -1,4 +1,4 @@
-import { ArrowRight, Compass, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
+import { Activity, ArrowRight, Compass, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -50,6 +50,13 @@ const SECTIONS = [
     description:
       "Acompanhar as conversões offline enviadas ao Google Ads (qualificado e fechado), status de envio e falhas.",
     icon: Target,
+  },
+  {
+    href: "/configuracoes/whatsapp",
+    title: "Saúde do WhatsApp",
+    description:
+      "Métricas da Heloísa em tempo real: proativos enviados, taxa de entrega, falhas e respostas dos clientes.",
+    icon: Activity,
   },
 ];
 
