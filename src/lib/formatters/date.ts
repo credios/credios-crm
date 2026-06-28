@@ -1,18 +1,41 @@
-import { format, formatDistanceToNow, parseISO } from "date-fns";
+import { formatDistanceToNow, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+// SEMPRE no fuso do negócio (Brasília). Sem isso, render no servidor (Vercel=UTC)
+// mostra a hora 3h adiantada. Intl com timeZone resolve em qualquer runtime
+// (servidor ou browser), evitando inclusive hydration mismatch.
+const TZ = "America/Sao_Paulo";
+const fmtData = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: TZ,
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+const fmtHora = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const fmtMesLongo = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: TZ,
+  day: "2-digit",
+  month: "long",
+});
 
 function asDate(value: Date | string): Date {
   return typeof value === "string" ? parseISO(value) : value;
 }
 
-/** "12/03/2026" */
+/** "12/03/2026" (fuso de Brasília) */
 export function formatDateBr(value: Date | string): string {
-  return format(asDate(value), "dd/MM/yyyy", { locale: ptBR });
+  return fmtData.format(asDate(value));
 }
 
-/** "12/03/2026 14:35" */
+/** "12/03/2026 14:35" (fuso de Brasília) */
 export function formatDateTimeBr(value: Date | string): string {
-  return format(asDate(value), "dd/MM/yyyy HH:mm", { locale: ptBR });
+  const d = asDate(value);
+  return `${fmtData.format(d)} ${fmtHora.format(d)}`;
 }
 
 /** "há 2 horas", "há 3 dias", etc. */
@@ -20,9 +43,10 @@ export function formatRelative(value: Date | string): string {
   return formatDistanceToNow(asDate(value), { locale: ptBR, addSuffix: true });
 }
 
-/** "12 de março, 14:35" */
+/** "12 de março, 14:35" (fuso de Brasília) */
 export function formatLong(value: Date | string): string {
-  return format(asDate(value), "dd 'de' MMMM, HH:mm", { locale: ptBR });
+  const d = asDate(value);
+  return `${fmtMesLongo.format(d)}, ${fmtHora.format(d)}`;
 }
 
 /**

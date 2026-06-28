@@ -61,18 +61,27 @@ function initials(nome: string | null): string {
 /** "16:42" — só hora local. Data completa fica no tooltip via formatLong. */
 function formatHora(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /** "12/05" — usado pra separar grupos por dia. */
 function formatDia(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  return d.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+  });
 }
 
 function formatDiaLong(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     weekday: "long",
     day: "2-digit",
     month: "long",
