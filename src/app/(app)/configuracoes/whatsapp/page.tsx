@@ -57,11 +57,11 @@ export default async function WhatsappSaudePage() {
       count(*) FILTER (WHERE tipo='whatsapp_enviado' AND metadata->>'entrega'='read' AND criado_em > now()-interval '24 hours')::int AS lido_24,
       count(*) FILTER (WHERE tipo='whatsapp_enviado' AND metadata->>'entrega'='failed' AND criado_em > now()-interval '24 hours')::int AS falhou_24,
       count(*) FILTER (WHERE tipo='whatsapp_enviado' AND metadata->>'wamid' IS NOT NULL AND metadata->>'entrega' IS NULL AND criado_em > now()-interval '24 hours')::int AS pend_24,
-      count(*) FILTER (WHERE tipo='whatsapp_recebido' AND criado_em > now()-interval '24 hours')::int AS rec_24,
+      count(*) FILTER (WHERE tipo='whatsapp_recebido' AND metadata->>'canal'='whatsapp_ia' AND criado_em > now()-interval '24 hours')::int AS rec_24,
       count(*) FILTER (WHERE tipo='whatsapp_enviado' AND (metadata->>'proativo')='true' AND criado_em > now()-interval '7 days')::int AS proativo_7d,
       count(*) FILTER (WHERE tipo='whatsapp_enviado' AND metadata->>'entrega' IN ('delivered','read') AND criado_em > now()-interval '7 days')::int AS entregue_7d,
       count(*) FILTER (WHERE tipo='whatsapp_enviado' AND metadata->>'entrega'='failed' AND criado_em > now()-interval '7 days')::int AS falhou_7d,
-      count(*) FILTER (WHERE tipo='whatsapp_recebido' AND criado_em > now()-interval '7 days')::int AS rec_7d
+      count(*) FILTER (WHERE tipo='whatsapp_recebido' AND metadata->>'canal'='whatsapp_ia' AND criado_em > now()-interval '7 days')::int AS rec_7d
     FROM interacoes
     WHERE criado_em > now() - interval '7 days'
   `)) as unknown as Agg[];

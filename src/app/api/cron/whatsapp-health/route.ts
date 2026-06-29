@@ -32,6 +32,10 @@ export async function GET(request: NextRequest) {
       ON r.lead_id = l.id AND r.tipo::text = 'whatsapp_recebido'
     WHERE r.criado_em < now() - interval '30 minutes'
       AND r.criado_em > now() - interval '3 hours'
+      -- Só mensagens REAIS recebidas pelo bot (canal whatsapp_ia). Exclui
+      -- lançamentos manuais de "WhatsApp" na timeline (autor = usuário, sem
+      -- canal), que não passam pelo bot e geravam falso "bot não respondeu".
+      AND r.metadata ->> 'canal' = 'whatsapp_ia'
       AND coalesce(l.qualif_whatsapp_status, '') NOT IN ('concluida', 'optout')
       AND l.status NOT IN ('fechado', 'perdido', 'desqualificado')
       AND NOT EXISTS (
