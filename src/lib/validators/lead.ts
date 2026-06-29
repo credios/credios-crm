@@ -187,9 +187,11 @@ export type ReassignInput = z.infer<typeof reassignSchema>;
 
 export const createInteracaoSchema = z.object({
   tipo: tipoInteracaoEnum,
-  // Conteúdo obrigatório: interação manual sem texto não agrega nada e ainda
-  // gerava falso "bot não respondeu" no health-check (entrada vazia de WhatsApp).
-  conteudo: z.string().trim().min(1, "Descreva a interação"),
+  // Conteúdo OPCIONAL de propósito: o consultor registra contato (WhatsApp
+  // comercial próprio, ligação) só pra marcar a DATA, sem descrição. O falso
+  // "bot não respondeu" é tratado no health-check (filtra canal=whatsapp_ia),
+  // não exigindo conteúdo aqui.
+  conteudo: optionalString,
   metadata: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 export type CreateInteracaoInput = z.infer<typeof createInteracaoSchema>;
