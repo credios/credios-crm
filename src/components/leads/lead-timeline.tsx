@@ -238,6 +238,8 @@ export function LeadTimeline({
   useInteracoesRealtime(leadId, onRealtimeNew);
 
   async function handleSubmit() {
+    const texto = conteudo.trim();
+    if (!texto) return; // não registra interação vazia
     // "whatsapp" (sentinela da UI) mapeia pra `whatsapp_recebido` ao salvar.
     // Convenção histórica do CRM — mantém rows antigas e novas consistentes
     // numa única coluna do enum sem precisar criar tipo novo.
@@ -246,7 +248,7 @@ export function LeadTimeline({
     const res = await fetch(`/api/leads/${leadId}/interacoes`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tipo: tipoToSave, conteudo: conteudo.trim() || null }),
+      body: JSON.stringify({ tipo: tipoToSave, conteudo: texto }),
     });
     setPending(false);
     if (!res.ok) {
@@ -347,7 +349,11 @@ export function LeadTimeline({
               disabled={pending}
             />
             <div className="flex justify-end">
-              <Button size="sm" onClick={handleSubmit} disabled={pending}>
+              <Button
+                size="sm"
+                onClick={handleSubmit}
+                disabled={pending || !conteudo.trim()}
+              >
                 {pending && <Loader2 className="size-3.5 animate-spin" />}
                 Registrar
               </Button>
