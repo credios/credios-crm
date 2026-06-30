@@ -108,6 +108,32 @@ export function pctDelta(curr: number, prev: number): number | null {
   return ((curr - prev) / prev) * 100;
 }
 
+/**
+ * Volume mínimo de leads na janela de comparação pra que QUALQUER delta da
+ * página seja confiável. Abaixo disso, percentuais viram ruído
+ * (ex.: prev=2, curr=348 → +17300%, que não diz nada útil).
+ *
+ * Caso real: a operação tem ~90 dias de histórico. Em períodos longos
+ * (90d, trimestre, ano, 12m) a janela "anterior equivalente" cai ANTES da
+ * operação existir, então tem ~1-2 leads e todo delta explode. Quando isso
+ * acontece, escondemos os deltas em vez de mostrar números absurdos.
+ */
+export const MIN_COMPARISON_BASE = 10;
+
+/**
+ * Decide se a comparação contra o período anterior é estatisticamente útil.
+ * Usa o VOLUME de leads da janela anterior como termômetro: se a janela mal
+ * existia (poucos leads), nenhum delta da página deve ser exibido.
+ *
+ * @param prevLeadsCount total de leads no período de comparação (ou null se
+ *   não há comparação configurada).
+ */
+export function isComparisonReliable(
+  prevLeadsCount: number | null | undefined,
+): boolean {
+  return prevLeadsCount != null && prevLeadsCount >= MIN_COMPARISON_BASE;
+}
+
 /** Delta absoluto em pontos (pra taxas que já são %). */
 export function pointsDelta(curr: number, prev: number): number {
   return curr - prev;

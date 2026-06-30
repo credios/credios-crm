@@ -23,6 +23,7 @@ import { formatBrlShort } from "@/lib/formatters/currency";
 import { periodFromFilters } from "@/lib/reports/period";
 import {
   comparisonPeriod,
+  isComparisonReliable,
   pctDelta,
   pointsDelta,
 } from "@/lib/reports/comparativos";
@@ -112,6 +113,11 @@ export default async function MeuDesempenhoPage({ searchParams }: Props) {
   const taxaCurr = kpisCurr.conversaoPeriodo.taxa;
   const taxaPrev = kpisPrev?.conversaoPeriodo.taxa ?? 0;
 
+  // Esconde deltas quando a janela de comparação não tem volume suficiente
+  // pra ser confiável (períodos longos caem antes da operação existir e o %
+  // explode — ex.: +17300%). Ver isComparisonReliable.
+  const comparavel = isComparisonReliable(kpisPrev?.atribuidosCount);
+
   // Audit não-crítico via after — não bloqueia render e não é cortado em serverless.
   after(() =>
     logAction(
@@ -164,7 +170,7 @@ export default async function MeuDesempenhoPage({ searchParams }: Props) {
           value={String(kpisCurr.atribuidosCount)}
           hint="atribuídos no período"
           deltaPct={
-            kpisPrev
+            comparavel && kpisPrev
               ? pctDelta(kpisCurr.atribuidosCount, kpisPrev.atribuidosCount)
               : null
           }
@@ -186,7 +192,9 @@ export default async function MeuDesempenhoPage({ searchParams }: Props) {
               : "no período"
           }
           deltaPct={
-            kpisPrev ? pctDelta(kpisCurr.fechadosCount, kpisPrev.fechadosCount) : null
+            comparavel && kpisPrev
+              ? pctDelta(kpisCurr.fechadosCount, kpisPrev.fechadosCount)
+              : null
           }
         />
         <KpiCard
@@ -195,7 +203,7 @@ export default async function MeuDesempenhoPage({ searchParams }: Props) {
           value={`${(taxaCurr * 100).toFixed(1)}%`}
           hint="atribuídos → fechados no período"
           deltaPct={
-            kpisPrev ? pointsDelta(taxaCurr * 100, taxaPrev * 100) : null
+            comparavel ? pointsDelta(taxaCurr * 100, taxaPrev * 100) : null
           }
         />
       </div>
