@@ -31,6 +31,7 @@ import { isAdminOrGerente } from "@/lib/auth/permissions";
 import { formatBrlShort } from "@/lib/formatters/currency";
 import {
   comparisonPeriod,
+  isComparisonReliable,
   pctDelta,
   pointsDelta,
 } from "@/lib/reports/comparativos";
@@ -321,6 +322,10 @@ async function KpisSection({
       compPeriod ? fetchKpis(filters, compPeriod) : Promise.resolve(null),
     ]);
     const conversaoPct = (kpisCurr.conversaoRolling90d.taxa * 100).toFixed(1);
+    // Só mostra deltas se a janela de comparação tem volume suficiente.
+    // Em períodos longos (90d, ano…) a janela anterior cai antes da operação
+    // existir (~1-2 leads) e o % explodia (ex.: +17300%). Ver isComparisonReliable.
+    const comparavel = isComparisonReliable(kpisPrev?.leadsNovosCount);
     return (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 stagger [&>*]:animate-fade-up">
         <KpiCard
@@ -329,7 +334,7 @@ async function KpisSection({
           value={String(kpisCurr.leadsNovosCount)}
           hint="entradas no período"
           deltaPct={
-            kpisPrev
+            comparavel && kpisPrev
               ? pctDelta(kpisCurr.leadsNovosCount, kpisPrev.leadsNovosCount)
               : null
           }
@@ -351,7 +356,7 @@ async function KpisSection({
               : "no período"
           }
           deltaPct={
-            kpisPrev
+            comparavel && kpisPrev
               ? pctDelta(kpisCurr.fechadosCount, kpisPrev.fechadosCount)
               : null
           }
