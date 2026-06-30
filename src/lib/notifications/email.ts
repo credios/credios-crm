@@ -180,6 +180,88 @@ export async function sendProativoFailureEmail(
   }
 }
 
+/**
+ * E-mail de CONFIRMAÇÃO de reunião — vai pro CLIENTE (não é interno). Branded
+ * Credios, com data/hora, link do Meet e o que esperar. Rodapé próprio (sem
+ * menção ao CRM). Complementa o convite padrão do Google Calendar com a cara da
+ * Credios. Falha silenciosa (loga e segue) — não pode quebrar o agendamento.
+ */
+export async function sendReuniaoConfirmadaEmail(params: {
+  to: string;
+  primeiroNome: string;
+  consultorNome: string;
+  quando: string;
+  meetLink: string | null;
+  docsUrl?: string | null;
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!params.to) return { ok: false, reason: "destinatário vazio" };
+  const fromName = from.includes("<") ? from : `Credios <${from}>`;
+  const subject = `Reunião confirmada — ${params.quando}`;
+  try {
+    const result = await resend.emails.send({
+      from: fromName,
+      to: params.to,
+      replyTo,
+      subject,
+      html: renderReuniaoConfirmadaEmail(params),
+    });
+    if (result.error) {
+      console.error("[email-reuniao] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-reuniao] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+export function renderReuniaoConfirmadaEmail(params: {
+  primeiroNome: string;
+  consultorNome: string;
+  quando: string;
+  meetLink: string | null;
+  docsUrl?: string | null;
+}): string {
+  const { primeiroNome, consultorNome, quando, meetLink, docsUrl } = params;
+
+  const detalhes = detailsSection("Detalhes da conversa", [
+    ["Quando", `${quando} (horário de Brasília)`],
+    ["Duração", "10–15 minutos"],
+    ["Consultor", consultorNome],
+    ["Formato", "Vídeo (Google Meet)"],
+  ]);
+
+  const oQueEsperar = `
+    <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#6b6f7e;font-family:Inter,Arial,sans-serif;font-weight:700;margin:18px 0 6px">O que vamos fazer</div>
+    <ul style="margin:0;padding:0 0 0 18px;color:#141e30;font-family:Inter,Arial,sans-serif;font-size:14px;line-height:1.7">
+      <li>Conhecer você e entender a sua necessidade</li>
+      <li>Explicar como a Credios trabalha — consultoria, não banco</li>
+      <li>Iniciar a busca pela melhor proposta de crédito com garantia de imóvel</li>
+    </ul>`;
+
+  const docsNote = docsUrl
+    ? `<p style="margin:18px 0 0;color:#6b6f7e;font-size:14px;line-height:1.55;font-family:Inter,Arial,sans-serif">Pra adiantar e o consultor já chegar com tudo em mãos, você pode <a href="${docsUrl}" style="color:#4b7be5;text-decoration:none">enviar seus documentos com segurança</a> antes da conversa.</p>`
+    : "";
+
+  const ctas: Array<{ href: string; label: string; tone?: "primary" | "secondary" }> = [];
+  if (meetLink) ctas.push({ href: meetLink, label: "Entrar na videochamada" });
+  if (docsUrl) ctas.push({ href: docsUrl, label: "Enviar documentos", tone: "secondary" });
+
+  return renderEmailLayout({
+    preheader: `Sua conversa com a Credios está marcada — ${quando}`,
+    eyebrow: "Reunião confirmada",
+    eyebrowTone: "success",
+    title: `Tudo certo, ${primeiroNome}!`,
+    intro: `Sua conversa rápida por vídeo com ${consultorNome} está confirmada. Aqui estão os detalhes — você também recebeu o convite no seu calendário.`,
+    contentHtml: `${detalhes}${oQueEsperar}${docsNote}`,
+    ctas,
+    footerHtml: `<div style="margin-bottom:6px">Credios · Consultoria de crédito com garantia de imóvel</div>
+          <div>Precisa remarcar ou tem alguma dúvida? É só responder no WhatsApp que a gente ajuda.</div>`,
+  });
+}
+
 // ============================================================================
 // Construção do bloco de detalhes do lead (compartilhado entre emails)
 // ============================================================================

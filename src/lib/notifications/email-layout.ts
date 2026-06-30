@@ -121,6 +121,9 @@ type RenderProps = {
   ctas?: ButtonProps[];
   /** Tom destacado pra eyebrow (alerta, sucesso, etc). */
   eyebrowTone?: Tone;
+  /** HTML do rodapé. Omitido = rodapé interno do CRM. Emails pro CLIENTE passam
+   *  um rodapé próprio (sem links/menção ao CRM). */
+  footerHtml?: string;
 };
 
 export function renderEmailLayout(props: RenderProps): string {
@@ -181,8 +184,11 @@ export function renderEmailLayout(props: RenderProps): string {
         </td></tr>
         <!-- Footer -->
         <tr><td style="padding:24px 4px 0;text-align:center;font-family:Inter,Arial,sans-serif;font-size:12px;color:${COLORS.textMuted};line-height:1.6">
-          <div style="margin-bottom:6px">Você recebeu este email porque tem acesso ao CRM Credios.</div>
-          <div><a href="${appUrl("/")}" style="color:${COLORS.blue};text-decoration:none">Acessar o CRM</a> · <a href="${appUrl("/perfil")}" style="color:${COLORS.blue};text-decoration:none">Preferências</a></div>
+          ${
+            props.footerHtml ??
+            `<div style="margin-bottom:6px">Você recebeu este email porque tem acesso ao CRM Credios.</div>
+          <div><a href="${appUrl("/")}" style="color:${COLORS.blue};text-decoration:none">Acessar o CRM</a> · <a href="${appUrl("/perfil")}" style="color:${COLORS.blue};text-decoration:none">Preferências</a></div>`
+          }
         </td></tr>
       </table>
     </td></tr>

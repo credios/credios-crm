@@ -1,7 +1,7 @@
 /**
  * Status do lead — keys "sistema" referenciadas direto pelo código.
  *
- * Após migration 0003 o `leads.status` é text livre, mas estes 9 keys têm
+ * Após migration 0003 o `leads.status` é text livre, mas estes keys têm
  * tratamento especial em vários pontos do app:
  *
  *  - 'fechado' → modal de fechamento (banco/valor/comissão), reabertura
@@ -22,6 +22,7 @@
 export const SYSTEM_STATUS_KEYS = [
   "novo",
   "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_resposta",
   "aguardando_documentacao",
   "documentacao_enviada",
@@ -58,6 +59,7 @@ export function isSystemTerminal(key: string): boolean {
 export const SYSTEM_STATUS_LABEL: Record<string, string> = {
   novo: "Novo",
   conversa_inicial: "Conversa inicial",
+  reuniao_agendada: "Reunião agendada",
   aguardando_resposta: "Aguardando resposta",
   aguardando_documentacao: "Aguardando documentação",
   documentacao_enviada: "Documentação enviada",

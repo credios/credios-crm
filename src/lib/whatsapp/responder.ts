@@ -9,6 +9,7 @@ import {
 } from "@/lib/whatsapp/heloisa";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
+import { sendReuniaoConfirmadaEmail } from "@/lib/notifications/email";
 import {
   horarioEstaLivre,
   horariosDisponiveis,
@@ -170,6 +171,39 @@ async function concluirQualif(leadId: string): Promise<void> {
 }
 
 /**
+ * Reunião confirmada: move o lead pro funil `reuniao_agendada`, garante a
+ * atribuição ao consultor da reunião e encerra a qualificação. Registra a
+ * mudança de status na timeline (espelha o endpoint normal de status), só
+ * quando o status de fato mudou — evita ruído em remarcações.
+ */
+async function marcarReuniaoAgendada(lead: Lead, consultorId: string): Promise<void> {
+  await db
+    .update(leads)
+    .set({
+      status: "reuniao_agendada",
+      consultorId,
+      atribuidoEm: lead.atribuidoEm ?? new Date(),
+      qualifWhatsappStatus: "concluida",
+      qualifWhatsappEm: new Date(),
+    })
+    .where(eq(leads.id, lead.id));
+  if (lead.status !== "reuniao_agendada") {
+    await db.insert(interacoes).values({
+      leadId: lead.id,
+      autorId: null,
+      tipo: "mudanca_status",
+      conteudo: `Status alterado de ${lead.status} para reuniao_agendada`,
+      metadata: {
+        de: lead.status,
+        para: "reuniao_agendada",
+        canal: "whatsapp_ia",
+        automatico: true,
+      } as never,
+    });
+  }
+}
+
+/**
  * Máquina de estados do SDR (só roda atrás do flag `sdrAtivo`). A cada turno:
  *  - fase "agendando" + cliente confirmou um horário → cria a reunião + link docs;
  *  - qualificação completa + QUALIFICADO → atribui consultor por valor e oferta horários;
@@ -197,8 +231,21 @@ async function fluxoSdr(lead: Lead, turn: HeloisaTurn): Promise<string> {
             inicioISO: turn.agendar.inicio,
             fimISO: chk.fimISO,
           });
-          await concluirQualif(lead.id);
-          return msgConfirmacao(ag.rotulo, ag.meetLink, await gerarPortalUrl(lead.id));
+          await marcarReuniaoAgendada(lead, consultor.id);
+          const docsUrl = await gerarPortalUrl(lead.id);
+          // Email branded de confirmação pro cliente (best-effort; complementa o
+          // convite padrão do Google Calendar). Não bloqueia a resposta do bot.
+          if (lead.email) {
+            await sendReuniaoConfirmadaEmail({
+              to: lead.email,
+              primeiroNome: nome,
+              consultorNome: consultor.nome,
+              quando: ag.rotulo,
+              meetLink: ag.meetLink,
+              docsUrl,
+            }).catch((e) => console.error("[sdr] email de confirmação falhou:", e));
+          }
+          return msgConfirmacao(ag.rotulo, ag.meetLink, docsUrl);
         } catch (e) {
           console.error("[sdr] agendarReuniao falhou — reoferta:", e);
         }
