@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
 import { interacoes, leads } from "../../../db/schema";
 import { db } from "@/lib/db";
@@ -34,6 +34,27 @@ export async function enviarProativoWhatsapp(opts: {
   const to = opts.whatsapp.replace(/\D/g, "");
   if (to.length < 10) return { sent: false };
   const primeiroNome = opts.nome ? opts.nome.split(/\s+/)[0] : "";
+
+  // Não reabre conversa proativa num número que JÁ está em conversa com a Heloísa
+  // (outro lead com o mesmo telefone, qualif já setado). WhatsApp é uma thread por
+  // número — re-simulação cria lead novo no mesmo número e dispararia a abertura de
+  // novo pra quem acabou de agendar/conversar. Aqui a gente segura.
+  const last8 = to.slice(-8);
+  const emConversa = await db
+    .select({ id: leads.id })
+    .from(leads)
+    .where(
+      and(
+        sql`regexp_replace(${leads.whatsapp}, '[^0-9]', '', 'g') LIKE ${"%" + last8}`,
+        ne(leads.id, opts.leadId),
+        isNotNull(leads.qualifWhatsappStatus),
+      ),
+    )
+    .limit(1);
+  if (emConversa.length > 0) {
+    console.log("[proativo] número já em conversa (outro lead) — não reabre:", to);
+    return { sent: false };
+  }
 
   const claimed = await db
     .update(leads)

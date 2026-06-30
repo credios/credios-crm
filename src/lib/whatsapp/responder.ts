@@ -37,7 +37,9 @@ const SIMULADOR_URL = "https://credios.com.br/simulador";
 
 /**
  * Acha o lead pelo telefone (últimos 8 dígitos). Com vários leads no mesmo
- * número, prefere o ativo (não-terminal) mais recente; senão o mais recente.
+ * número, prefere os ATIVOS (não-terminais) e, dentro deles, o que a Heloísa JÁ
+ * está conversando (qualif setado) — assim um lead duplicado novo (mesmo número,
+ * ex.: re-simulação) não "sequestra" a thread de quem já está em atendimento.
  */
 async function acharLead(phone: string) {
   const digits = phone.replace(/\D/g, "");
@@ -49,7 +51,9 @@ async function acharLead(phone: string) {
     .where(sql`regexp_replace(${leads.whatsapp}, '\\D', '', 'g') LIKE ${"%" + last8}`)
     .orderBy(desc(leads.createdAt));
   if (rows.length === 0) return null;
-  return rows.find((l) => !isSystemTerminal(l.status)) ?? rows[0];
+  const ativos = rows.filter((l) => !isSystemTerminal(l.status));
+  const pool = ativos.length > 0 ? ativos : rows;
+  return pool.find((l) => l.qualifWhatsappStatus != null) ?? pool[0];
 }
 
 type Lead = NonNullable<Awaited<ReturnType<typeof acharLead>>>;
