@@ -163,15 +163,34 @@ export function normalizarCpf(cpf: string | null): string | null {
   return digits.length === 11 ? digits : null;
 }
 
-/** Normaliza WhatsApp para E.164 (+55XX...). Mantém só dígitos com +. */
+/**
+ * Normaliza WhatsApp para E.164 (+55DDNNNNNNNNN). Brasil completo = 13 díg
+ * (móvel: 55 + DDD + 9 dígitos) ou 12 (fixo: 55 + DDD + 8).
+ *
+ * Trata o BUG do DDD 55 (Santa Rosa/Santa Maria-RS etc.) "colapsado" com o
+ * código do país: o site às vezes manda "+55 9XXXXXXXX" (11 díg, SEM o DDD,
+ * porque o DDD 55 == país 55 e algum mask removeu um). Como esse é o único DDD
+ * que some nesse colapso, prefixar 55 reconstrói +55 55 9XXXXXXXX corretamente.
+ * NÃO confiamos cegamente no "+": validamos o tamanho.
+ */
 export function normalizarWhatsapp(num: string | null): string | null {
   if (!num) return null;
-  const cleaned = num.replace(/[^\d+]/g, "");
-  if (!cleaned) return null;
-  // Se não começa com +, assume Brasil.
-  if (cleaned.startsWith("+")) return cleaned;
-  if (cleaned.length === 11 || cleaned.length === 10) return `+55${cleaned}`;
-  return cleaned;
+  const temMais = num.trim().startsWith("+");
+  const d = num.replace(/\D/g, "");
+  if (!d) return null;
+
+  // Internacional explícito (+ e país ≠ 55): respeita como veio.
+  if (temMais && !d.startsWith("55")) return `+${d}`;
+
+  // Brasil já completo (com país): 13 díg (móvel) ou 12 (fixo).
+  if (d.startsWith("55") && (d.length === 13 || d.length === 12)) return `+${d}`;
+
+  // Sem país: DDD + assinante = 11 díg (móvel) ou 10 (fixo) → prefixa 55.
+  // Cobre o colapso do DDD 55: "+55 9XXXXXXXX" (11 díg) vira +55 55 9XXXXXXXX.
+  if (d.length === 11 || d.length === 10) return `+55${d}`;
+
+  // Fora do padrão: melhor esforço — garante + e país quando faz sentido.
+  return d.startsWith("55") ? `+${d}` : `+55${d}`;
 }
 
 /** Reais → centavos. Aceita number ou null/undefined. */
