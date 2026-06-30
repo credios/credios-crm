@@ -954,3 +954,34 @@ export const googleAdsConversions = pgTable(
     index("idx_gads_conv_status").on(table.status),
   ],
 );
+
+// ============================================================================
+// reunioes — reuniões agendadas pela Heloísa (SDR) na agenda do consultor
+// ============================================================================
+export const reunioes = pgTable(
+  "reunioes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    consultorId: uuid("consultor_id").references(() => users.id),
+    /** ID do evento no Google Calendar (pra remarcar/cancelar). */
+    googleEventId: text("google_event_id"),
+    meetLink: text("meet_link"),
+    inicio: timestamp("inicio", { withTimezone: true }).notNull(),
+    fim: timestamp("fim", { withTimezone: true }).notNull(),
+    /** agendada | remarcada | cancelada | realizada | no_show */
+    status: text("status").notNull().default("agendada"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_reunioes_lead").on(table.leadId),
+    index("idx_reunioes_consultor").on(table.consultorId, table.inicio),
+  ],
+);
