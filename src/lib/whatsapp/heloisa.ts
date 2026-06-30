@@ -135,6 +135,15 @@ function buildLeadContext(
   const nome = lead.nome ? lead.nome.split(/\s+/)[0] : "(desconhecido)";
   const valor = brl(lead.valorCreditoCentavos) ?? "(não informado)";
   const cidade = lead.cidade ?? "(não informada)";
+  // Data de HOJE em Brasília — sem isso a IA não mapeia "hoje"/"amanhã" pras
+  // datas absolutas dos horários (já confundiu "hoje" com a data 30/06 que ERA hoje).
+  const hoje = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date());
   const jaSabe: string[] = [];
   if (lead.qualifObjetivo) jaSabe.push(`objetivo: ${lead.qualifObjetivo}`);
   if (lead.qualifTitularidade) jaSabe.push(`titularidade: ${lead.qualifTitularidade}`);
@@ -162,6 +171,7 @@ Reunião atual: ${remarcacao.reuniaoAtual} (horário de Brasília). O cliente ma
 - MANTER a reunião atual (ele desistiu de mexer, ou era só uma dúvida) → tranquilize e preencha "encerrar": true (sem agendar nem cancelar).
 Horários LIVRES do consultor (fuso de Brasília):
 ${lista}
+- "Hoje"/"amanhã": traduza pela data de HOJE (no contexto acima) antes de responder. Não diga que não há horário num dia que está na lista.
 - NUNCA invente horário; use os ISOs da lista ou converta o que o cliente propôs. Só preencha "agendar"/"cancelar" quando ele de fato confirmar.`;
   } else if (slots && slots.length) {
     bloco = `
@@ -170,6 +180,7 @@ ${lista}
 Agora você OFERECE uma conversa rápida (10–15 min) por VÍDEO com o consultor: pra conhecer o cliente, entender a necessidade, explicar como a Credios trabalha e iniciar a busca pelo crédito. Apresente como um próximo passo leve e útil.
 Horários LIVRES do consultor (fuso de Brasília):
 ${lista}
+- "Hoje"/"amanhã": traduza pela data de HOJE (no contexto acima). Se o cliente disser "hoje às 16h" e a lista tiver um horário com a data de hoje às 16h, É esse — confirme. NUNCA diga que não há horário num dia que está na lista.
 - Ofereça 2–3 desses horários de forma natural (não liste todos de forma robótica).
 - Se o cliente escolher um, CONFIRME e preencha "agendar": { "inicio": "<o inicio ISO EXATO daquele horário, da lista acima>" }.
 - Se o cliente NÃO puder em nenhum, peça um horário que ele prefira (dia útil, 08–18h, fuso de Brasília). Se ele propor, converta pra ISO e preencha "agendar": { "inicio": "<ISO>" }.
@@ -177,6 +188,7 @@ ${lista}
   }
 
   return `# Contexto deste cliente (do CRM)
+- HOJE é ${hoje} (fuso de Brasília). Use SEMPRE esta data pra entender "hoje", "amanhã", "depois de amanhã", "essa semana". Os horários têm a data absoluta — case "hoje" com a data acima antes de dizer que não há horário hoje.
 - Primeiro nome: ${nome}
 - Cidade: ${cidade}
 - Valor simulado: ${valor}
