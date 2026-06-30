@@ -90,9 +90,10 @@ Responda SEMPRE com um único objeto JSON, sem nenhum texto fora dele, neste for
     "urgencia": "ate_30_dias | 1_3_meses | sem_pressa (opcional)"
   },
   "encerrar": false,
-  "agendar": null
+  "agendar": null,
+  "cancelar": false
 }
-Inclua em "qualificacao" apenas os campos que você descobriu ou atualizou nesta troca. Use "encerrar": true somente quando você concluiu a qualificação e já se despediu. O campo "agendar" só é usado na fase de agendamento (as instruções aparecem no contexto do cliente quando for o caso) — fora dela, deixe null.`;
+Inclua em "qualificacao" apenas os campos que você descobriu ou atualizou nesta troca. Use "encerrar": true somente quando você concluiu a qualificação e já se despediu. Os campos "agendar" e "cancelar" só são usados nas fases de agendamento/remarcação (as instruções aparecem no contexto do cliente quando for o caso) — fora delas, deixe "agendar": null e "cancelar": false.`;
 
 export type Qualificacao = {
   objetivo?: string;
@@ -108,8 +109,10 @@ export type HeloisaTurn = {
   resposta: string;
   qualificacao: Qualificacao;
   encerrar: boolean;
-  /** ISO do horário que o cliente confirmou (fase de agendamento). */
+  /** ISO do horário que o cliente confirmou (agendamento ou remarcação). */
   agendar?: { inicio: string } | null;
+  /** Cliente quer CANCELAR/desmarcar a reunião (fase de remarcação). */
+  cancelar?: boolean;
 };
 
 export type SlotContexto = { inicioISO: string; label: string };
@@ -124,7 +127,11 @@ function brl(centavos: number | null | undefined): string | null {
 }
 
 /** Contexto dinâmico do lead (vai depois do system prompt cacheável). */
-function buildLeadContext(lead: Lead, slots?: SlotContexto[]): string {
+function buildLeadContext(
+  lead: Lead,
+  slots?: SlotContexto[],
+  remarcacao?: { reuniaoAtual: string },
+): string {
   const nome = lead.nome ? lead.nome.split(/\s+/)[0] : "(desconhecido)";
   const valor = brl(lead.valorCreditoCentavos) ?? "(não informado)";
   const cidade = lead.cidade ?? "(não informada)";
@@ -140,12 +147,24 @@ function buildLeadContext(lead: Lead, slots?: SlotContexto[]): string {
   if (lead.qualifUrgencia) jaSabe.push(`urgência: ${lead.qualifUrgencia}`);
   const concluida = lead.qualifWhatsappStatus === "concluida";
 
-  let agendamento = "";
-  if (slots && slots.length) {
-    const lista = slots
-      .map((s, i) => `  ${i + 1}. ${s.label}  [inicio=${s.inicioISO}]`)
-      .join("\n");
-    agendamento = `
+  const lista = (slots ?? [])
+    .map((s, i) => `  ${i + 1}. ${s.label}  [inicio=${s.inicioISO}]`)
+    .join("\n");
+
+  let bloco = "";
+  if (remarcacao) {
+    bloco = `
+
+# FASE DE REMARCAÇÃO — o cliente JÁ tem uma reunião marcada
+Reunião atual: ${remarcacao.reuniaoAtual} (horário de Brasília). O cliente mandou mensagem querendo mexer nela. Entenda o que ele quer e aja:
+- REMARCAR pra outro horário → ofereça os horários livres abaixo (ou aceite um que ele propor, dia útil 08–18h). Ao ele CONFIRMAR, preencha "agendar": { "inicio": "<ISO EXATO>" }.
+- CANCELAR/desmarcar de vez → confirme com gentileza e preencha "cancelar": true. Ofereça remarcar como alternativa só UMA vez, sem insistir.
+- MANTER a reunião atual (ele desistiu de mexer, ou era só uma dúvida) → tranquilize e preencha "encerrar": true (sem agendar nem cancelar).
+Horários LIVRES do consultor (fuso de Brasília):
+${lista}
+- NUNCA invente horário; use os ISOs da lista ou converta o que o cliente propôs. Só preencha "agendar"/"cancelar" quando ele de fato confirmar.`;
+  } else if (slots && slots.length) {
+    bloco = `
 
 # FASE DE AGENDAMENTO — o cliente foi QUALIFICADO
 Agora você OFERECE uma conversa rápida (10–15 min) por VÍDEO com o consultor: pra conhecer o cliente, entender a necessidade, explicar como a Credios trabalha e iniciar a busca pelo crédito. Apresente como um próximo passo leve e útil.
@@ -162,7 +181,7 @@ ${lista}
 - Cidade: ${cidade}
 - Valor simulado: ${valor}
 - Já qualificado até agora: ${jaSabe.length ? jaSabe.join("; ") : "nada ainda"}
-- Qualificação já concluída? ${concluida ? "SIM — apenas reforce que o consultor já vai entrar em contato; não reinicie o roteiro." : "não"}${agendamento}`;
+- Qualificação já concluída? ${concluida ? "SIM — apenas reforce que o consultor já vai entrar em contato; não reinicie o roteiro." : "não"}${bloco}`;
 }
 
 /** Tenta extrair o objeto JSON da resposta do modelo (tolerante a ruído). */
@@ -172,6 +191,7 @@ function parseTurn(text: string): HeloisaTurn {
     qualificacao: {},
     encerrar: false,
     agendar: null,
+    cancelar: false,
   };
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -185,6 +205,7 @@ function parseTurn(text: string): HeloisaTurn {
       qualificacao: (obj.qualificacao ?? {}) as Qualificacao,
       encerrar: obj.encerrar === true,
       agendar: typeof inicio === "string" && inicio.trim() ? { inicio } : null,
+      cancelar: obj.cancelar === true,
     };
   } catch {
     return fallback;
@@ -200,7 +221,7 @@ export async function conversarComHeloisa(
   lead: Lead,
   historico: Mensagem[],
   novaMensagem: string,
-  opts?: { slots?: SlotContexto[] },
+  opts?: { slots?: SlotContexto[]; remarcacao?: { reuniaoAtual: string } },
 ): Promise<HeloisaTurn> {
   const messages: Anthropic.MessageParam[] = [
     ...historico.map((m) => ({ role: m.role, content: m.content })),
@@ -214,7 +235,7 @@ export async function conversarComHeloisa(
     output_config: { effort: "low" },
     system: [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-      { type: "text", text: buildLeadContext(lead, opts?.slots) },
+      { type: "text", text: buildLeadContext(lead, opts?.slots, opts?.remarcacao) },
     ],
     messages,
   });

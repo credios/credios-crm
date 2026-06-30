@@ -136,6 +136,35 @@ export async function criarEvento(ev: NovoEvento): Promise<EventoCriado> {
   return { eventId: data.id, meetLink: data.hangoutLink ?? null, htmlLink: data.htmlLink ?? null };
 }
 
+/**
+ * Move um evento existente pra novo horário (remarcação). Usa PATCH pra manter o
+ * MESMO link do Meet e a thread do convite — o Google envia "evento atualizado"
+ * aos convidados. Notifica todos (sendUpdates=all).
+ */
+export async function atualizarHorarioEvento(
+  subject: string,
+  eventId: string,
+  inicioISO: string,
+  fimISO: string,
+): Promise<void> {
+  const token = await getAccessToken(subject);
+  const url =
+    `${CAL_API}/calendars/${encodeURIComponent(subject)}/events/${encodeURIComponent(eventId)}` +
+    `?sendUpdates=all`;
+  const resp = await fetch(url, {
+    method: "PATCH",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      start: { dateTime: inicioISO, timeZone: TZ },
+      end: { dateTime: fimISO, timeZone: TZ },
+    }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`google patchEvent: ${resp.status} ${body.slice(0, 200)}`);
+  }
+}
+
 /** Cancela/remove um evento (usado em remarcar/cancelar). Notifica os convidados. */
 export async function deletarEvento(subject: string, eventId: string): Promise<void> {
   const token = await getAccessToken(subject);

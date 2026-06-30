@@ -15,7 +15,12 @@ import {
   horariosDisponiveis,
   type Slot,
 } from "@/lib/calendar/disponibilidade";
-import { agendarReuniao } from "@/lib/sdr/agendar";
+import {
+  agendarReuniao,
+  cancelarReuniao,
+  remarcarReuniao,
+  reuniaoAtivaDoLead,
+} from "@/lib/sdr/agendar";
 import { avaliarQualificacao } from "@/lib/sdr/qualificacao";
 import {
   consultorDoLead,
@@ -297,6 +302,115 @@ async function fluxoSdr(lead: Lead, turn: HeloisaTurn): Promise<string> {
   return msgManual(nome, await gerarPortalUrl(lead.id));
 }
 
+/** O cliente quer mexer na reunião já marcada (remarcar/cancelar)? Heurística por
+ *  palavras-chave — só pra DECIDIR entrar no fluxo; a Heloísa confirma a intenção. */
+function querMexerNaReuniao(texto: string): boolean {
+  const t = texto.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return /(remarc|reagend|desmarc|cancel|adiar|atras|trocar|outro (horario|dia)|outra hora|mudar (a |o |de )?(hora|horario|dia|reuni)|nao (vou|consigo|posso|poderei|vai) (dar|ir|participar|comparecer|conseguir)|nao vai dar|preciso (mudar|remarcar|cancelar))/.test(
+    t,
+  );
+}
+
+/**
+ * Fluxo de REMARCAÇÃO/cancelamento (atrás do flag SDR). Roda quando o lead já tem
+ * reunião futura e quer mexer nela. Injeta a agenda do consultor + a reunião atual
+ * no contexto da Heloísa; conforme o turno:
+ *  - cancelar → remove do Google + volta o lead pro funil ativo (conversa_inicial);
+ *  - novo horário confirmado → PATCH no Google (mantém o Meet) + e-mail atualizado;
+ *  - manter/encerrar → volta o estado pra "concluida".
+ * Sem reunião ativa (já passou/cancelada) → fecho gentil.
+ */
+async function fluxoRemarcacao(lead: Lead, mensagem: string): Promise<string> {
+  if (!mensagem.trim()) {
+    return "Recebi! 🙏 Se quiser remarcar ou ajustar a reunião, me manda por texto que eu te ajudo.";
+  }
+  const reuniao = await reuniaoAtivaDoLead(lead.id);
+  if (!reuniao || !reuniao.consultorEmail) {
+    if (lead.qualifWhatsappStatus === "remarcando") {
+      await db
+        .update(leads)
+        .set({ qualifWhatsappStatus: "concluida" })
+        .where(eq(leads.id, lead.id));
+    }
+    return "O consultor já vai entrar em contato com você 🙂";
+  }
+
+  if (lead.qualifWhatsappStatus !== "remarcando") {
+    await db
+      .update(leads)
+      .set({ qualifWhatsappStatus: "remarcando" })
+      .where(eq(leads.id, lead.id));
+  }
+
+  const slots = await horariosDisponiveis(reuniao.consultorEmail);
+  const historico = await carregarHistorico(lead.id);
+  const turn = await conversarComHeloisa(lead, historico, mensagem, {
+    slots,
+    remarcacao: { reuniaoAtual: reuniao.rotulo },
+  });
+
+  // Cancelar de vez → remove do Google, volta pro funil ativo.
+  if (turn.cancelar) {
+    await cancelarReuniao(reuniao.reuniaoId);
+    await db
+      .update(leads)
+      .set({
+        status: "conversa_inicial",
+        qualifWhatsappStatus: "concluida",
+        qualifWhatsappEm: new Date(),
+      })
+      .where(eq(leads.id, lead.id));
+    await db.insert(interacoes).values({
+      leadId: lead.id,
+      autorId: null,
+      tipo: "mudanca_status",
+      conteudo: `Status alterado de ${lead.status} para conversa_inicial (reunião cancelada pelo cliente)`,
+      metadata: {
+        de: lead.status,
+        para: "conversa_inicial",
+        canal: "whatsapp_ia",
+        automatico: true,
+        reuniao_cancelada: true,
+      } as never,
+    });
+    return turn.resposta;
+  }
+
+  // Novo horário confirmado → PATCH no Google (mantém o Meet).
+  if (turn.agendar?.inicio) {
+    const chk = await horarioEstaLivre(reuniao.consultorEmail, turn.agendar.inicio);
+    if (chk.ok) {
+      try {
+        const r = await remarcarReuniao(reuniao.reuniaoId, turn.agendar.inicio, chk.fimISO);
+        await concluirQualif(lead.id); // volta pra "concluida" (status do funil segue reuniao_agendada)
+        if (lead.email && reuniao.consultorNome) {
+          await sendReuniaoConfirmadaEmail({
+            to: lead.email,
+            primeiroNome: primeiroNome(lead),
+            consultorNome: reuniao.consultorNome,
+            quando: r.rotulo,
+            meetLink: r.meetLink,
+            docsUrl: await gerarPortalUrl(lead.id),
+          }).catch((e) => console.error("[sdr] email de remarcação falhou:", e));
+        }
+        return `Pronto, remarcado! ✅ ${r.rotulo} (horário de Brasília). Atualizei o convite no seu calendário${r.meetLink ? ` — é o mesmo link do Meet: ${r.meetLink}` : ""}.`;
+      } catch (e) {
+        console.error("[sdr] remarcar falhou — reoferta:", e);
+      }
+    }
+    return msgReoferta(await horariosDisponiveis(reuniao.consultorEmail));
+  }
+
+  // Manteve a reunião (ou só tirou dúvida) → volta pro estado concluído.
+  if (turn.encerrar) {
+    await db
+      .update(leads)
+      .set({ qualifWhatsappStatus: "concluida" })
+      .where(eq(leads.id, lead.id));
+  }
+  return turn.resposta;
+}
+
 /** Detecta o botão "Agora não" do template proativo (opt-out). */
 function ehOptOut(texto: string): boolean {
   const t = texto.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
@@ -354,6 +468,8 @@ export async function responderMensagem(
       : "(não encontrado)",
   );
 
+  const sdrOn = !!lead && sdrAtivo(phone);
+
   let resposta: string | null;
   let respostaTag: Record<string, unknown> | null = null; // metadata extra do enviado
   if (!lead) {
@@ -368,6 +484,17 @@ export async function responderMensagem(
       resposta = msgDesqualificado(lead);
       respostaTag = { desqualificado_aviso: true };
     }
+  } else if (sdrOn && lead.qualifWhatsappStatus === "remarcando") {
+    // Já em remarcação → continua nesse fluxo até resolver (remarcar/cancelar/manter).
+    resposta = await fluxoRemarcacao(lead, mensagem);
+  } else if (
+    sdrOn &&
+    lead.qualifWhatsappStatus === "concluida" &&
+    mensagem.trim() &&
+    querMexerNaReuniao(mensagem)
+  ) {
+    // Pós-agendamento: o cliente quer remarcar/cancelar a reunião → entra no fluxo.
+    resposta = await fluxoRemarcacao(lead, mensagem);
   } else if (lead.qualifWhatsappStatus === "concluida") {
     // Qualificação encerrada: fecho breve por até 3 mensagens; depois, silêncio.
     const pos = lead.qualifWhatsappEm
@@ -391,8 +518,6 @@ export async function responderMensagem(
       : "Pode me mandar por texto? Assim consigo te ajudar certinho 🙂";
   } else {
     try {
-      const sdrOn = sdrAtivo(phone);
-
       // Na fase de agendamento (SDR), injeta os horários livres do consultor no
       // contexto da IA pra ela ofertar/negociar. Fora dela, sem horários.
       let slots: Slot[] | undefined;
