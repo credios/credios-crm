@@ -207,7 +207,9 @@ export const leads = pgTable(
     qualifImovelRegularizado: text("qualif_imovel_regularizado"),
     qualifPendenciaJuridica: text("qualif_pendencia_juridica"),
     qualifUrgencia: text("qualif_urgencia"),
-    qualifWhatsappStatus: text("qualif_whatsapp_status"), // em_andamento | concluida
+    qualifTemImovelGarantia: text("qualif_tem_imovel_garantia"), // sim | nao | nao_sei
+    qualifPendenciaBloqueante: text("qualif_pendencia_bloqueante"), // sim | nao | nao_sei
+    qualifWhatsappStatus: text("qualif_whatsapp_status"), // em_andamento | agendando | concluida
     qualifWhatsappEm: timestamp("qualif_whatsapp_em", { withTimezone: true }),
 
     // --- Pipeline ---

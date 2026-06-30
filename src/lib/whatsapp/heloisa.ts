@@ -61,6 +61,7 @@ const SYSTEM_PROMPT = `Você é a Heloísa, analista de crédito da Credios. Voc
 6. Pergunte em quanto tempo o cliente precisa do crédito — ofereça as opções: até 30 dias, de 1 a 3 meses, ou sem pressa.
 7. Quando tiver as respostas, agradeça, diga que vai repassar tudo para o consultor responsável (que entra em contato em breve) e que está te enviando o link pra ele já adiantar a documentação — o que ACELERA a análise e a aprovação. Então ENCERRE. NUNCA escreva uma URL você mesma: o link do portal de documentos é anexado automaticamente logo abaixo da sua mensagem final.
 - GARANTIA (faça cedo): confirme logo que o cliente POSSUI um imóvel para dar em garantia. Se ele só quer COMPRAR um imóvel e não tem outro para a garantia, esclareça a diferença (veja "Sobre a Credios") ANTES de seguir — não conduza o roteiro como se a garantia já existisse.
+- REGISTRE no JSON, conforme descobrir: tem_imovel_garantia (possui imóvel pra garantia?), imovel_regularizado, e pendencia_bloqueante (sim se houver inventário/ação/bloqueio/disputa; nao se não houver). Esses três, junto com os valores do cadastro, decidem se o cliente avança.
 - Não repergunte o que o cliente já respondeu. Se ele já adiantou algo, siga em frente.
 - Adapte a ordem se a conversa pedir.
 - Se o histórico já mostra que você ABRIU a conversa (já cumprimentou e pediu pra confirmar os dados), NÃO repita a saudação — confirme a proposta e siga direto pras perguntas.
@@ -82,19 +83,24 @@ Responda SEMPRE com um único objeto JSON, sem nenhum texto fora dele, neste for
   "qualificacao": {
     "objetivo": "string (opcional)",
     "titularidade": "string (opcional — ex.: 'próprio' ou 'terceiro: cônjuge')",
+    "tem_imovel_garantia": "sim | nao | nao_sei (opcional — o cliente POSSUI um imóvel pra dar em garantia? 'nao' se ele só quer COMPRAR)",
     "imovel_regularizado": "sim | nao | nao_sei (opcional)",
     "pendencia_juridica": "string (opcional — ex.: 'não' ou 'inventário em andamento')",
+    "pendencia_bloqueante": "sim | nao | nao_sei (opcional — há inventário, ação judicial, bloqueio ou disputa no imóvel?)",
     "urgencia": "ate_30_dias | 1_3_meses | sem_pressa (opcional)"
   },
-  "encerrar": false
+  "encerrar": false,
+  "agendar": null
 }
-Inclua em "qualificacao" apenas os campos que você descobriu ou atualizou nesta troca. Use "encerrar": true somente quando você concluiu a qualificação e já se despediu.`;
+Inclua em "qualificacao" apenas os campos que você descobriu ou atualizou nesta troca. Use "encerrar": true somente quando você concluiu a qualificação e já se despediu. O campo "agendar" só é usado na fase de agendamento (as instruções aparecem no contexto do cliente quando for o caso) — fora dela, deixe null.`;
 
 export type Qualificacao = {
   objetivo?: string;
   titularidade?: string;
+  tem_imovel_garantia?: "sim" | "nao" | "nao_sei";
   imovel_regularizado?: "sim" | "nao" | "nao_sei";
   pendencia_juridica?: string;
+  pendencia_bloqueante?: "sim" | "nao" | "nao_sei";
   urgencia?: "ate_30_dias" | "1_3_meses" | "sem_pressa";
 };
 
@@ -102,7 +108,11 @@ export type HeloisaTurn = {
   resposta: string;
   qualificacao: Qualificacao;
   encerrar: boolean;
+  /** ISO do horário que o cliente confirmou (fase de agendamento). */
+  agendar?: { inicio: string } | null;
 };
+
+export type SlotContexto = { inicioISO: string; label: string };
 
 export type Mensagem = { role: "user" | "assistant"; content: string };
 
@@ -114,13 +124,15 @@ function brl(centavos: number | null | undefined): string | null {
 }
 
 /** Contexto dinâmico do lead (vai depois do system prompt cacheável). */
-function buildLeadContext(lead: Lead): string {
+function buildLeadContext(lead: Lead, slots?: SlotContexto[]): string {
   const nome = lead.nome ? lead.nome.split(/\s+/)[0] : "(desconhecido)";
   const valor = brl(lead.valorCreditoCentavos) ?? "(não informado)";
   const cidade = lead.cidade ?? "(não informada)";
   const jaSabe: string[] = [];
   if (lead.qualifObjetivo) jaSabe.push(`objetivo: ${lead.qualifObjetivo}`);
   if (lead.qualifTitularidade) jaSabe.push(`titularidade: ${lead.qualifTitularidade}`);
+  if (lead.qualifTemImovelGarantia)
+    jaSabe.push(`tem imóvel p/ garantia: ${lead.qualifTemImovelGarantia}`);
   if (lead.qualifImovelRegularizado)
     jaSabe.push(`imóvel regularizado: ${lead.qualifImovelRegularizado}`);
   if (lead.qualifPendenciaJuridica)
@@ -128,27 +140,51 @@ function buildLeadContext(lead: Lead): string {
   if (lead.qualifUrgencia) jaSabe.push(`urgência: ${lead.qualifUrgencia}`);
   const concluida = lead.qualifWhatsappStatus === "concluida";
 
+  let agendamento = "";
+  if (slots && slots.length) {
+    const lista = slots
+      .map((s, i) => `  ${i + 1}. ${s.label}  [inicio=${s.inicioISO}]`)
+      .join("\n");
+    agendamento = `
+
+# FASE DE AGENDAMENTO — o cliente foi QUALIFICADO
+Agora você OFERECE uma conversa rápida (10–15 min) por VÍDEO com o consultor: pra conhecer o cliente, entender a necessidade, explicar como a Credios trabalha e iniciar a busca pelo crédito. Apresente como um próximo passo leve e útil.
+Horários LIVRES do consultor (fuso de Brasília):
+${lista}
+- Ofereça 2–3 desses horários de forma natural (não liste todos de forma robótica).
+- Se o cliente escolher um, CONFIRME e preencha "agendar": { "inicio": "<o inicio ISO EXATO daquele horário, da lista acima>" }.
+- Se o cliente NÃO puder em nenhum, peça um horário que ele prefira (dia útil, 08–18h, fuso de Brasília). Se ele propor, converta pra ISO e preencha "agendar": { "inicio": "<ISO>" }.
+- NUNCA invente horário nem confirme sem o cliente escolher. Só preencha "agendar" quando ele de fato confirmar um horário.`;
+  }
+
   return `# Contexto deste cliente (do CRM)
 - Primeiro nome: ${nome}
 - Cidade: ${cidade}
 - Valor simulado: ${valor}
 - Já qualificado até agora: ${jaSabe.length ? jaSabe.join("; ") : "nada ainda"}
-- Qualificação já concluída? ${concluida ? "SIM — apenas reforce que o consultor já vai entrar em contato; não reinicie o roteiro." : "não"}`;
+- Qualificação já concluída? ${concluida ? "SIM — apenas reforce que o consultor já vai entrar em contato; não reinicie o roteiro." : "não"}${agendamento}`;
 }
 
 /** Tenta extrair o objeto JSON da resposta do modelo (tolerante a ruído). */
 function parseTurn(text: string): HeloisaTurn {
-  const fallback: HeloisaTurn = { resposta: text.trim(), qualificacao: {}, encerrar: false };
+  const fallback: HeloisaTurn = {
+    resposta: text.trim(),
+    qualificacao: {},
+    encerrar: false,
+    agendar: null,
+  };
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) return fallback;
   try {
     const obj = JSON.parse(text.slice(start, end + 1)) as Partial<HeloisaTurn>;
     if (typeof obj.resposta !== "string" || !obj.resposta.trim()) return fallback;
+    const inicio = (obj.agendar as { inicio?: unknown } | null | undefined)?.inicio;
     return {
       resposta: obj.resposta.trim(),
       qualificacao: (obj.qualificacao ?? {}) as Qualificacao,
       encerrar: obj.encerrar === true,
+      agendar: typeof inicio === "string" && inicio.trim() ? { inicio } : null,
     };
   } catch {
     return fallback;
@@ -164,6 +200,7 @@ export async function conversarComHeloisa(
   lead: Lead,
   historico: Mensagem[],
   novaMensagem: string,
+  opts?: { slots?: SlotContexto[] },
 ): Promise<HeloisaTurn> {
   const messages: Anthropic.MessageParam[] = [
     ...historico.map((m) => ({ role: m.role, content: m.content })),
@@ -177,7 +214,7 @@ export async function conversarComHeloisa(
     output_config: { effort: "low" },
     system: [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-      { type: "text", text: buildLeadContext(lead) },
+      { type: "text", text: buildLeadContext(lead, opts?.slots) },
     ],
     messages,
   });

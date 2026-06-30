@@ -9,6 +9,23 @@ import {
 } from "@/lib/whatsapp/heloisa";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
+import {
+  horarioEstaLivre,
+  horariosDisponiveis,
+  type Slot,
+} from "@/lib/calendar/disponibilidade";
+import { agendarReuniao } from "@/lib/sdr/agendar";
+import { avaliarQualificacao } from "@/lib/sdr/qualificacao";
+import {
+  consultorDoLead,
+  escolherConsultor,
+  montarFatos,
+  msgConfirmacao,
+  msgManual,
+  msgOfertaHorarios,
+  msgReoferta,
+  sdrAtivo,
+} from "@/lib/sdr/fluxo";
 
 const SIMULADOR_URL = "https://credios.com.br/simulador";
 
@@ -83,17 +100,30 @@ async function carregarHistorico(leadId: string): Promise<Mensagem[]> {
   }));
 }
 
-/** Grava os campos de qualificação que a Heloísa descobriu + o status. */
-async function persistirQualificacao(leadId: string, turn: HeloisaTurn): Promise<void> {
+/**
+ * Grava os campos de qualificação que a Heloísa descobriu. Com `gerirStatus`
+ * (padrão), também cuida do status (em_andamento/concluida) — comportamento de
+ * hoje. No fluxo SDR, o status é controlado pela máquina de estados (fluxoSdr),
+ * então passamos `gerirStatus = false` pra não atropelar a transição.
+ */
+async function persistirQualificacao(
+  leadId: string,
+  turn: HeloisaTurn,
+  gerirStatus = true,
+): Promise<void> {
   const q = turn.qualificacao;
   const set: Partial<typeof leads.$inferInsert> = {};
   if (q.objetivo) set.qualifObjetivo = q.objetivo;
   if (q.titularidade) set.qualifTitularidade = q.titularidade;
+  if (q.tem_imovel_garantia) set.qualifTemImovelGarantia = q.tem_imovel_garantia;
   if (q.imovel_regularizado) set.qualifImovelRegularizado = q.imovel_regularizado;
   if (q.pendencia_juridica) set.qualifPendenciaJuridica = q.pendencia_juridica;
+  if (q.pendencia_bloqueante) set.qualifPendenciaBloqueante = q.pendencia_bloqueante;
   if (q.urgencia) set.qualifUrgencia = q.urgencia;
-  set.qualifWhatsappStatus = turn.encerrar ? "concluida" : "em_andamento";
-  if (turn.encerrar) set.qualifWhatsappEm = new Date();
+  if (gerirStatus) {
+    set.qualifWhatsappStatus = turn.encerrar ? "concluida" : "em_andamento";
+    if (turn.encerrar) set.qualifWhatsappEm = new Date();
+  }
   await db.update(leads).set(set).where(eq(leads.id, leadId));
 }
 
@@ -118,6 +148,101 @@ async function anexarLinkDocumentos(leadId: string, resposta: string): Promise<s
     console.error("[whatsapp] link de documentos falhou:", e);
     return resposta;
   }
+}
+
+/** Gera um token fresco e devolve a URL pública do portal de documentos do lead. */
+async function gerarPortalUrl(leadId: string): Promise<string> {
+  const { token } = await generatePortalToken(leadId);
+  return portalUrl(token);
+}
+
+/** Marca a qualificação como concluída (encerra a conversa do SDR). */
+async function concluirQualif(leadId: string): Promise<void> {
+  await db
+    .update(leads)
+    .set({ qualifWhatsappStatus: "concluida", qualifWhatsappEm: new Date() })
+    .where(eq(leads.id, leadId));
+}
+
+/**
+ * Máquina de estados do SDR (só roda atrás do flag `sdrAtivo`). A cada turno:
+ *  - fase "agendando" + cliente confirmou um horário → cria a reunião + link docs;
+ *  - qualificação completa + QUALIFICADO → atribui consultor por valor e oferta horários;
+ *  - qualificação completa + reprovado (ou qualificado sem agenda) → fila MANUAL + link docs;
+ *  - ainda faltam dados → segue a conversa normal da Heloísa.
+ * "Não qualificado" cai no fluxo manual de sempre — NUNCA vira "desqualificado".
+ */
+async function fluxoSdr(lead: Lead, turn: HeloisaTurn): Promise<string> {
+  const nome = primeiroNome(lead);
+  const fase = lead.qualifWhatsappStatus;
+
+  // ── Fase de agendamento: o cliente confirmou um horário? ──
+  if (fase === "agendando") {
+    const consultor = lead.consultorId ? await consultorDoLead(lead.consultorId) : null;
+    if (consultor && turn.agendar?.inicio) {
+      const chk = await horarioEstaLivre(consultor.email, turn.agendar.inicio);
+      if (chk.ok) {
+        try {
+          const ag = await agendarReuniao({
+            leadId: lead.id,
+            leadNome: lead.nome ?? "",
+            consultorId: consultor.id,
+            consultorEmail: consultor.email,
+            clienteEmail: lead.email,
+            inicioISO: turn.agendar.inicio,
+            fimISO: chk.fimISO,
+          });
+          await concluirQualif(lead.id);
+          return msgConfirmacao(ag.rotulo, ag.meetLink, await gerarPortalUrl(lead.id));
+        } catch (e) {
+          console.error("[sdr] agendarReuniao falhou — reoferta:", e);
+        }
+      }
+      // horário indisponível (ou erro ao criar) → reoferta horários
+      return msgReoferta(await horariosDisponiveis(consultor.email));
+    }
+    // ainda negociando horário, sem confirmação → segue a resposta da IA
+    return turn.resposta;
+  }
+
+  // ── Ainda faltam dados pra decidir → conversa segue normalmente ──
+  const { qualificado, faltando } = avaliarQualificacao(montarFatos(lead, turn.qualificacao));
+  if (faltando.length > 0) return turn.resposta;
+
+  // ── Qualificado → roteia por valor e oferta horários ──
+  if (qualificado) {
+    const consultor = await escolherConsultor(lead.valorCreditoCentavos);
+    if (consultor) {
+      const slots = await horariosDisponiveis(consultor.email);
+      if (slots.length) {
+        await db
+          .update(leads)
+          .set({
+            consultorId: consultor.id,
+            atribuidoEm: new Date(),
+            qualifWhatsappStatus: "agendando",
+          })
+          .where(eq(leads.id, lead.id));
+        await db.insert(interacoes).values({
+          leadId: lead.id,
+          autorId: null,
+          tipo: "mudanca_atribuicao",
+          conteudo: `Atribuído a ${consultor.nome} pela Heloísa (lead qualificado).`,
+          metadata: {
+            canal: "whatsapp_ia",
+            consultorId: consultor.id,
+            automatico: true,
+          } as never,
+        });
+        return msgOfertaHorarios(nome, slots);
+      }
+    }
+    console.warn("[sdr] qualificado mas sem consultor/horário disponível → manual");
+  }
+
+  // ── Reprovado (ou qualificado sem agenda) → fila MANUAL + link de documentos ──
+  await concluirQualif(lead.id);
+  return msgManual(nome, await gerarPortalUrl(lead.id));
 }
 
 /** Detecta o botão "Agora não" do template proativo (opt-out). */
@@ -214,17 +339,34 @@ export async function responderMensagem(
       : "Pode me mandar por texto? Assim consigo te ajudar certinho 🙂";
   } else {
     try {
+      const sdrOn = sdrAtivo(phone);
+
+      // Na fase de agendamento (SDR), injeta os horários livres do consultor no
+      // contexto da IA pra ela ofertar/negociar. Fora dela, sem horários.
+      let slots: Slot[] | undefined;
+      if (sdrOn && lead.qualifWhatsappStatus === "agendando" && lead.consultorId) {
+        const c = await consultorDoLead(lead.consultorId);
+        if (c) slots = await horariosDisponiveis(c.email);
+      }
+
       const historico = await carregarHistorico(lead.id);
-      const turn = await conversarComHeloisa(lead, historico, mensagem);
-      resposta = turn.resposta;
-      await persistirQualificacao(lead.id, turn);
-      // No encerramento, manda o link do portal de documentos (acelera a aprovação).
-      if (turn.encerrar) resposta = await anexarLinkDocumentos(lead.id, resposta);
+      const turn = await conversarComHeloisa(lead, historico, mensagem, { slots });
+      // No SDR, quem controla o status é a máquina de estados (fluxoSdr).
+      await persistirQualificacao(lead.id, turn, !sdrOn);
+
+      if (sdrOn) {
+        resposta = await fluxoSdr(lead, turn);
+      } else {
+        resposta = turn.resposta;
+        // No encerramento, manda o link do portal de documentos (acelera a aprovação).
+        if (turn.encerrar) resposta = await anexarLinkDocumentos(lead.id, resposta);
+      }
       console.log(
         "[whatsapp] heloisa:",
-        turn.encerrar ? "ENCERROU" : "em andamento",
+        sdrOn ? "(sdr)" : turn.encerrar ? "ENCERROU" : "em andamento",
         "| qualif:",
         JSON.stringify(turn.qualificacao),
+        turn.agendar ? `| agendar=${turn.agendar.inicio}` : "",
       );
     } catch (e) {
       console.error("[whatsapp] heloisa falhou — fallback:", e);
