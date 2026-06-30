@@ -5,12 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { formatBrlShort } from "@/lib/formatters/currency";
-import type {
-  DistribRow,
-  Distribuicoes,
-  ValorStat,
-} from "@/lib/reports/queries";
+import type { DistribRow, Distribuicoes } from "@/lib/reports/queries";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -20,7 +15,7 @@ type Props = {
 };
 
 const SECTIONS: Array<{
-  key: keyof Omit<Distribuicoes, "totalLeads" | "valores">;
+  key: keyof Omit<Distribuicoes, "totalLeads">;
   title: string;
   hint: string;
 }> = [
@@ -58,8 +53,7 @@ export function DistribuicaoCards({ data, topN = 6 }: Props) {
           quem é o típico cliente que está entrando
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
-        <ValoresBlock valores={data.valores} />
+      <CardContent>
         <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
           {SECTIONS.map((sec) => (
             <DistribBlock
@@ -73,76 +67,6 @@ export function DistribuicaoCards({ data, topN = 6 }: Props) {
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function ValoresBlock({ valores }: { valores: Distribuicoes["valores"] }) {
-  const ITEMS: Array<{ title: string; hint: string; stat: ValorStat }> = [
-    {
-      title: "Crédito buscado",
-      hint: "valor solicitado",
-      stat: valores.credito,
-    },
-    { title: "Valor do imóvel", hint: "garantia", stat: valores.imovel },
-    { title: "Renda mensal", hint: "declarada", stat: valores.renda },
-  ];
-  // Só mostra se houver ao menos um valor preenchido em alguma dimensão.
-  if (ITEMS.every((it) => it.stat.n === 0)) return null;
-  return (
-    <div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {ITEMS.map((it) => (
-          <ValorStatCard
-            key={it.title}
-            title={it.title}
-            hint={it.hint}
-            stat={it.stat}
-          />
-        ))}
-      </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        A <span className="font-medium text-foreground">mediana</span> é o valor
-        do cliente típico — não é distorcida por outliers (ex.: um valor digitado
-        errado). A média aparece ao lado para referência.
-      </p>
-    </div>
-  );
-}
-
-function ValorStatCard({
-  title,
-  hint,
-  stat,
-}: {
-  title: string;
-  hint: string;
-  stat: ValorStat;
-}) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-foreground/[0.02] px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle font-mono">
-          {title}
-        </h4>
-        <span className="text-[10px] text-fg-faint">{hint}</span>
-      </div>
-      {stat.n === 0 ? (
-        <p className="mt-1 text-xs italic text-fg-faint font-serif">sem dados</p>
-      ) : (
-        <>
-          <p className="mt-1 font-display tabular-nums text-xl font-semibold tracking-[-0.02em] text-foreground">
-            {formatBrlShort(stat.medianaCentavos)}
-            <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-              mediana
-            </span>
-          </p>
-          <p className="text-[11px] tabular-nums text-muted-foreground">
-            média {formatBrlShort(stat.mediaCentavos)} ·{" "}
-            <span className="text-fg-faint">{stat.n} c/ valor</span>
-          </p>
-        </>
-      )}
-    </div>
   );
 }
 

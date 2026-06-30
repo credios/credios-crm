@@ -98,12 +98,10 @@ function cacheKeyFor(
   return parts;
 }
 
-// TTL padrão pra queries pesadas dos dashboards: 5 min. Equilibra freshness
-// (relatórios não precisam ser real-time — as MVs já são atualizadas a cada
-// 30 min) com performance. Subido de 120s → 300s pra que períodos não-padrão
-// (90d, ano, trimestre), que raramente estão no cache, permaneçam quentes
-// durante uma sessão de trabalho em vez de re-pagar o custo a cada 2 min.
-const REPORT_CACHE_TTL = 300;
+// TTL padrão pra queries pesadas dos dashboards: 2 min. Equilibra freshness
+// (relatórios não precisam ser real-time) com performance (primeira request
+// paga o custo, demais nesse minuto vêm do Data Cache).
+const REPORT_CACHE_TTL = 120;
 
 function baseConds(rawFilters: ReportFilters) {
   const filters = normalizeFilters(rawFilters);
@@ -385,18 +383,7 @@ export type VolumePorDiaRow = {
   count: number;
 };
 
-export function fetchVolumePorDia(
-  filters: ReportFilters,
-  period: PeriodRange,
-): Promise<VolumePorDiaRow[]> {
-  return unstable_cache(
-    () => fetchVolumePorDiaUncached(filters, period),
-    cacheKeyFor("reports:volume-por-dia", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchVolumePorDiaUncached(
+export async function fetchVolumePorDia(
   _filters: ReportFilters,
   period: PeriodRange,
 ): Promise<VolumePorDiaRow[]> {
@@ -571,18 +558,7 @@ export type PerformanceConsultorRow = {
   primeiroContatoMinAvg: number | null;
 };
 
-export function fetchPerformanceConsultores(
-  rawFilters: ReportFilters,
-  period: PeriodRange,
-): Promise<PerformanceConsultorRow[]> {
-  return unstable_cache(
-    () => fetchPerformanceConsultoresUncached(rawFilters, period),
-    cacheKeyFor("reports:perf-consultores", rawFilters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchPerformanceConsultoresUncached(
+export async function fetchPerformanceConsultores(
   rawFilters: ReportFilters,
   period: PeriodRange,
 ): Promise<PerformanceConsultorRow[]> {
@@ -663,17 +639,7 @@ async function fetchPerformanceConsultoresUncached(
 
 export type PipelineRow = { status: string; count: number; valorCentavos: number };
 
-export function fetchPipelineAtivoPorStatus(
-  filters: ReportFilters,
-): Promise<PipelineRow[]> {
-  return unstable_cache(
-    () => fetchPipelineAtivoPorStatusUncached(filters),
-    cacheKeyFor("reports:pipeline-ativo", filters),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchPipelineAtivoPorStatusUncached(
+export async function fetchPipelineAtivoPorStatus(
   filters: ReportFilters,
 ): Promise<PipelineRow[]> {
   const useMV = canUseMV(filters);
@@ -1028,18 +994,7 @@ export type ConversionStage = {
  * Considera "passou pelo stage" quem está no stage OU em algum stage posterior
  * (incl. fechado). Quem foi pra perdido/desqualificado não conta como progressão.
  */
-export function fetchConversionRates(
-  filters: ReportFilters,
-  period: PeriodRange,
-): Promise<ConversionStage[]> {
-  return unstable_cache(
-    () => fetchConversionRatesUncached(filters, period),
-    cacheKeyFor("reports:conversion", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchConversionRatesUncached(
+export async function fetchConversionRates(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<ConversionStage[]> {
@@ -1096,18 +1051,7 @@ async function fetchConversionRatesUncached(
 
 export type LossReasonRow = { motivo: string; count: number };
 
-export function fetchLossReasons(
-  filters: ReportFilters,
-  period: PeriodRange,
-): Promise<LossReasonRow[]> {
-  return unstable_cache(
-    () => fetchLossReasonsUncached(filters, period),
-    cacheKeyFor("reports:loss-reasons", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchLossReasonsUncached(
+export async function fetchLossReasons(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<LossReasonRow[]> {
@@ -1149,18 +1093,7 @@ export type OrigemROIRow = {
   avgValorBuscadoCentavos: number;
 };
 
-export function fetchOrigemROI(
-  filters: ReportFilters,
-  period: PeriodRange,
-): Promise<OrigemROIRow[]> {
-  return unstable_cache(
-    () => fetchOrigemROIUncached(filters, period),
-    cacheKeyFor("reports:origem-roi", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchOrigemROIUncached(
+export async function fetchOrigemROI(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<OrigemROIRow[]> {
@@ -1237,18 +1170,7 @@ export type SlaComplianceRow = {
   avgPrimeiroContatoMin: number | null;
 };
 
-export function fetchSlaCompliance(
-  rawFilters: ReportFilters,
-  period: PeriodRange,
-): Promise<SlaComplianceRow> {
-  return unstable_cache(
-    () => fetchSlaComplianceUncached(rawFilters, period),
-    cacheKeyFor("reports:sla-compliance", rawFilters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchSlaComplianceUncached(
+export async function fetchSlaCompliance(
   rawFilters: ReportFilters,
   period: PeriodRange,
 ): Promise<SlaComplianceRow> {
@@ -1482,18 +1404,7 @@ export type PerformanceUfRow = {
   taxaConversao: number;
 };
 
-export function fetchPerformancePorUf(
-  rawFilters: ReportFilters,
-  period: PeriodRange,
-): Promise<PerformanceUfRow[]> {
-  return unstable_cache(
-    () => fetchPerformancePorUfUncached(rawFilters, period),
-    cacheKeyFor("reports:perf-uf", rawFilters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchPerformancePorUfUncached(
+export async function fetchPerformancePorUf(
   rawFilters: ReportFilters,
   period: PeriodRange,
 ): Promise<PerformanceUfRow[]> {
@@ -2070,25 +1981,6 @@ async function fetchSparkRevenueUncached(meses: number): Promise<{
 
 export type DistribRow = { valor: string; count: number; pct: number };
 
-/**
- * Estatísticas de valor (centavos). Inclui média E mediana porque a média é
- * fortemente distorcida por outliers (ex.: um lead com valor de imóvel
- * digitado errado em centenas de milhões puxa a média pra cima). A mediana
- * reflete o "ticket real" do cliente típico. `n` = quantos leads tinham o
- * campo preenchido (base do cálculo).
- */
-export type ValorStat = {
-  mediaCentavos: number;
-  medianaCentavos: number;
-  n: number;
-};
-
-export type DistribValores = {
-  credito: ValorStat;
-  imovel: ValorStat;
-  renda: ValorStat;
-};
-
 export type Distribuicoes = {
   tipoPessoa: DistribRow[];
   objetivoCredito: DistribRow[];
@@ -2096,7 +1988,6 @@ export type Distribuicoes = {
   situacaoImovel: DistribRow[];
   ocupacao: DistribRow[];
   estadoCivil: DistribRow[];
-  valores: DistribValores;
   totalLeads: number;
 };
 
@@ -2164,7 +2055,6 @@ async function fetchDistribuicoesUncached(
   // max=1, ainda assim < 100ms cada).
   const [
     totalRow,
-    valoresRow,
     tipoPessoa,
     objetivoCredito,
     tipoImovel,
@@ -2177,33 +2067,6 @@ async function fetchDistribuicoesUncached(
         `SELECT COUNT(*)::text AS total FROM public.leads WHERE ${whereClause}`,
       ),
     ),
-    // Média E mediana de cada valor. percentile_cont(0.5) = mediana; ambos
-    // ignoram NULL automaticamente. count(col) = base não-nula (n).
-    db.execute<{
-      credito_media: string;
-      credito_mediana: string;
-      credito_n: string;
-      imovel_media: string;
-      imovel_mediana: string;
-      imovel_n: string;
-      renda_media: string;
-      renda_mediana: string;
-      renda_n: string;
-    }>(
-      sql.raw(`
-        SELECT
-          COALESCE(round(AVG(valor_credito_centavos)), 0)::text AS credito_media,
-          COALESCE(round(percentile_cont(0.5) WITHIN GROUP (ORDER BY valor_credito_centavos)), 0)::text AS credito_mediana,
-          COUNT(valor_credito_centavos)::text AS credito_n,
-          COALESCE(round(AVG(valor_imovel_centavos)), 0)::text AS imovel_media,
-          COALESCE(round(percentile_cont(0.5) WITHIN GROUP (ORDER BY valor_imovel_centavos)), 0)::text AS imovel_mediana,
-          COUNT(valor_imovel_centavos)::text AS imovel_n,
-          COALESCE(round(AVG(renda_mensal_centavos)), 0)::text AS renda_media,
-          COALESCE(round(percentile_cont(0.5) WITHIN GROUP (ORDER BY renda_mensal_centavos)), 0)::text AS renda_mediana,
-          COUNT(renda_mensal_centavos)::text AS renda_n
-        FROM public.leads WHERE ${whereClause}
-      `),
-    ),
     distribOf("tipo_pessoa", whereClause),
     distribOf("objetivo_credito", whereClause),
     distribOf("tipo_imovel", whereClause),
@@ -2214,24 +2077,6 @@ async function fetchDistribuicoesUncached(
 
   void cb;
   const totalLeads = Number(totalRow[0]?.total ?? 0);
-  const v = valoresRow[0];
-  const valores: DistribValores = {
-    credito: {
-      mediaCentavos: Number(v?.credito_media ?? 0),
-      medianaCentavos: Number(v?.credito_mediana ?? 0),
-      n: Number(v?.credito_n ?? 0),
-    },
-    imovel: {
-      mediaCentavos: Number(v?.imovel_media ?? 0),
-      medianaCentavos: Number(v?.imovel_mediana ?? 0),
-      n: Number(v?.imovel_n ?? 0),
-    },
-    renda: {
-      mediaCentavos: Number(v?.renda_media ?? 0),
-      medianaCentavos: Number(v?.renda_mediana ?? 0),
-      n: Number(v?.renda_n ?? 0),
-    },
-  };
 
   return {
     tipoPessoa,
@@ -2240,7 +2085,6 @@ async function fetchDistribuicoesUncached(
     situacaoImovel,
     ocupacao,
     estadoCivil,
-    valores,
     totalLeads,
   };
 }
@@ -2285,15 +2129,7 @@ async function distribOf(
  *
  * Usado pelo card "Pipeline esfriando" em /relatorios.
  */
-export function fetchEsfriandoGlobal(): Promise<{ count: number }> {
-  return unstable_cache(
-    () => fetchEsfriandoGlobalUncached(),
-    ["reports:esfriando-global"],
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchEsfriandoGlobalUncached(): Promise<{ count: number }> {
+export async function fetchEsfriandoGlobal(): Promise<{ count: number }> {
   // Reescrita: antes usava subquery correlata em interacoes por linha de
   // leads — O(N) seeks. Agora: LEFT JOIN LATERAL com LIMIT 1 contra o índice
   // parcial idx_interacoes_manuais_lead (criado em 0008). Postgres consegue

@@ -28,7 +28,6 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { formatBrlShort } from "@/lib/formatters/currency";
 import {
   comparisonPeriod,
-  isComparisonReliable,
   pctDelta,
   pointsDelta,
 } from "@/lib/reports/comparativos";
@@ -272,10 +271,6 @@ async function KpisSection({
       fetchSparkRevenue(6),
     ]);
 
-    // Esconde deltas quando a janela de comparação não tem volume suficiente
-    // pra ser confiável (períodos longos caem antes da operação existir).
-    const comparavel = isComparisonReliable(kpisPrev?.leadsNovosCount);
-
     return (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 stagger [&>*]:animate-fade-up">
         <KpiExecutive
@@ -284,7 +279,7 @@ async function KpisSection({
           label="Receita realizada"
           value={formatBrlShort(kpisCurr.fechadosComissaoCentavos)}
           deltaPct={
-            comparavel && kpisPrev
+            kpisPrev
               ? pctDelta(
                   kpisCurr.fechadosComissaoCentavos,
                   kpisPrev.fechadosComissaoCentavos,
@@ -300,7 +295,7 @@ async function KpisSection({
           label="Volume liberado"
           value={formatBrlShort(kpisCurr.fechadosValorLiberadoCentavos)}
           deltaPct={
-            comparavel && kpisPrev
+            kpisPrev
               ? pctDelta(
                   kpisCurr.fechadosValorLiberadoCentavos,
                   kpisPrev.fechadosValorLiberadoCentavos,
@@ -319,7 +314,7 @@ async function KpisSection({
               : "—"
           }
           deltaPct={
-            comparavel && salesPrev
+            salesPrev
               ? pctDelta(
                   salesCurr.avgDealSizeCentavos,
                   salesPrev.avgDealSizeCentavos,
@@ -338,10 +333,7 @@ async function KpisSection({
               : "—"
           }
           deltaPct={
-            comparavel &&
-            salesPrev &&
-            salesPrev.avgSalesCycleDays &&
-            salesCurr.avgSalesCycleDays
+            salesPrev && salesPrev.avgSalesCycleDays && salesCurr.avgSalesCycleDays
               ? -pointsDelta(
                   salesCurr.avgSalesCycleDays,
                   salesPrev.avgSalesCycleDays,
