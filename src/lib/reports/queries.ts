@@ -2114,7 +2114,10 @@ export async function fetchDistribuicoes(
 ): Promise<Distribuicoes> {
   return unstable_cache(
     () => fetchDistribuicoesUncached(rawFilters, period),
-    cacheKeyFor("reports:distribuicoes", rawFilters, period),
+    // :v2 — invalida entradas antigas do Data Cache (geradas antes do campo
+    // `valores`). Sem o bump, código novo lê entrada velha sem `valores` e
+    // o render quebra. Guard defensivo também em <ValoresBlock>.
+    cacheKeyFor("reports:distribuicoes:v2", rawFilters, period),
     { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
   )();
 }

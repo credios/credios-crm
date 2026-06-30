@@ -76,7 +76,13 @@ export function DistribuicaoCards({ data, topN = 6 }: Props) {
   );
 }
 
-function ValoresBlock({ valores }: { valores: Distribuicoes["valores"] }) {
+function ValoresBlock({ valores }: { valores?: Distribuicoes["valores"] }) {
+  // Defensivo: entradas antigas do Data Cache (geradas antes do campo
+  // `valores` existir) ainda podem chegar aqui sem ele até o TTL expirar.
+  // Sem este guard, o render quebra a PÁGINA INTEIRA (o erro borbulha pro
+  // error boundary da rota, não é pego pelo renderSection que só envolve o
+  // fetch). Ver também o bump da chave de cache em fetchDistribuicoes.
+  if (!valores) return null;
   const ITEMS: Array<{ title: string; hint: string; stat: ValorStat }> = [
     {
       title: "Crédito buscado",
