@@ -124,6 +124,11 @@ async function persistirQualificacao(
     set.qualifWhatsappStatus = turn.encerrar ? "concluida" : "em_andamento";
     if (turn.encerrar) set.qualifWhatsappEm = new Date();
   }
+  // No fluxo SDR (gerirStatus=false) um turno pode não trazer nenhum campo novo
+  // (ex.: a saudação inicial). `db.update().set({})` LANÇA no Drizzle ("No values
+  // to set") — então, sem nada a gravar, não toca no banco. (Era a causa do bot
+  // cair no fallback a cada mensagem com o SDR ligado.)
+  if (Object.keys(set).length === 0) return;
   await db.update(leads).set(set).where(eq(leads.id, leadId));
 }
 
