@@ -500,11 +500,14 @@ export async function responderMensagem(
     // Pós-agendamento: o cliente quer remarcar/cancelar a reunião → entra no fluxo.
     resposta = await fluxoRemarcacao(lead, mensagem);
   } else if (lead.qualifWhatsappStatus === "concluida") {
-    // Qualificação encerrada: fecho breve por até 3 mensagens; depois, silêncio.
+    // Qualificação encerrada: manda o fecho UMA única vez (na 1ª mensagem do
+    // cliente pós-conclusão) e depois SILENCIA. Repetir "o consultor já vai
+    // entrar em contato" a cada "ok"/"obrigada" ficava repetitivo e derrubava a
+    // qualidade da interação.
     const pos = lead.qualifWhatsappEm
       ? await contarRecebidasApos(lead.id, lead.qualifWhatsappEm)
       : 99;
-    resposta = pos >= 3 ? null : "O consultor já vai entrar em contato com você 🙂";
+    resposta = pos >= 1 ? null : "O consultor já vai entrar em contato com você 🙂";
     console.log("[whatsapp] pós-conclusão:", pos, resposta ? "(fecho)" : "(SILÊNCIO)");
   } else if (ehOptOut(mensagem)) {
     // Botão "Agora não" do template proativo → encerra educadamente; sem mais proativo.
