@@ -11,6 +11,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/desafio-mfa",
   "/api/webhooks", // gate: x-webhook-secret
   "/api/cron", // gate: Authorization: Bearer ${CRON_SECRET} (Vercel Cron)
+  "/api/internal", // gate: Authorization: Bearer ${CRON_SECRET} (ações internas server-side)
   "/api/version", // só retorna o SHA do commit — info já pública no GitHub
   "/portal", // gate: token do portal de documentos (validado no handler)
   "/api/portal", // gate: token do portal (upload/validação no handler)
