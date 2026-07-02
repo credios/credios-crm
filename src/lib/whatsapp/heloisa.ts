@@ -5,7 +5,7 @@ import type { InferSelectModel } from "drizzle-orm";
 
 type Lead = InferSelectModel<typeof leads>;
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 // Cliente lazy: se ANTHROPIC_API_KEY não estiver setada, o construtor lança —
 // e queremos que esse erro só apareça dentro de conversarComHeloisa (pego pelo
