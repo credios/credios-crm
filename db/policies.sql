@@ -713,3 +713,53 @@ DROP POLICY IF EXISTS lead_anotacoes_delete_admin ON public.lead_anotacoes;
 CREATE POLICY lead_anotacoes_delete_admin
 ON public.lead_anotacoes FOR DELETE TO authenticated
 USING (public.current_user_perfil() = 'admin');
+
+-- ================================================================
+-- 0038_rls_portal_gads_reunioes: Security Advisor 28 Jun 2026
+-- (rls_disabled_in_public nas tabelas das migrations 0031/0034/0035)
+-- ================================================================
+
+-- lead_portal_tokens (0038) — hash de tokens do portal público. Resolução é
+-- 100% server-side (src/lib/portal/token.ts); nenhum acesso via PostgREST é
+-- legítimo. RLS sem policy = deny total (mesmo padrão de webhook_idempotency).
+ALTER TABLE public.lead_portal_tokens ENABLE ROW LEVEL SECURITY;
+
+-- google_ads_conversions (0038) — fila de conversões offline, só backend/cron.
+ALTER TABLE public.google_ads_conversions ENABLE ROW LEVEL SECURITY;
+
+-- lead_documentos (0038) — metadado de docs do lead (PII). Leitura espelha o
+-- modelo de permissão; escritas são 100% server-side (portal + API).
+ALTER TABLE public.lead_documentos ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS lead_documentos_select_admin_gerente ON public.lead_documentos;
+CREATE POLICY lead_documentos_select_admin_gerente
+ON public.lead_documentos FOR SELECT TO authenticated
+USING (public.current_user_perfil() = ANY(ARRAY['admin','gerente']));
+
+DROP POLICY IF EXISTS lead_documentos_select_consultor ON public.lead_documentos;
+CREATE POLICY lead_documentos_select_consultor
+ON public.lead_documentos FOR SELECT TO authenticated
+USING (
+  public.current_user_perfil() = 'consultor'
+  AND EXISTS (
+    SELECT 1 FROM public.leads l
+    WHERE l.id = lead_documentos.lead_id AND l.consultor_id = auth.uid()
+  )
+);
+
+-- reunioes (0038) — agenda SDR. Leitura no padrão de tarefas (consultor só as
+-- próprias); escritas só backend SDR.
+ALTER TABLE public.reunioes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS reunioes_select_admin_gerente ON public.reunioes;
+CREATE POLICY reunioes_select_admin_gerente
+ON public.reunioes FOR SELECT TO authenticated
+USING (public.current_user_perfil() = ANY(ARRAY['admin','gerente']));
+
+DROP POLICY IF EXISTS reunioes_select_consultor ON public.reunioes;
+CREATE POLICY reunioes_select_consultor
+ON public.reunioes FOR SELECT TO authenticated
+USING (
+  public.current_user_perfil() = 'consultor'
+  AND consultor_id = auth.uid()
+);
