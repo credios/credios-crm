@@ -68,11 +68,6 @@ CREATE TRIGGER set_atualizado_em
   BEFORE UPDATE ON public.round_robin_estado
   FOR EACH ROW EXECUTE FUNCTION public.trigger_set_atualizado_em();
 
-DROP TRIGGER IF EXISTS set_updated_at ON public.tarefas;
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON public.tarefas
-  FOR EACH ROW EXECUTE FUNCTION public.trigger_set_updated_at();
-
 DROP TRIGGER IF EXISTS set_atualizado_em ON public.lead_bancos;
 CREATE TRIGGER set_atualizado_em
   BEFORE UPDATE ON public.lead_bancos
@@ -130,7 +125,6 @@ ALTER TABLE public.round_robin_estado     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mensagens_template     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.duplicidades_pendentes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sla_alertas            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tarefas                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lead_bancos            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log              ENABLE ROW LEVEL SECURITY;
 -- webhook_idempotency: somente backend (service_role bypassa RLS).
@@ -398,44 +392,7 @@ USING (current_user_perfil() = 'admin');
 -- INSERT vem do backend (service_role bypassa RLS) — sem policy adicional.
 
 -- ----------------------------------------------------------------
--- 12. Policies — tarefas
--- ----------------------------------------------------------------
-
-DROP POLICY IF EXISTS tarefas_select_admin_gerente ON public.tarefas;
-CREATE POLICY tarefas_select_admin_gerente
-ON public.tarefas FOR SELECT TO authenticated
-USING (current_user_perfil() = ANY(ARRAY['admin','gerente']));
-
-DROP POLICY IF EXISTS tarefas_select_consultor ON public.tarefas;
-CREATE POLICY tarefas_select_consultor
-ON public.tarefas FOR SELECT TO authenticated
-USING (
-  current_user_perfil() = 'consultor'
-  AND consultor_id = auth.uid()
-);
-
-DROP POLICY IF EXISTS tarefas_update_admin_gerente ON public.tarefas;
-CREATE POLICY tarefas_update_admin_gerente
-ON public.tarefas FOR UPDATE TO authenticated
-USING (current_user_perfil() = ANY(ARRAY['admin','gerente']))
-WITH CHECK (current_user_perfil() = ANY(ARRAY['admin','gerente']));
-
-DROP POLICY IF EXISTS tarefas_update_consultor ON public.tarefas;
-CREATE POLICY tarefas_update_consultor
-ON public.tarefas FOR UPDATE TO authenticated
-USING (
-  current_user_perfil() = 'consultor'
-  AND consultor_id = auth.uid()
-)
-WITH CHECK (
-  current_user_perfil() = 'consultor'
-  AND consultor_id = auth.uid()
-);
-
--- Criação de tarefas vem do backend/cron com DATABASE_URL.
-
--- ----------------------------------------------------------------
--- 13. Policies — lead_bancos
+-- 12. Policies — lead_bancos
 -- ----------------------------------------------------------------
 
 DROP POLICY IF EXISTS lead_bancos_select_admin_gerente ON public.lead_bancos;
@@ -565,15 +522,6 @@ CREATE INDEX IF NOT EXISTS idx_interacoes_lead_tipo_criado
 CREATE INDEX IF NOT EXISTS idx_sla_alertas_lead_tipo_resolvido
   ON public.sla_alertas (lead_id, tipo, resolvido_em);
 
--- tarefas: uma única tarefa ativa por lead (evita funil poluído) e uma única
--- tarefa por lead/dia (evita duplicidade no cron diário).
-CREATE UNIQUE INDEX IF NOT EXISTS tarefas_lead_ativa_unica
-  ON public.tarefas (lead_id)
-  WHERE status IN ('aberta', 'atrasada');
-
-CREATE UNIQUE INDEX IF NOT EXISTS tarefas_lead_dia_unica
-  ON public.tarefas (lead_id, data_referencia);
-
 CREATE UNIQUE INDEX IF NOT EXISTS lead_bancos_lead_banco_unico
   ON public.lead_bancos (lead_id, banco);
 
@@ -581,7 +529,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS lead_bancos_lead_banco_unico
 -- RLS pós-canonical: tabelas adicionadas após a versão original deste
 -- arquivo. Mantido aqui pra `npm run db:policies` ser self-contained.
 -- Migrations correspondentes:
---   - 0009_security_advisor_fixes: status_lead_config + task_config_por_status
+--   - 0009_security_advisor_fixes: status_lead_config
 --   - 0024_rls_tracking_anotacoes: as 4 tabelas abaixo
 -- ================================================================
 
@@ -596,20 +544,6 @@ USING (true);
 DROP POLICY IF EXISTS status_lead_config_admin_write ON public.status_lead_config;
 CREATE POLICY status_lead_config_admin_write
 ON public.status_lead_config FOR ALL TO authenticated
-USING (public.current_user_perfil() = 'admin')
-WITH CHECK (public.current_user_perfil() = 'admin');
-
--- task_config_por_status (0009) ----------------------------------------------
-ALTER TABLE public.task_config_por_status ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS task_config_por_status_select_authenticated ON public.task_config_por_status;
-CREATE POLICY task_config_por_status_select_authenticated
-ON public.task_config_por_status FOR SELECT TO authenticated
-USING (true);
-
-DROP POLICY IF EXISTS task_config_por_status_admin_write ON public.task_config_por_status;
-CREATE POLICY task_config_por_status_admin_write
-ON public.task_config_por_status FOR ALL TO authenticated
 USING (public.current_user_perfil() = 'admin')
 WITH CHECK (public.current_user_perfil() = 'admin');
 
@@ -747,8 +681,8 @@ USING (
   )
 );
 
--- reunioes (0038) — agenda SDR. Leitura no padrão de tarefas (consultor só as
--- próprias); escritas só backend SDR.
+-- reunioes (0038) — agenda SDR. Leitura: admin/gerente tudo; consultor só as
+-- próprias; escritas só backend SDR.
 ALTER TABLE public.reunioes ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS reunioes_select_admin_gerente ON public.reunioes;

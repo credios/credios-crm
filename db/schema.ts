@@ -78,29 +78,6 @@ export const tipoSlaEnum = pgEnum("tipo_sla", [
   "lead_esfriando",
 ]);
 
-export const statusTarefaEnum = pgEnum("status_tarefa", [
-  "aberta",
-  "concluida",
-  "atrasada",
-]);
-
-export const tipoTarefaEnum = pgEnum("tipo_tarefa", [
-  "contato_diario",
-  "follow_up_banco",
-]);
-
-export const acaoTarefaEnum = pgEnum("acao_tarefa", [
-  "liguei",
-  "enviei_whatsapp",
-  "recebi_resposta",
-  "cobrei_documentacao",
-  "atualizei_retorno_banco",
-  "atualizei_banco_parceiro",
-  "cliente_pediu_retorno",
-  "nao_consegui_contato",
-  "outro",
-]);
-
 export const statusPropostaBancoEnum = pgEnum("status_proposta_banco", [
   "enviado",
   "em_analise",
@@ -584,82 +561,6 @@ export const slaAlertas = pgTable("sla_alertas", {
     .notNull()
     .defaultNow(),
   resolvidoEm: timestamp("resolvido_em", { withTimezone: true }),
-});
-
-// ============================================================================
-// tarefas — follow-up diário por lead ativo
-// ============================================================================
-
-export const tarefas = pgTable(
-  "tarefas",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    leadId: uuid("lead_id")
-      .notNull()
-      .references(() => leads.id, { onDelete: "cascade" }),
-    consultorId: uuid("consultor_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    tipo: tipoTarefaEnum("tipo").notNull().default("contato_diario"),
-    titulo: text("titulo").notNull(),
-    descricao: text("descricao"),
-    status: statusTarefaEnum("status").notNull().default("aberta"),
-    dataReferencia: date("data_referencia").notNull(),
-    venceEm: timestamp("vence_em", { withTimezone: true }).notNull(),
-    concluidaEm: timestamp("concluida_em", { withTimezone: true }),
-    concluidaPor: uuid("concluida_por").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    acaoConclusao: acaoTarefaEnum("acao_conclusao"),
-    observacaoConclusao: text("observacao_conclusao"),
-    emailResumoEnviadoEm: timestamp("email_resumo_enviado_em", {
-      withTimezone: true,
-    }),
-    emailAtrasoEnviadoEm: timestamp("email_atraso_enviado_em", {
-      withTimezone: true,
-    }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("idx_tarefas_consultor_status_data").on(
-      table.consultorId,
-      table.status,
-      table.dataReferencia,
-    ),
-    index("idx_tarefas_lead_status").on(table.leadId, table.status),
-    index("idx_tarefas_vence_em").on(table.venceEm),
-  ],
-);
-
-// ============================================================================
-// task_config_por_status — configura quais tarefas o cron diário gera por status
-// ============================================================================
-// Substitui o switch-case hardcoded em src/lib/tasks/service.ts. Admin edita
-// pela UI: título, descrição, frequência (em dias), ou desativa pra parar
-// de gerar tarefas pra leads naquele status. Status sem row aqui também não
-// gera tarefa (default: ativo=false implícito).
-
-export const taskConfigPorStatus = pgTable("task_config_por_status", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  // FK lógico pra status_lead_config.key — sem hard FK pra tolerar custom
-  // statuses criadas/desativadas sem cascatear pro cron.
-  statusKey: text("status_key").notNull().unique(),
-  ativo: boolean("ativo").notNull().default(true),
-  titulo: text("titulo").notNull().default("Fazer acompanhamento do lead"),
-  descricao: text("descricao"),
-  // 1 = diária; 7 = semanal; 14 = quinzenal. CHECK no DB ([1,30]).
-  frequenciaDias: integer("frequencia_dias").notNull().default(1),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
 });
 
 // ============================================================================
