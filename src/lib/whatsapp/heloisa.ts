@@ -182,8 +182,9 @@ Horários LIVRES do consultor (fuso de Brasília):
 ${lista}
 - "Hoje"/"amanhã": traduza pela data de HOJE (no contexto acima). Se o cliente disser "hoje às 16h" e a lista tiver um horário com a data de hoje às 16h, É esse — confirme. NUNCA diga que não há horário num dia que está na lista.
 - Ofereça 2–3 desses horários de forma natural (não liste todos de forma robótica).
-- Se o cliente escolher um, CONFIRME e preencha "agendar": { "inicio": "<o inicio ISO EXATO daquele horário, da lista acima>" }.
+- Se o cliente escolher um, CONFIRME e preencha "agendar": { "inicio": "<o inicio ISO EXATO daquele horário, da lista acima>" } — no MESMO turno da mensagem de confirmação, NUNCA confirme em texto pra preencher depois.
 - Se o cliente NÃO puder em nenhum, peça um horário que ele prefira (dia útil, 08–18h, fuso de Brasília). Se ele propor, converta pra ISO e preencha "agendar": { "inicio": "<ISO>" }.
+- Se o cliente NÃO QUISER a reunião (ex.: "prefiro por mensagem", "não gosto de call"), aceite numa boa: diga que o consultor entra em contato por mensagem mesmo e preencha "encerrar": true. NUNCA prometa que VOCÊ vai enviar o link do portal — ao encerrar, o sistema anexa o link automaticamente à sua mensagem.
 - NUNCA invente horário nem confirme sem o cliente escolher. Só preencha "agendar" quando ele de fato confirmar um horário.`;
   }
 

@@ -262,6 +262,15 @@ async function fluxoSdr(lead: Lead, turn: HeloisaTurn): Promise<string> {
       // horário indisponível (ou erro ao criar) → reoferta horários
       return msgReoferta(await horariosDisponiveis(consultor.email));
     }
+    // Cliente RECUSOU a reunião (ex.: "prefiro por mensagem") e a IA encerrou →
+    // cai no fluxo manual: conclui a qualificação e anexa o link do portal.
+    // Sem isso o lead ficava preso em "agendando" e a promessa de link da IA
+    // saía SEM link (a IA não envia URL; quem anexa é o código — e este caminho
+    // não anexava).
+    if (turn.encerrar) {
+      await concluirQualif(lead.id);
+      return anexarLinkDocumentos(lead.id, turn.resposta);
+    }
     // ainda negociando horário, sem confirmação → segue a resposta da IA
     return turn.resposta;
   }
