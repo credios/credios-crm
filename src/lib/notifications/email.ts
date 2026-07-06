@@ -181,6 +181,72 @@ export async function sendProativoFailureEmail(
 }
 
 /**
+ * E-mail INTERNO pro CONSULTOR quando a Heloísa mexe numa reunião dele
+ * (marca/remarca/cancela). Necessário porque o evento é criado na agenda do
+ * próprio consultor (ele é o organizador) — o Google só envia convite por
+ * e-mail pros CONVIDADOS; o organizador não recebe nada, o evento só aparece
+ * na agenda. Sem isso o consultor não fica sabendo (reclamação do Rodrigo,
+ * 2026-07-06).
+ */
+export async function sendReuniaoConsultorEmail(params: {
+  to: string;
+  consultorNome: string;
+  lead: Lead;
+  quando: string;
+  meetLink: string | null;
+  tipo: "agendada" | "remarcada" | "cancelada";
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!params.to) return { ok: false, reason: "destinatário vazio" };
+  const { lead, quando, tipo } = params;
+  const primeiro = params.consultorNome.split(" ")[0] || params.consultorNome;
+
+  const subject =
+    tipo === "agendada"
+      ? `📅 Reunião marcada: ${lead.nome} — ${quando}`
+      : tipo === "remarcada"
+        ? `📅 Reunião remarcada: ${lead.nome} — ${quando}`
+        : `Reunião cancelada: ${lead.nome} (era ${quando})`;
+
+  const intro =
+    tipo === "agendada"
+      ? `Olá, ${primeiro}. A Heloísa qualificou este lead e marcou uma conversa por vídeo pra você: ${quando} (horário de Brasília), 10–15 min. O evento já está na sua agenda Google.`
+      : tipo === "remarcada"
+        ? `Olá, ${primeiro}. O cliente remarcou com a Heloísa: a reunião agora é ${quando} (horário de Brasília). O evento na sua agenda Google já foi atualizado — mesmo link do Meet.`
+        : `Olá, ${primeiro}. O cliente cancelou a reunião que estava marcada pra ${quando}. O evento já saiu da sua agenda. O lead segue ativo — vale um contato pra entender e reengajar.`;
+
+  const ctas: Array<{ href: string; label: string; tone?: "primary" | "secondary" }> = [
+    { href: appUrl(`/leads/${lead.id}`), label: "Abrir lead no CRM" },
+  ];
+  if (tipo !== "cancelada" && params.meetLink) {
+    ctas.push({ href: params.meetLink, label: "Link do Meet", tone: "secondary" });
+  }
+
+  const html = renderEmailLayout({
+    preheader: `${lead.nome} — ${quando}`,
+    eyebrow:
+      tipo === "cancelada" ? "Reunião cancelada (Heloísa)" : "Reunião da Heloísa",
+    eyebrowTone: tipo === "cancelada" ? "warning" : "success",
+    title: lead.nome,
+    intro,
+    contentHtml: `${buildLeadKpis(lead)}${buildLeadDetailsHtml(lead)}`,
+    ctas,
+  });
+
+  try {
+    const result = await resend.emails.send({ from, to: params.to, replyTo, subject, html });
+    if (result.error) {
+      console.error("[email-reuniao-consultor] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-reuniao-consultor] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+/**
  * Alerta do watchdog do SDR: leads parados há 24h+ numa fase de DECISÃO do bot
  * (agendando/remarcando) — cliente viu os horários e sumiu, ou algo travou.
  * Visibilidade pro time dar o empurrão humano. Destinatário: WHATSAPP_ALERT_EMAIL.

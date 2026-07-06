@@ -9,7 +9,11 @@ import {
 } from "@/lib/whatsapp/heloisa";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
-import { sendReuniaoConfirmadaEmail } from "@/lib/notifications/email";
+import {
+  sendLeadAssignedEmail,
+  sendReuniaoConfirmadaEmail,
+  sendReuniaoConsultorEmail,
+} from "@/lib/notifications/email";
 import {
   horarioEstaLivre,
   horariosDisponiveis,
@@ -254,6 +258,16 @@ async function fluxoSdr(lead: Lead, turn: HeloisaTurn): Promise<string> {
               docsUrl,
             }).catch((e) => console.error("[sdr] email de confirmação falhou:", e));
           }
+          // Email interno pro CONSULTOR — o Google não avisa o organizador do
+          // próprio evento (só convidados), então sem isso ele não fica sabendo.
+          await sendReuniaoConsultorEmail({
+            to: consultor.email,
+            consultorNome: consultor.nome,
+            lead,
+            quando: ag.rotulo,
+            meetLink: ag.meetLink,
+            tipo: "agendada",
+          }).catch((e) => console.error("[sdr] email pro consultor falhou:", e));
           return msgConfirmacao(ag.rotulo, ag.meetLink, docsUrl);
         } catch (e) {
           console.error("[sdr] agendarReuniao falhou — reoferta:", e);
@@ -269,6 +283,13 @@ async function fluxoSdr(lead: Lead, turn: HeloisaTurn): Promise<string> {
     // não anexava).
     if (turn.encerrar) {
       await concluirQualif(lead.id);
+      // Consultor precisa saber que tem lead qualificado esperando contato
+      // (sem reunião marcada, ninguém mais avisa).
+      if (consultor) {
+        await sendLeadAssignedEmail(lead, consultor.email, consultor.nome).catch(
+          (e) => console.error("[sdr] email de atribuição falhou:", e),
+        );
+      }
       return anexarLinkDocumentos(lead.id, turn.resposta);
     }
     // ainda negociando horário, sem confirmação → segue a resposta da IA
@@ -365,6 +386,17 @@ async function fluxoRemarcacao(lead: Lead, mensagem: string): Promise<string> {
   // Cancelar de vez → remove do Google, volta pro funil ativo.
   if (turn.cancelar) {
     await cancelarReuniao(reuniao.reuniaoId);
+    // Avisa o consultor (o Google não notifica o organizador do próprio evento).
+    if (reuniao.consultorEmail && reuniao.consultorNome) {
+      await sendReuniaoConsultorEmail({
+        to: reuniao.consultorEmail,
+        consultorNome: reuniao.consultorNome,
+        lead,
+        quando: reuniao.rotulo,
+        meetLink: null,
+        tipo: "cancelada",
+      }).catch((e) => console.error("[sdr] email de cancelamento falhou:", e));
+    }
     await db
       .update(leads)
       .set({
@@ -405,6 +437,17 @@ async function fluxoRemarcacao(lead: Lead, mensagem: string): Promise<string> {
             meetLink: r.meetLink,
             docsUrl: await gerarPortalUrl(lead.id),
           }).catch((e) => console.error("[sdr] email de remarcação falhou:", e));
+        }
+        // Avisa o consultor do novo horário (Google não notifica o organizador).
+        if (reuniao.consultorEmail && reuniao.consultorNome) {
+          await sendReuniaoConsultorEmail({
+            to: reuniao.consultorEmail,
+            consultorNome: reuniao.consultorNome,
+            lead,
+            quando: r.rotulo,
+            meetLink: r.meetLink,
+            tipo: "remarcada",
+          }).catch((e) => console.error("[sdr] email pro consultor falhou:", e));
         }
         return `Pronto, remarcado! ✅ ${r.rotulo} (horário de Brasília). Atualizei o convite no seu calendário${r.meetLink ? ` — é o mesmo link do Meet: ${r.meetLink}` : ""}.`;
       } catch (e) {
