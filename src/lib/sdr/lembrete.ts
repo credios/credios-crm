@@ -4,6 +4,7 @@ import { and, desc, eq, gte, lte } from "drizzle-orm";
 
 import { interacoes, leads, reunioes } from "../../../db/schema";
 import { db } from "@/lib/db";
+import { sendReuniaoLembreteEmail } from "@/lib/notifications/email";
 import { enviarTemplateWhatsApp, enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
 
 // Lembrete de reunião ~30 min antes. Disparado pelo cron a cada 10 min: pega
@@ -67,6 +68,7 @@ export async function processarLembretesReuniao(): Promise<ResultadoLembretes> {
       meetLink: reunioes.meetLink,
       nome: leads.nome,
       whatsapp: leads.whatsapp,
+      email: leads.email,
     })
     .from(reunioes)
     .innerJoin(leads, eq(leads.id, reunioes.leadId))
@@ -92,15 +94,33 @@ export async function processarLembretesReuniao(): Promise<ResultadoLembretes> {
     const res = aberta
       ? await enviarTextoWhatsApp(to, msgTextoLivre(nome, quando, r.meetLink))
       : await enviarTemplateWhatsApp(to, TEMPLATE_LEMBRETE, TEMPLATE_LANG, [nome, quando]);
-
     if (!res.ok) {
       console.error(
-        `[lembrete] falha (${via}) reunião ${r.reuniaoId}:`,
+        `[lembrete] falha WhatsApp (${via}) reunião ${r.reuniaoId}:`,
         ("error" in res && res.error) || res.status,
       );
-      continue; // não marca → tenta de novo no próximo run (janela é curta)
     }
 
+    // Lembrete por E-MAIL em paralelo — garante o aviso mesmo sem janela de 24h
+    // aberta e sem o template Utility aprovado.
+    let emailOk = false;
+    if (r.email) {
+      const em = await sendReuniaoLembreteEmail({
+        to: r.email,
+        primeiroNome: nome,
+        quando,
+        meetLink: r.meetLink,
+      }).catch(() => ({ ok: false as const }));
+      emailOk = em.ok;
+    }
+
+    if (!res.ok && !emailOk) {
+      continue; // nada saiu → não marca → tenta de novo no próximo run
+    }
+
+    const canais = [res.ok ? `whatsapp/${via}` : null, emailOk ? "email" : null]
+      .filter(Boolean)
+      .join(" + ");
     await db
       .update(reunioes)
       .set({ lembreteEnviado: true, updatedAt: new Date() })
@@ -108,13 +128,13 @@ export async function processarLembretesReuniao(): Promise<ResultadoLembretes> {
     await db.insert(interacoes).values({
       leadId: r.leadId,
       autorId: null,
-      tipo: "whatsapp_enviado",
-      conteudo: `⏰ Lembrete de reunião enviado (${via}) — ${quando}`,
+      tipo: res.ok ? "whatsapp_enviado" : "evento_sistema",
+      conteudo: `⏰ Lembrete de reunião enviado (${canais}) — ${quando}`,
       metadata: {
         canal: "whatsapp_ia",
         automatico: true,
         lembrete: true,
-        wamid: res.id ?? null,
+        wamid: res.ok ? (res.id ?? null) : null,
       } as never,
     });
     enviados++;

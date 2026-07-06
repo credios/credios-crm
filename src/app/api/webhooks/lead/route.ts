@@ -19,6 +19,8 @@ import { formatProperName } from "@/lib/formatters/proper-name";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { sendPortalEmail } from "@/lib/portal/email";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
+import { elegivelAgendaPublica } from "@/lib/agenda/prequal";
+import { gerarAgendaToken } from "@/lib/agenda/token";
 import { enviarProativoWhatsapp } from "@/lib/whatsapp/proativo";
 import {
   sendLeadAssignedEmail,
@@ -111,8 +113,16 @@ function agendarProativoSeCompleto(opts: {
   notify: boolean | undefined;
   completo: boolean;
   qualifStatusAtual: string | null;
+  /** Lead elegível pra AGENDA PÚBLICA: não dispara na hora — a página de sucesso
+   *  mostra a grade de horários; se ele agendar, a qualif vira 'concluida' e o
+   *  cron proativo (15 min) pula; se não agendar, o cron abre a conversa. */
+  deferirParaCron?: boolean;
 }): void {
   if (opts.notify === false || !opts.completo || !opts.whatsapp || opts.qualifStatusAtual) {
+    return;
+  }
+  if (opts.deferirParaCron) {
+    console.log(`[webhook] proativo adiado pro cron (agenda pública): ${opts.leadId}`);
     return;
   }
   after(() =>
@@ -122,6 +132,34 @@ function agendarProativoSeCompleto(opts: {
       whatsapp: opts.whatsapp,
     }),
   );
+}
+
+/**
+ * Token da AGENDA PÚBLICA pra tela de sucesso do simulador — só pra lead
+ * completo, com notificação ativa e que passa na pré-qualificação determinística
+ * (crédito/imóvel/renda/tipo — src/lib/agenda/prequal.ts). Kill switch:
+ * AGENDA_PUBLICA=off. Nunca lança (não pode quebrar o webhook).
+ */
+function tokenAgendaSeElegivel(
+  lead: {
+    id: string;
+    valorCreditoCentavos: number | null;
+    valorImovelCentavos: number | null;
+    rendaMensalCentavos: number | null;
+    tipoImovel: string | null;
+  },
+  notify: boolean | undefined,
+  completo: boolean,
+): string | null {
+  if (process.env.AGENDA_PUBLICA === "off") return null;
+  if (notify === false || !completo) return null;
+  if (!elegivelAgendaPublica(lead)) return null;
+  try {
+    return gerarAgendaToken(lead.id);
+  } catch (e) {
+    console.error("[webhook] agenda token falhou:", e);
+    return null;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -290,6 +328,12 @@ export async function POST(request: NextRequest) {
         notify: payload.notify,
       });
 
+      const agendaTokenEnriched = tokenAgendaSeElegivel(
+        enrichedLead,
+        payload.notify,
+        !!enrichedLead.objetivoCredito,
+      );
+
       agendarProativoSeCompleto({
         leadId: existing.id,
         nome: enrichedLead.nome,
@@ -297,10 +341,16 @@ export async function POST(request: NextRequest) {
         notify: payload.notify,
         completo: !!enrichedLead.objetivoCredito,
         qualifStatusAtual: existing.qualifWhatsappStatus,
+        deferirParaCron: !!agendaTokenEnriched,
       });
 
       return NextResponse.json(
-        { leadId: existing.id, enriched: true, portalUrl: portalUrlEnriched },
+        {
+          leadId: existing.id,
+          enriched: true,
+          portalUrl: portalUrlEnriched,
+          agendaToken: agendaTokenEnriched,
+        },
         { status: 200 },
       );
     }
@@ -668,6 +718,12 @@ export async function POST(request: NextRequest) {
     notify: payload.notify,
   });
 
+  const agendaTokenCreated = tokenAgendaSeElegivel(
+    newLead,
+    payload.notify,
+    !!newLead.objetivoCredito,
+  );
+
   agendarProativoSeCompleto({
     leadId: newLead.id,
     nome: newLead.nome,
@@ -675,6 +731,7 @@ export async function POST(request: NextRequest) {
     notify: payload.notify,
     completo: !!newLead.objetivoCredito,
     qualifStatusAtual: newLead.qualifWhatsappStatus,
+    deferirParaCron: !!agendaTokenCreated,
   });
 
   return NextResponse.json(
@@ -683,6 +740,7 @@ export async function POST(request: NextRequest) {
       duplicate: false,
       possivelDuplicidadeCpf: leadExistenteId,
       portalUrl: portalUrlCreated,
+      agendaToken: agendaTokenCreated,
     },
     { status: 201 },
   );

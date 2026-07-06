@@ -247,6 +247,53 @@ export async function sendReuniaoConsultorEmail(params: {
 }
 
 /**
+ * LEMBRETE de reunião pro CLIENTE (~30 min antes) — complementa o lembrete por
+ * WhatsApp (que fora da janela de 24h depende de template aprovado). Client-
+ * facing: rodapé próprio, tom leve, CTA direto pro Meet.
+ */
+export async function sendReuniaoLembreteEmail(params: {
+  to: string;
+  primeiroNome: string;
+  quando: string; // "hoje às 15:00"
+  meetLink: string | null;
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!params.to) return { ok: false, reason: "destinatário vazio" };
+  const fromName = from.includes("<") ? from : `Credios <${from}>`;
+  const ctas = params.meetLink
+    ? [{ href: params.meetLink, label: "Entrar na videochamada" }]
+    : [];
+  const html = renderEmailLayout({
+    preheader: `Sua conversa com a Credios é ${params.quando}`,
+    eyebrow: "Lembrete",
+    eyebrowTone: "info",
+    title: `É já já, ${params.primeiroNome}!`,
+    intro: `Passando pra lembrar da sua conversa por vídeo com a Credios ${params.quando} (horário de Brasília). É rapidinho — de 10 a 15 minutos — e o link é o mesmo do convite no seu calendário.`,
+    contentHtml: "",
+    ctas,
+    footerHtml: `<div style="margin-bottom:6px">Credios · Consultoria de crédito com garantia de imóvel</div>
+          <div>Precisa remarcar? É só responder no WhatsApp que a gente ajusta.</div>`,
+  });
+  try {
+    const result = await resend.emails.send({
+      from: fromName,
+      to: params.to,
+      replyTo,
+      subject: `Lembrete: sua conversa com a Credios é ${params.quando}`,
+      html,
+    });
+    if (result.error) {
+      console.error("[email-lembrete] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-lembrete] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+/**
  * Alerta do watchdog do SDR: leads parados há 24h+ numa fase de DECISÃO do bot
  * (agendando/remarcando) — cliente viu os horários e sumiu, ou algo travou.
  * Visibilidade pro time dar o empurrão humano. Destinatário: WHATSAPP_ALERT_EMAIL.
