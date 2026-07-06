@@ -1,4 +1,4 @@
-import { and, gt, isNotNull, isNull, lt, notInArray, sql } from "drizzle-orm";
+import { and, gt, isNotNull, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { leads } from "../../../../../db/schema";
@@ -45,6 +45,12 @@ export async function GET(request: NextRequest) {
         isNotNull(leads.valorCreditoCentavos), // simulou (1ª etapa capturou valor)
         lt(leads.createdAt, new Date(agora - MIN_MS)),
         gt(leads.createdAt, new Date(agora - MAX_MS)),
+        // Viu a agenda pública? Espera 15 min DA OFERTA (não da criação) — dá
+        // tempo de o cliente marcar sozinho antes de a Heloísa abordar.
+        or(
+          isNull(leads.agendaOferecidaEm),
+          lt(leads.agendaOferecidaEm, new Date(agora - MIN_MS)),
+        ),
         notInArray(leads.status, [...SYSTEM_TERMINAL_KEYS]),
       ),
     )

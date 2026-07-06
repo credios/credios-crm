@@ -212,11 +212,17 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     quando: ag.rotulo,
     meetLink: ag.meetLink,
     tipo: "agendada",
+    origem: "agenda_publica",
   }).catch((e) => console.error("[agenda-publica] email consultor falhou:", e));
 
   console.log(`[agenda-publica] reunião marcada pelo cliente: lead ${lead.id} → ${ag.rotulo}`);
   return NextResponse.json(
-    { ok: true, quando: ag.rotulo, meetLink: ag.meetLink },
+    {
+      ok: true,
+      quando: ag.rotulo,
+      meetLink: ag.meetLink,
+      consultor: consultor.nome.split(/\s+/)[0] ?? consultor.nome,
+    },
     { status: 201, headers },
   );
 }

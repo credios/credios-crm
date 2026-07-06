@@ -5,6 +5,10 @@ import { Resend } from "resend";
 import type { InferSelectModel } from "drizzle-orm";
 import type { leads as leadsTable } from "../../../db/schema";
 import {
+  CLIENT_EMAIL_FROM,
+  renderClientEmail,
+} from "@/lib/notifications/client-email";
+import {
   appUrl,
   calcLtv,
   detailsSection,
@@ -195,10 +199,14 @@ export async function sendReuniaoConsultorEmail(params: {
   quando: string;
   meetLink: string | null;
   tipo: "agendada" | "remarcada" | "cancelada";
+  /** Quem marcou: a Heloísa (conversa no WhatsApp) ou o próprio cliente na
+   *  página do simulador (agenda pública). Muda o texto do aviso. */
+  origem?: "heloisa" | "agenda_publica";
 }): Promise<{ ok: boolean; reason?: string }> {
   if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
   if (!params.to) return { ok: false, reason: "destinatário vazio" };
   const { lead, quando, tipo } = params;
+  const origem = params.origem ?? "heloisa";
   const primeiro = params.consultorNome.split(" ")[0] || params.consultorNome;
 
   const subject =
@@ -210,7 +218,9 @@ export async function sendReuniaoConsultorEmail(params: {
 
   const intro =
     tipo === "agendada"
-      ? `Olá, ${primeiro}. A Heloísa qualificou este lead e marcou uma conversa por vídeo pra você: ${quando} (horário de Brasília), 10–15 min. O evento já está na sua agenda Google.`
+      ? origem === "agenda_publica"
+        ? `Olá, ${primeiro}. Este lead passou na pré-qualificação do simulador e escolheu o horário direto na página: ${quando} (horário de Brasília), 10–15 min. O evento já está na sua agenda Google.`
+        : `Olá, ${primeiro}. A Heloísa qualificou este lead e marcou uma conversa por vídeo pra você: ${quando} (horário de Brasília), 10–15 min. O evento já está na sua agenda Google.`
       : tipo === "remarcada"
         ? `Olá, ${primeiro}. O cliente remarcou com a Heloísa: a reunião agora é ${quando} (horário de Brasília). O evento na sua agenda Google já foi atualizado — mesmo link do Meet.`
         : `Olá, ${primeiro}. O cliente cancelou a reunião que estava marcada pra ${quando}. O evento já saiu da sua agenda. O lead segue ativo — vale um contato pra entender e reengajar.`;
@@ -225,7 +235,11 @@ export async function sendReuniaoConsultorEmail(params: {
   const html = renderEmailLayout({
     preheader: `${lead.nome} — ${quando}`,
     eyebrow:
-      tipo === "cancelada" ? "Reunião cancelada (Heloísa)" : "Reunião da Heloísa",
+      tipo === "cancelada"
+        ? "Reunião cancelada"
+        : origem === "agenda_publica"
+          ? "Reunião — marcada pelo cliente no simulador"
+          : "Reunião da Heloísa",
     eyebrowTone: tipo === "cancelada" ? "warning" : "success",
     title: lead.nome,
     intro,
@@ -259,24 +273,21 @@ export async function sendReuniaoLembreteEmail(params: {
 }): Promise<{ ok: boolean; reason?: string }> {
   if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
   if (!params.to) return { ok: false, reason: "destinatário vazio" };
-  const fromName = from.includes("<") ? from : `Credios <${from}>`;
-  const ctas = params.meetLink
-    ? [{ href: params.meetLink, label: "Entrar na videochamada" }]
-    : [];
-  const html = renderEmailLayout({
+  const F = "'Helvetica Neue', Helvetica, Arial, sans-serif";
+  const html = renderClientEmail({
     preheader: `Sua conversa com a Credios é ${params.quando}`,
-    eyebrow: "Lembrete",
-    eyebrowTone: "info",
     title: `É já já, ${params.primeiroNome}!`,
-    intro: `Passando pra lembrar da sua conversa por vídeo com a Credios ${params.quando} (horário de Brasília). É rapidinho — de 10 a 15 minutos — e o link é o mesmo do convite no seu calendário.`,
-    contentHtml: "",
-    ctas,
-    footerHtml: `<div style="margin-bottom:6px">Credios · Consultoria de crédito com garantia de imóvel</div>
-          <div>Precisa remarcar? É só responder no WhatsApp que a gente ajusta.</div>`,
+    intro: `Passando pra lembrar da sua conversa por vídeo com a Credios <strong style="color:#0f1b3d">${params.quando}</strong> (horário de Brasília).`,
+    bodyHtml: `<p style="margin:0;color:#475467;font-size:16px;line-height:1.65;font-family:${F}">É rapidinho — de 10 a 15 minutos, direto ao ponto — e o link é o mesmo do convite no seu calendário.</p>`,
+    cta: params.meetLink
+      ? { href: params.meetLink, label: "Entrar na videochamada" }
+      : undefined,
+    footer:
+      "Precisa remarcar? É só responder no WhatsApp que a gente ajusta. Credios · consultoria gratuita de crédito com garantia de imóvel.",
   });
   try {
     const result = await resend.emails.send({
-      from: fromName,
+      from: CLIENT_EMAIL_FROM,
       to: params.to,
       replyTo,
       subject: `Lembrete: sua conversa com a Credios é ${params.quando}`,
@@ -347,11 +358,10 @@ export async function sendReuniaoConfirmadaEmail(params: {
 }): Promise<{ ok: boolean; reason?: string }> {
   if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
   if (!params.to) return { ok: false, reason: "destinatário vazio" };
-  const fromName = from.includes("<") ? from : `Credios <${from}>`;
   const subject = `Reunião confirmada — ${params.quando}`;
   try {
     const result = await resend.emails.send({
-      from: fromName,
+      from: CLIENT_EMAIL_FROM,
       to: params.to,
       replyTo,
       subject,
@@ -376,40 +386,46 @@ export function renderReuniaoConfirmadaEmail(params: {
   docsUrl?: string | null;
 }): string {
   const { primeiroNome, consultorNome, quando, meetLink, docsUrl } = params;
+  const F = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 
-  const detalhes = detailsSection("Detalhes da conversa", [
-    ["Quando", `${quando} (horário de Brasília)`],
-    ["Duração", "10–15 minutos"],
-    ["Consultor", consultorNome],
-    ["Formato", "Vídeo (Google Meet)"],
-  ]);
+  const linha = (t: string, d: string) => `
+      <tr><td style="padding:6px 0;font-family:${F};font-size:15px;line-height:1.55;color:#475467;vertical-align:top">
+        <span style="color:#2f55c7;font-weight:700">•</span>&nbsp;
+        <strong style="color:#0f1b3d">${t}</strong> ${d}
+      </td></tr>`;
 
-  const oQueEsperar = `
-    <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#6b6f7e;font-family:Inter,Arial,sans-serif;font-weight:700;margin:18px 0 6px">O que vamos fazer</div>
-    <ul style="margin:0;padding:0 0 0 18px;color:#141e30;font-family:Inter,Arial,sans-serif;font-size:14px;line-height:1.7">
-      <li>Conhecer você e entender a sua necessidade</li>
-      <li>Explicar como a Credios trabalha — consultoria, não banco</li>
-      <li>Iniciar a busca pela melhor proposta de crédito com garantia de imóvel</li>
-    </ul>`;
+  const bodyHtml = `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 8px">
+      ${linha("Quando:", `${quando} (horário de Brasília).`)}
+      ${linha("Duração:", "10–15 minutos, direto ao ponto.")}
+      ${linha("Com quem:", `${consultorNome}, o consultor responsável pelo seu caso.`)}
+      ${linha("Formato:", "vídeo (Google Meet) — o convite com o link já está no seu e-mail e calendário.")}
+    </table>
+    <p style="margin:18px 0 0;color:#475467;font-size:16px;line-height:1.65;font-family:${F}">
+      Nessa conversa vamos <strong style="color:#0f1b3d">conhecer você, entender a sua necessidade</strong>
+      e explicar como a Credios trabalha — consultoria, não banco — já iniciando a busca pela sua melhor proposta.
+    </p>
+    ${
+      docsUrl
+        ? `<p style="margin:16px 0 0;color:#475467;font-size:16px;line-height:1.65;font-family:${F}">
+      Pra adiantar e o consultor chegar com tudo em mãos, você pode
+      <a href="${docsUrl}" style="color:#2f55c7;text-decoration:underline">enviar seus documentos com segurança</a>
+      antes da conversa.</p>`
+        : ""
+    }`;
 
-  const docsNote = docsUrl
-    ? `<p style="margin:18px 0 0;color:#6b6f7e;font-size:14px;line-height:1.55;font-family:Inter,Arial,sans-serif">Pra adiantar e o consultor já chegar com tudo em mãos, você pode <a href="${docsUrl}" style="color:#4b7be5;text-decoration:none">enviar seus documentos com segurança</a> antes da conversa.</p>`
-    : "";
-
-  const ctas: Array<{ href: string; label: string; tone?: "primary" | "secondary" }> = [];
-  if (meetLink) ctas.push({ href: meetLink, label: "Entrar na videochamada" });
-  if (docsUrl) ctas.push({ href: docsUrl, label: "Enviar documentos", tone: "secondary" });
-
-  return renderEmailLayout({
+  return renderClientEmail({
     preheader: `Sua conversa com a Credios está marcada — ${quando}`,
-    eyebrow: "Reunião confirmada",
-    eyebrowTone: "success",
     title: `Tudo certo, ${primeiroNome}!`,
-    intro: `Sua conversa rápida por vídeo com ${consultorNome} está confirmada. Aqui estão os detalhes — você também recebeu o convite no seu calendário.`,
-    contentHtml: `${detalhes}${oQueEsperar}${docsNote}`,
-    ctas,
-    footerHtml: `<div style="margin-bottom:6px">Credios · Consultoria de crédito com garantia de imóvel</div>
-          <div>Precisa remarcar ou tem alguma dúvida? É só responder no WhatsApp que a gente ajuda.</div>`,
+    intro: "Sua conversa por vídeo com a Credios está confirmada. Aqui está o essencial:",
+    bodyHtml,
+    cta: meetLink
+      ? { href: meetLink, label: "Entrar na videochamada" }
+      : docsUrl
+        ? { href: docsUrl, label: "Enviar meus documentos" }
+        : undefined,
+    footer:
+      "Precisa remarcar? É só responder no WhatsApp que a gente ajusta. Credios · consultoria gratuita de crédito com garantia de imóvel.",
   });
 }
 

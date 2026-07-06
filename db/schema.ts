@@ -188,6 +188,10 @@ export const leads = pgTable(
     qualifPendenciaBloqueante: text("qualif_pendencia_bloqueante"), // sim | nao | nao_sei
     qualifWhatsappStatus: text("qualif_whatsapp_status"), // em_andamento | agendando | concluida
     qualifWhatsappEm: timestamp("qualif_whatsapp_em", { withTimezone: true }),
+    // Quando a AGENDA PÚBLICA foi oferecida na tela de sucesso do simulador —
+    // o proativo da Heloísa espera 15 min a partir DAQUI (não da criação do
+    // lead) pra dar tempo de o cliente marcar sozinho.
+    agendaOferecidaEm: timestamp("agenda_oferecida_em", { withTimezone: true }),
 
     // --- Pipeline ---
     // text livre — validado em app-layer contra status_lead_config.key.

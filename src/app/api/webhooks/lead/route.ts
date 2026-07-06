@@ -333,6 +333,15 @@ export async function POST(request: NextRequest) {
         payload.notify,
         !!enrichedLead.objetivoCredito,
       );
+      if (agendaTokenEnriched) {
+        // Marca a oferta da agenda — o cron do proativo espera 15 min a partir daqui.
+        after(() =>
+          db
+            .update(leads)
+            .set({ agendaOferecidaEm: new Date() })
+            .where(eq(leads.id, existing.id)),
+        );
+      }
 
       agendarProativoSeCompleto({
         leadId: existing.id,
@@ -723,6 +732,15 @@ export async function POST(request: NextRequest) {
     payload.notify,
     !!newLead.objetivoCredito,
   );
+  if (agendaTokenCreated) {
+    // Marca a oferta da agenda — o cron do proativo espera 15 min a partir daqui.
+    after(() =>
+      db
+        .update(leads)
+        .set({ agendaOferecidaEm: new Date() })
+        .where(eq(leads.id, newLead.id)),
+    );
+  }
 
   agendarProativoSeCompleto({
     leadId: newLead.id,

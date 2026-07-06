@@ -131,6 +131,7 @@ async function buildSamples(adminNome: string): Promise<
     qualifUrgencia: null,
     qualifWhatsappStatus: null,
     qualifWhatsappEm: null,
+    agendaOferecidaEm: null,
     status: "novo",
     motivoDesqualificacao: null,
     consultorId: null,
