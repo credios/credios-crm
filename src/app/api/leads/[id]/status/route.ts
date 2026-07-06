@@ -14,6 +14,7 @@ import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads/bancos";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { updateStatusSchema } from "@/lib/validators/lead";
+import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -125,6 +126,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     conteudo: `Status alterado de ${existing.status} para ${data.status}`,
     metadata: { de: existing.status, para: data.status, ...extraMeta } as never,
   });
+
+  // Mudança manual de status = consultor assumiu o lead → o bot cede a vez.
+  await cederVezAoHumano(id, "status_manual");
 
   if (isLeadBankStage(data.status) && "bancos" in data && data.bancos?.length) {
     for (const banco of data.bancos) {

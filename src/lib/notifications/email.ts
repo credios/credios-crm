@@ -181,6 +181,44 @@ export async function sendProativoFailureEmail(
 }
 
 /**
+ * Alerta do watchdog do SDR: leads parados há 24h+ numa fase de DECISÃO do bot
+ * (agendando/remarcando) — cliente viu os horários e sumiu, ou algo travou.
+ * Visibilidade pro time dar o empurrão humano. Destinatário: WHATSAPP_ALERT_EMAIL.
+ */
+export async function sendSdrWatchdogEmail(
+  itens: { id: string; nome: string; fase: string; horas: number }[],
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (itens.length === 0) return { ok: false, reason: "nenhum item" };
+  const to = process.env.WHATSAPP_ALERT_EMAIL ?? "gabriel.meirelles@credios.com.br";
+  const subject = `⏳ ${itens.length} lead(s) parado(s) na fase de agendamento da Heloísa`;
+  const linhas = itens
+    .map(
+      (i) =>
+        `<li style="margin-bottom:6px"><a href="${appUrl(`/leads/${i.id}`)}" style="color:#2563eb">${i.nome}</a> — fase <code>${i.fase}</code>, sem conversa há ~${i.horas}h</li>`,
+    )
+    .join("");
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a;line-height:1.5">
+      <h2 style="margin-bottom:8px">⏳ Leads parados no agendamento do SDR</h2>
+      <p>A Heloísa ofertou horários (ou está negociando remarcação) e a conversa está parada há mais de 24h. Vale um contato humano pra não esfriar:</p>
+      <ul>${linhas}</ul>
+      <p style="color:#666;font-size:13px;margin-top:16px">Alerta automático do watchdog do SDR (roda a cada hora; avisa 1x por lead até a conversa se mover).</p>
+    </div>`;
+  try {
+    const result = await resend.emails.send({ from, to, replyTo, subject, html });
+    if (result.error) {
+      console.error("[email-watchdog] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-watchdog] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+/**
  * E-mail de CONFIRMAÇÃO de reunião — vai pro CLIENTE (não é interno). Branded
  * Credios, com data/hora, link do Meet e o que esperar. Rodapé próprio (sem
  * menção ao CRM). Complementa o convite padrão do Google Calendar com a cara da

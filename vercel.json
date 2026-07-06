@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/lembrete-reuniao",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/sdr-watchdog",
+      "schedule": "0 * * * *"
     }
   ]
 }
