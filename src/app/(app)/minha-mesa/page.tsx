@@ -56,9 +56,11 @@ export default async function MinhaMesaPage() {
 
       <MiniPlacar data={placar} />
 
-      <FilaFazerAgora items={fila} />
-
+      {/* Faxina primeiro enquanto houver backlog — é o trabalho de onboarding
+          do playbook; some sozinha quando drenar. */}
       <BlocoFaxina data={faxina} />
+
+      <FilaFazerAgora items={fila} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <BlocoNovosParaMim items={novos} />

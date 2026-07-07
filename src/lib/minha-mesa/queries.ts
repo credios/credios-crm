@@ -86,6 +86,9 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
   // prioridade por lead — evita o mesmo lead aparecer duas vezes.
   // docs_paradas e esfriando foram substituídos pela CADÊNCIA (playbook
   // executável): cada card já é uma ação pronta com data pra acontecer.
+  const statusComCadencia = (await listCadencias())
+    .filter((c) => c.ativa)
+    .map((c) => c.statusKey);
   const [reunioesSemDesfecho, sla, cadencia, novosHoje, negociacaoParada, altoValorParado] =
     await Promise.all([
       qReuniaoSemDesfecho(consultorId),
@@ -93,7 +96,7 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
       qCadenciaDue(consultorId),
       qNovosHoje(consultorId),
       qNegociacaoParada(consultorId),
-      qAltoValorParado(consultorId),
+      qAltoValorParado(consultorId, statusComCadencia),
     ]);
 
   const todos: FilaItem[] = [
@@ -364,7 +367,10 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
   });
 }
 
-async function qAltoValorParado(consultorId: string): Promise<FilaItem[]> {
+async function qAltoValorParado(
+  consultorId: string,
+  statusComCadencia: string[],
+): Promise<FilaItem[]> {
   const rows = await db
     .select({
       leadId: leadsTable.id,
@@ -383,7 +389,10 @@ async function qAltoValorParado(consultorId: string): Promise<FilaItem[]> {
       and(
         eq(leadsTable.consultorId, consultorId),
         gte(leadsTable.valorCreditoCentavos, ALTO_VALOR_CENTAVOS),
-        notInArray(leadsTable.status, STATUS_TERMINAIS),
+        // Estágios com cadência ficam de fora: quem tem cadência ativa aparece
+        // no card de cadência; quem não tem, na FAXINA. Duplicar aqui só
+        // afogava a fila com cards antigos sem ação pronta.
+        notInArray(leadsTable.status, [...STATUS_TERMINAIS, ...statusComCadencia]),
         or(
           and(
             isNull(leadsTable.ultimoContato),
