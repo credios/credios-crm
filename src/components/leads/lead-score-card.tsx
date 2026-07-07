@@ -25,10 +25,12 @@ type Props = {
   } | null;
 };
 
-// Faixas oficiais do QUOD Score (fonte: central de ajuda da Direct Data):
-// 0–600 alto · 601–700 médio · 701–1000 baixo índice de inadimplência.
+// Faixas oficiais do QUOD Score (fonte: Direct Data + blog da QUOD). A escala
+// do QUOD vai de 300 a 1000 (não começa em zero, diferente de outros bureaus).
+const QUOD_MIN = 300;
+const QUOD_MAX = 1000;
 const FAIXAS_QUOD = [
-  { min: 0, max: 600, rotulo: "Alto índice de inadimplência", cor: "bg-rose-500" },
+  { min: 300, max: 600, rotulo: "Alto índice de inadimplência", cor: "bg-rose-500" },
   { min: 601, max: 700, rotulo: "Médio índice de inadimplência", cor: "bg-amber-500" },
   { min: 701, max: 1000, rotulo: "Baixo índice de inadimplência", cor: "bg-emerald-500" },
 ] as const;
@@ -36,11 +38,13 @@ const FAIXAS_QUOD = [
 function GuiaQuod({ score }: { score: number }) {
   return (
     <div className="space-y-1.5">
-      {/* Barra 0–1000 com marcador na posição do score */}
+      {/* Barra 300–1000 (escala real do QUOD) com marcador no score */}
       <div className="relative pt-2">
         <div
           className="absolute top-0 size-2 -translate-x-1/2 rotate-45 rounded-[2px] bg-foreground"
-          style={{ left: `${Math.min(100, Math.max(0, score / 10))}%` }}
+          style={{
+            left: `${Math.min(100, Math.max(0, ((score - QUOD_MIN) / (QUOD_MAX - QUOD_MIN)) * 100))}%`,
+          }}
           aria-hidden
         />
         <div className="flex h-1.5 w-full overflow-hidden rounded-full">
@@ -48,7 +52,7 @@ function GuiaQuod({ score }: { score: number }) {
             <div
               key={f.min}
               className={f.cor}
-              style={{ width: `${((f.max - f.min + 1) / 1001) * 100}%` }}
+              style={{ width: `${((f.max - Math.max(f.min, QUOD_MIN)) / (QUOD_MAX - QUOD_MIN)) * 100}%` }}
             />
           ))}
         </div>

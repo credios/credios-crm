@@ -261,6 +261,59 @@ export async function sendReuniaoConsultorEmail(params: {
 }
 
 /**
+ * LEMBRETE pro CONSULTOR: a reunião dele começa em ~15 min. Curto e direto —
+ * link do Meet em destaque e o lead no CRM pra revisar o caso antes de entrar.
+ */
+export async function sendReuniaoLembreteConsultorEmail(params: {
+  to: string;
+  consultorNome: string;
+  lead: Lead;
+  quando: string;
+  meetLink: string | null;
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!params.to) return { ok: false, reason: "destinatário vazio" };
+  const { lead, quando } = params;
+  const primeiro = params.consultorNome.split(" ")[0] || params.consultorNome;
+
+  const ctas: Array<{ href: string; label: string; tone?: "primary" | "secondary" }> = [];
+  if (params.meetLink) ctas.push({ href: params.meetLink, label: "Entrar no Meet" });
+  ctas.push({
+    href: appUrl(`/leads/${lead.id}`),
+    label: "Revisar o lead no CRM",
+    tone: params.meetLink ? "secondary" : "primary",
+  });
+
+  const html = renderEmailLayout({
+    preheader: `Sua reunião com ${lead.nome} começa em ~15 minutos`,
+    eyebrow: "Reunião em 15 minutos",
+    eyebrowTone: "warning",
+    title: lead.nome,
+    intro: `Olá, ${primeiro}. Sua conversa por vídeo com ${lead.nome} começa ${quando} (horário de Brasília) — em cerca de 15 minutos. Vale abrir o lead antes pra chegar afiado.`,
+    contentHtml: buildLeadKpis(lead),
+    ctas,
+  });
+
+  try {
+    const result = await resend.emails.send({
+      from,
+      to: params.to,
+      replyTo,
+      subject: `⏰ Em 15 min: reunião com ${lead.nome} — ${quando}`,
+      html,
+    });
+    if (result.error) {
+      console.error("[email-lembrete-consultor] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-lembrete-consultor] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+/**
  * AUTO-PERDIDO da cadência: o coletor encerrou um lead cuja decisão de fim de
  * cadência ficou ignorada por 7+ dias. Avisa o CONSULTOR na hora (pedido do
  * owner: cobrir falha humana) — reverter é 1 clique no CRM (Mudar status).

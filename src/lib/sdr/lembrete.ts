@@ -2,9 +2,12 @@ import "server-only";
 
 import { and, desc, eq, gte, lte } from "drizzle-orm";
 
-import { interacoes, leads, reunioes } from "../../../db/schema";
+import { interacoes, leads, reunioes, users as usersTable } from "../../../db/schema";
 import { db } from "@/lib/db";
-import { sendReuniaoLembreteEmail } from "@/lib/notifications/email";
+import {
+  sendReuniaoLembreteConsultorEmail,
+  sendReuniaoLembreteEmail,
+} from "@/lib/notifications/email";
 import { enviarTemplateWhatsApp, enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
 
 // Lembrete de reunião ~30 min antes. Disparado pelo cron a cada 10 min: pega
@@ -137,6 +140,64 @@ export async function processarLembretesReuniao(): Promise<ResultadoLembretes> {
         wamid: res.ok ? (res.id ?? null) : null,
       } as never,
     });
+    enviados++;
+  }
+
+  return { candidatos: pendentes.length, enviados };
+}
+
+// ── Lembrete pro CONSULTOR: e-mail 15 min antes de TODA reunião ─────────────
+// Cron a cada 10 min + janela [agora, agora+15min] → chega 5–15 min antes.
+// Flag própria (lembrete_consultor_enviado) — independente do lembrete do
+// cliente (~30 min, WhatsApp+email).
+
+const CONSULTOR_ANTECEDENCIA_MIN = 15;
+
+export async function processarLembretesConsultor(): Promise<ResultadoLembretes> {
+  const agora = Date.now();
+  const min = new Date(agora);
+  const max = new Date(agora + CONSULTOR_ANTECEDENCIA_MIN * 60_000);
+
+  const pendentes = await db
+    .select({
+      reuniaoId: reunioes.id,
+      inicio: reunioes.inicio,
+      meetLink: reunioes.meetLink,
+      lead: leads,
+      consultorNome: usersTable.nome,
+      consultorEmail: usersTable.email,
+    })
+    .from(reunioes)
+    .innerJoin(leads, eq(leads.id, reunioes.leadId))
+    .innerJoin(usersTable, eq(usersTable.id, reunioes.consultorId))
+    .where(
+      and(
+        eq(reunioes.status, "agendada"),
+        eq(reunioes.lembreteConsultorEnviado, false),
+        gte(reunioes.inicio, min),
+        lte(reunioes.inicio, max),
+      ),
+    )
+    .limit(LOTE);
+
+  let enviados = 0;
+  for (const r of pendentes) {
+    if (!r.consultorEmail) continue;
+    const em = await sendReuniaoLembreteConsultorEmail({
+      to: r.consultorEmail,
+      consultorNome: r.consultorNome,
+      lead: r.lead,
+      quando: quandoLabel(r.inicio),
+      meetLink: r.meetLink,
+    }).catch(() => ({ ok: false as const }));
+    if (!em.ok) {
+      console.error(`[lembrete-consultor] falha e-mail reunião ${r.reuniaoId}`);
+      continue; // não marca → tenta no próximo run (ainda dentro da janela)
+    }
+    await db
+      .update(reunioes)
+      .set({ lembreteConsultorEnviado: true, updatedAt: new Date() })
+      .where(eq(reunioes.id, r.reuniaoId));
     enviados++;
   }
 

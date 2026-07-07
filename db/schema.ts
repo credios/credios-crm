@@ -938,6 +938,10 @@ export const reunioes = pgTable(
     status: text("status").notNull().default("agendada"),
     /** Lembrete de ~30 min antes já enviado? (evita duplicar no cron) */
     lembreteEnviado: boolean("lembrete_enviado").notNull().default(false),
+    /** Lembrete de 15 min antes pro CONSULTOR (e-mail) já enviado? */
+    lembreteConsultorEnviado: boolean("lembrete_consultor_enviado")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
