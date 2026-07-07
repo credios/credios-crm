@@ -25,6 +25,58 @@ type Props = {
   } | null;
 };
 
+// Faixas oficiais do QUOD Score (fonte: central de ajuda da Direct Data):
+// 0–600 alto · 601–700 médio · 701–1000 baixo índice de inadimplência.
+const FAIXAS_QUOD = [
+  { min: 0, max: 600, rotulo: "Alto índice de inadimplência", cor: "bg-rose-500" },
+  { min: 601, max: 700, rotulo: "Médio índice de inadimplência", cor: "bg-amber-500" },
+  { min: 701, max: 1000, rotulo: "Baixo índice de inadimplência", cor: "bg-emerald-500" },
+] as const;
+
+function GuiaQuod({ score }: { score: number }) {
+  return (
+    <div className="space-y-1.5">
+      {/* Barra 0–1000 com marcador na posição do score */}
+      <div className="relative pt-2">
+        <div
+          className="absolute top-0 size-2 -translate-x-1/2 rotate-45 rounded-[2px] bg-foreground"
+          style={{ left: `${Math.min(100, Math.max(0, score / 10))}%` }}
+          aria-hidden
+        />
+        <div className="flex h-1.5 w-full overflow-hidden rounded-full">
+          {FAIXAS_QUOD.map((f) => (
+            <div
+              key={f.min}
+              className={f.cor}
+              style={{ width: `${((f.max - f.min + 1) / 1001) * 100}%` }}
+            />
+          ))}
+        </div>
+      </div>
+      <ul className="space-y-0.5">
+        {FAIXAS_QUOD.map((f) => {
+          const atual = score >= f.min && score <= f.max;
+          return (
+            <li
+              key={f.min}
+              className={`flex items-center gap-1.5 text-[11px] ${
+                atual ? "font-semibold text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <span className={`size-1.5 rounded-full ${f.cor}`} aria-hidden />
+              <span className="font-mono tabular-nums">
+                {f.min}–{f.max}
+              </span>
+              {f.rotulo}
+              {atual && <span className="text-fg-subtle">← este lead</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function idadeConsulta(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const horas = Math.floor(ms / 3_600_000);
@@ -95,6 +147,8 @@ export function LeadScoreCard({ leadId, temCpf, isAdmin, consulta }: Props) {
             Nenhuma consulta de score ainda.
           </p>
         )}
+
+        {consulta?.score != null && <GuiaQuod score={consulta.score} />}
 
         {!temCpf ? (
           <p className="text-xs text-muted-foreground">
