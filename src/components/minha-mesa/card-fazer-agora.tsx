@@ -15,6 +15,9 @@ type Props = {
   item: FilaItem;
   /** Chamado quando o user agiu em cima — card some otimisticamente. */
   onResolved: () => void;
+  /** Modo supervisão (admin vendo a mesa de outro): sem botões de ação —
+   *  impossível clicar em algo sem querer. */
+  readOnly?: boolean;
 };
 
 const MOTIVO_TONE: Record<
@@ -47,7 +50,7 @@ function formatLocalizacao(
   return cidade ?? estado ?? "";
 }
 
-export function CardFazerAgora({ item, onResolved }: Props) {
+export function CardFazerAgora({ item, onResolved, readOnly = false }: Props) {
   const tone = MOTIVO_TONE[item.motivoTipo];
 
   return (
@@ -112,7 +115,11 @@ export function CardFazerAgora({ item, onResolved }: Props) {
         )}
       </div>
 
-      {item.acao ? (
+      {readOnly ? (
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-fg-subtle">
+          somente leitura
+        </p>
+      ) : item.acao ? (
         <CadenciaActions
           leadId={item.leadId}
           whatsapp={item.whatsapp}

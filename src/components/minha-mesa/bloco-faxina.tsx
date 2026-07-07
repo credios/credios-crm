@@ -15,9 +15,9 @@ import type { Faxina } from "@/lib/minha-mesa/queries";
 // (de antes do playbook executável). 20 por dia; em ~2 dias o backlog seca e
 // este bloco desaparece pra sempre (a cadência + auto-perdido impedem volta).
 
-type Props = { data: Faxina };
+type Props = { data: Faxina; readOnly?: boolean };
 
-export function BlocoFaxina({ data }: Props) {
+export function BlocoFaxina({ data, readOnly = false }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [decididos, setDecididos] = useState<Set<string>>(new Set());
@@ -111,6 +111,7 @@ export function BlocoFaxina({ data }: Props) {
                   Ver lead
                 </Link>
               </div>
+              {readOnly ? null : (
               <div className="mt-3 flex items-center gap-1.5 flex-wrap">
                 <Button
                   size="sm"
@@ -147,6 +148,7 @@ export function BlocoFaxina({ data }: Props) {
                   Perdido
                 </Button>
               </div>
+              )}
             </article>
           ))}
         </div>

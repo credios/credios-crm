@@ -8,9 +8,9 @@ import { CardFazerAgora } from "./card-fazer-agora";
 import { Button } from "@/components/ui/button";
 import type { FilaItem } from "@/lib/minha-mesa/queries";
 
-type Props = { items: FilaItem[] };
+type Props = { items: FilaItem[]; readOnly?: boolean };
 
-export function FilaFazerAgora({ items }: Props) {
+export function FilaFazerAgora({ items, readOnly = false }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   // Itens "resolvidos" (já agiram em cima) somem da lista localmente.
@@ -72,6 +72,7 @@ export function FilaFazerAgora({ items }: Props) {
             <CardFazerAgora
               key={`${item.leadId}-${item.motivoTipo}`}
               item={item}
+              readOnly={readOnly}
               onResolved={() => marcarResolvido(item.leadId)}
             />
           ))}
