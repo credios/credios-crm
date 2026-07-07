@@ -554,6 +554,36 @@ export const cadenciaConfig = pgTable("cadencia_config", {
 });
 
 // ============================================================================
+// consultas_score — score de crédito por CPF (Direct Data → QUOD)
+// ============================================================================
+
+export const consultasScore = pgTable(
+  "consultas_score",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    /** CPF consultado (só dígitos), congelado no momento da consulta. */
+    cpf: text("cpf").notNull(),
+    score: integer("score"),
+    faixa: text("faixa"),
+    fonte: text("fonte").notNull().default("directd_quod"),
+    /** Resposta bruta da Direct Data, pra auditoria/debug. */
+    rawPayload: jsonb("raw_payload"),
+    /** null = consulta automática (sistema). */
+    consultadoPor: uuid("consultado_por").references(() => users.id),
+    criadoEm: timestamp("criado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_consultas_score_lead").on(t.leadId, t.criadoEm.desc()),
+    index("idx_consultas_score_cpf").on(t.cpf, t.criadoEm.desc()),
+  ],
+);
+
+// ============================================================================
 // duplicidades_pendentes — CPFs duplicados pendentes de revisão
 // ============================================================================
 

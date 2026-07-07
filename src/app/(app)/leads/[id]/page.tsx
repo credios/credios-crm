@@ -29,6 +29,7 @@ import {
   LeadPessoaisCard,
   LeadQualificacaoCard,
 } from "@/components/leads/lead-detail-sections";
+import { LeadScoreCard } from "@/components/leads/lead-score-card";
 import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
 import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
 import { LeadWhatsappConversa } from "@/components/leads/lead-whatsapp-conversa";
@@ -46,6 +47,7 @@ import { checkPermission, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { listConsultoresAtivos } from "@/lib/leads/list-leads";
 import type { ValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
+import { ultimaConsultaScore } from "@/lib/score/directd";
 import { listActiveStatuses } from "@/lib/status/queries";
 
 type Props = { params: Promise<{ id: string }> };
@@ -258,6 +260,18 @@ export default async function LeadDetailPage({ params }: Props) {
           <LeadOperacaoCard lead={lead} canEdit={canEdit} />
           <LeadEnderecoImovelCard lead={lead} canEdit={canEdit} />
           <LeadQualificacaoCard lead={lead} />
+
+          {/* Score de crédito (Direct Data/QUOD) — PII de crédito, oculto pra
+              marketing como CPF/renda. */}
+          {!isMarketing && (
+            <Suspense fallback={<SkeletonLeadBancos />}>
+              <ScoreBlock
+                leadId={lead.id}
+                temCpf={Boolean(row.cpf)}
+                isAdmin={user.perfil === "admin"}
+              />
+            </Suspense>
+          )}
 
           {/* Conversa do WhatsApp (Heloísa ↔ cliente). PII em texto livre →
               oculta pra marketing, igual à timeline. */}
@@ -724,5 +738,40 @@ function TimelineRedacted() {
         Solicite ao admin se precisar de informação específica deste lead.
       </p>
     </div>
+  );
+}
+
+async function ScoreBlock(props: {
+  leadId: string;
+  temCpf: boolean;
+  isAdmin: boolean;
+}) {
+  const consulta = await ultimaConsultaScore(props.leadId);
+  let autorNome: string | null = null;
+  if (consulta?.consultadoPor) {
+    autorNome = await db
+      .select({ nome: usersTable.nome })
+      .from(usersTable)
+      .where(eq(usersTable.id, consulta.consultadoPor))
+      .limit(1)
+      .then((r) => r[0]?.nome ?? null)
+      .catch(() => null);
+  }
+  return (
+    <LeadScoreCard
+      leadId={props.leadId}
+      temCpf={props.temCpf}
+      isAdmin={props.isAdmin}
+      consulta={
+        consulta
+          ? {
+              score: consulta.score,
+              faixa: consulta.faixa,
+              criadoEm: consulta.criadoEm.toISOString(),
+              autorNome,
+            }
+          : null
+      }
+    />
   );
 }

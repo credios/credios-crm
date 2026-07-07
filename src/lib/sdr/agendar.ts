@@ -8,6 +8,7 @@ import {
   moverEvento,
 } from "@/lib/calendar/google";
 import { db } from "@/lib/db";
+import { consultarScoreLead } from "@/lib/score/directd";
 
 const TZ = "America/Sao_Paulo";
 const fmtData = new Intl.DateTimeFormat("pt-BR", {
@@ -87,6 +88,13 @@ export async function agendarReuniao(d: DadosAgendamento): Promise<ReuniaoAgenda
       consultorId: d.consultorId,
     } as never,
   });
+
+  // Reunião marcada = lead quente → busca o score automaticamente (dedup 30d
+  // por CPF na lib; sem CPF vira no-op). Best-effort: falha na Direct Data
+  // jamais derruba o agendamento.
+  await consultarScoreLead(d.leadId, { autorId: null }).catch((e) =>
+    console.error("[agendarReuniao] score automático falhou:", e),
+  );
 
   return { reuniaoId: r!.id, meetLink: ev.meetLink, eventId: ev.eventId, rotulo: rot };
 }
