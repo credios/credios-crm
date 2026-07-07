@@ -115,7 +115,7 @@ function agendarProativoSeCompleto(opts: {
   qualifStatusAtual: string | null;
   /** Lead elegível pra AGENDA PÚBLICA: não dispara na hora — a página de sucesso
    *  mostra a grade de horários; se ele agendar, a qualif vira 'concluida' e o
-   *  cron proativo (15 min) pula; se não agendar, o cron abre a conversa. */
+   *  cron proativo (7 min da oferta) pula; se não agendar, o cron abre a conversa. */
   deferirParaCron?: boolean;
 }): void {
   if (opts.notify === false || !opts.completo || !opts.whatsapp || opts.qualifStatusAtual) {
@@ -334,7 +334,7 @@ export async function POST(request: NextRequest) {
         !!enrichedLead.objetivoCredito,
       );
       if (agendaTokenEnriched) {
-        // Marca a oferta da agenda — o cron do proativo espera 15 min a partir daqui.
+        // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
         after(() =>
           db
             .update(leads)
@@ -733,7 +733,7 @@ export async function POST(request: NextRequest) {
     !!newLead.objetivoCredito,
   );
   if (agendaTokenCreated) {
-    // Marca a oferta da agenda — o cron do proativo espera 15 min a partir daqui.
+    // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
     after(() =>
       db
         .update(leads)

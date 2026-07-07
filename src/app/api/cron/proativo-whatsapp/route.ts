@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 // Janela de elegibilidade do proativo: já passou MIN do cadastro inicial, mas
 // dentro de MAX (não varre leads antigos num primeiro run / após queda do cron).
 const MIN_MS = 15 * 60 * 1000; // 15 min após a 1ª etapa do simulador
+const AGENDA_GRACE_MS = 7 * 60 * 1000; // 7 min após a OFERTA da agenda pública
 const MAX_MS = 2 * 60 * 60 * 1000; // teto: 2h
 const LOTE = 50; // máx. por execução (drena em runs seguintes via claim)
 
@@ -43,13 +44,17 @@ export async function GET(request: NextRequest) {
         isNull(leads.qualifWhatsappStatus), // ainda não recebeu/abriu
         isNotNull(leads.whatsapp),
         isNotNull(leads.valorCreditoCentavos), // simulou (1ª etapa capturou valor)
-        lt(leads.createdAt, new Date(agora - MIN_MS)),
         gt(leads.createdAt, new Date(agora - MAX_MS)),
-        // Viu a agenda pública? Espera 15 min DA OFERTA (não da criação) — dá
-        // tempo de o cliente marcar sozinho antes de a Heloísa abordar.
+        // Sem agenda pública: espera MIN da criação (tempo de concluir o form).
+        // Viu a agenda pública? Espera só o GRACE de 7 min DA OFERTA (form já
+        // está completo) — tempo mais que suficiente pro cliente marcar na tela
+        // final antes de a Heloísa abordar.
         or(
-          isNull(leads.agendaOferecidaEm),
-          lt(leads.agendaOferecidaEm, new Date(agora - MIN_MS)),
+          and(
+            isNull(leads.agendaOferecidaEm),
+            lt(leads.createdAt, new Date(agora - MIN_MS)),
+          ),
+          lt(leads.agendaOferecidaEm, new Date(agora - AGENDA_GRACE_MS)),
         ),
         notInArray(leads.status, [...SYSTEM_TERMINAL_KEYS]),
       ),
