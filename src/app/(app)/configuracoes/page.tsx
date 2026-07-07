@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Compass, ListChecks, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
+import { Activity, ArrowRight, Calculator, Compass, ListChecks, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -36,6 +36,13 @@ const SECTIONS = [
     description:
       "O playbook executável da Mesa: passos, dias, ligações obrigatórias e frases de energia por estágio.",
     icon: ListChecks,
+  },
+  {
+    href: "/configuracoes/simulacao",
+    title: "Simulação — faixas da proposta",
+    description:
+      "Faixas de taxa (pós e pré), prazos e parâmetros do PDF de proposta gerado com 1 clique no lead.",
+    icon: Calculator,
   },
   {
     href: "/configuracoes/status",

@@ -30,7 +30,7 @@ import {
   LeadQualificacaoCard,
 } from "@/components/leads/lead-detail-sections";
 import { LeadScoreCard } from "@/components/leads/lead-score-card";
-import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
+import { LeadPropostaCard } from "@/components/leads/lead-proposta-card";
 import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
 import { LeadWhatsappConversa } from "@/components/leads/lead-whatsapp-conversa";
 import { MensagensSugeridas } from "@/components/leads/mensagens-sugeridas";
@@ -48,6 +48,7 @@ import { db } from "@/lib/db";
 import { listConsultoresAtivos } from "@/lib/leads/list-leads";
 import type { ValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { ultimaConsultaScore } from "@/lib/score/directd";
+import { getSimulacaoConfig } from "@/lib/simulador/config";
 import { listActiveStatuses } from "@/lib/status/queries";
 
 type Props = { params: Promise<{ id: string }> };
@@ -304,15 +305,13 @@ export default async function LeadDetailPage({ params }: Props) {
               inválida. Demais perfis (admin, gerente, consultor c/ acesso)
               podem gerar PDF a qualquer momento. */}
           {!isMarketing && (
-            <LeadSimulacaoCard
-              leadId={lead.id}
-              defaults={{
-                nome: lead.nome,
-                cpf: lead.cpf,
-                valorCreditoCentavos: lead.valorCreditoCentavos,
-                valorImovelCentavos: lead.valorImovelCentavos,
-              }}
-            />
+            <Suspense fallback={<SkeletonLeadBancos />}>
+              <PropostaBlock
+                leadId={lead.id}
+                valorCreditoCentavos={lead.valorCreditoCentavos}
+                valorImovelCentavos={lead.valorImovelCentavos}
+              />
+            </Suspense>
           )}
 
           <Suspense fallback={<MensagensSkeleton />}>
@@ -772,6 +771,29 @@ async function ScoreBlock(props: {
             }
           : null
       }
+    />
+  );
+}
+
+async function PropostaBlock(props: {
+  leadId: string;
+  valorCreditoCentavos: number | null;
+  valorImovelCentavos: number | null;
+}) {
+  const cfg = await getSimulacaoConfig();
+  const fmt = (n: number) => n.toFixed(2).replace(".", ",");
+  return (
+    <LeadPropostaCard
+      leadId={props.leadId}
+      defaults={{
+        valorCreditoCentavos: props.valorCreditoCentavos,
+        valorImovelCentavos: props.valorImovelCentavos,
+      }}
+      faixas={{
+        pos: `${fmt(cfg.pos.taxaMinAm)}–${fmt(cfg.pos.taxaMaxAm)}% a.m.`,
+        pre: `${fmt(cfg.pre.taxaMinAm)}–${fmt(cfg.pre.taxaMaxAm)}% a.m.`,
+        prazoMax: cfg.prazos[cfg.prazos.length - 1] ?? 240,
+      }}
     />
   );
 }

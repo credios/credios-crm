@@ -554,6 +554,20 @@ export const cadenciaConfig = pgTable("cadencia_config", {
 });
 
 // ============================================================================
+// simulacao_config — faixas da proposta (Avanti-style), admin-editável
+// ============================================================================
+
+export const simulacaoConfig = pgTable("simulacao_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** { pos: {taxaMinAm, taxaMaxAm}, pre: {...}, prazos, prazoDestaque,
+   *  comprometimentoRendaPct, validadeDias } — ver src/lib/simulador/config.ts */
+  config: jsonb("config").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// ============================================================================
 // consultas_score — score de crédito por CPF (Direct Data → QUOD)
 // ============================================================================
 
