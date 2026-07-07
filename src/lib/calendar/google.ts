@@ -165,6 +165,30 @@ export async function atualizarHorarioEvento(
   }
 }
 
+/**
+ * MOVE um evento pra agenda de OUTRO consultor (reatribuição de lead com
+ * reunião marcada). O organizador passa a ser o destino; o link do Meet e os
+ * convidados são preservados; todos são notificados.
+ */
+export async function moverEvento(
+  subjectAtual: string,
+  eventId: string,
+  destinoEmail: string,
+): Promise<void> {
+  const token = await getAccessToken(subjectAtual);
+  const url =
+    `${CAL_API}/calendars/${encodeURIComponent(subjectAtual)}/events/${encodeURIComponent(eventId)}/move` +
+    `?destination=${encodeURIComponent(destinoEmail)}&sendUpdates=all`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`google moveEvent: ${resp.status} ${body.slice(0, 200)}`);
+  }
+}
+
 /** Cancela/remove um evento (usado em remarcar/cancelar). Notifica os convidados. */
 export async function deletarEvento(subject: string, eventId: string): Promise<void> {
   const token = await getAccessToken(subject);

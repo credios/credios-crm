@@ -10,7 +10,11 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { sendLeadAssignedEmail } from "@/lib/notifications/email";
+import {
+  sendLeadAssignedEmail,
+  sendReuniaoConsultorEmail,
+} from "@/lib/notifications/email";
+import { transferirReunioesDoLead } from "@/lib/sdr/agendar";
 import { reassignSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -113,12 +117,35 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     targetConsultor.email &&
     targetConsultor.id !== existing.consultorId
   ) {
+    // A reunião pertence ao lead: as ABERTAS (inclusive as passadas sem
+    // desfecho) vão junto pro novo consultor — o card de desfecho cai na Mesa
+    // DELE e as futuras mudam de agenda no Google (mesmo Meet). Best-effort:
+    // falha aqui não desfaz a reatribuição.
+    const transferidas = await transferirReunioesDoLead(id, targetConsultor).catch(
+      (e) => {
+        console.error("[atribuicao] transferir reuniões falhou:", e);
+        return [];
+      },
+    );
+
     after(async () => {
       await sendLeadAssignedEmail(
         updated,
         targetConsultor.email,
         targetConsultor.nome,
       );
+      // Reuniões FUTURAS transferidas → o novo consultor precisa saber que já
+      // tem compromisso marcado com esse lead.
+      for (const t of transferidas.filter((x) => x.futura)) {
+        await sendReuniaoConsultorEmail({
+          to: targetConsultor.email,
+          consultorNome: targetConsultor.nome,
+          lead: updated,
+          quando: t.rotulo,
+          meetLink: t.meetLink,
+          tipo: "agendada",
+        }).catch((e) => console.error("[atribuicao] email reunião falhou:", e));
+      }
     });
   }
 

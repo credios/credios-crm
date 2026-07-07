@@ -5,6 +5,7 @@ import {
   atualizarHorarioEvento,
   criarEvento,
   deletarEvento,
+  moverEvento,
 } from "@/lib/calendar/google";
 import { db } from "@/lib/db";
 
@@ -175,6 +176,84 @@ export async function remarcarReuniao(
   });
 
   return { meetLink: r.meetLink, rotulo: rot };
+}
+
+export type ReuniaoTransferida = {
+  reuniaoId: string;
+  rotulo: string;
+  meetLink: string | null;
+  futura: boolean;
+};
+
+/**
+ * Lead reatribuído → as reuniões ainda ABERTAS (status 'agendada') passam pro
+ * novo consultor: o card de desfecho cai na Mesa DELE, e as reuniões FUTURAS
+ * são movidas pra agenda Google dele (mesmo Meet, convidados notificados). A
+ * reunião pertence ao lead — quem herda o lead herda a reunião.
+ * Best-effort no Google: se o move falhar, a transferência no CRM acontece
+ * mesmo assim (o desfecho é o que não pode se perder).
+ */
+export async function transferirReunioesDoLead(
+  leadId: string,
+  novoConsultor: { id: string; email: string; nome: string },
+): Promise<ReuniaoTransferida[]> {
+  const abertas = await db
+    .select({
+      id: reunioes.id,
+      consultorId: reunioes.consultorId,
+      eventId: reunioes.googleEventId,
+      meetLink: reunioes.meetLink,
+      inicio: reunioes.inicio,
+    })
+    .from(reunioes)
+    .where(and(eq(reunioes.leadId, leadId), eq(reunioes.status, "agendada")));
+
+  const transferidas: ReuniaoTransferida[] = [];
+  for (const r of abertas) {
+    if (r.consultorId === novoConsultor.id) continue;
+
+    const [anterior] = r.consultorId
+      ? await db
+          .select({ email: usersTable.email, nome: usersTable.nome })
+          .from(usersTable)
+          .where(eq(usersTable.id, r.consultorId))
+          .limit(1)
+      : [undefined];
+
+    const futura = r.inicio.getTime() > Date.now();
+    // Reunião futura → move o evento pra agenda do novo consultor (mesmo Meet).
+    if (futura && r.eventId && anterior?.email) {
+      await moverEvento(anterior.email, r.eventId, novoConsultor.email).catch((e) =>
+        console.error(`[reuniao] mover evento ${r.eventId} falhou (segue só no CRM):`, e),
+      );
+    }
+
+    await db
+      .update(reunioes)
+      .set({ consultorId: novoConsultor.id, updatedAt: new Date() })
+      .where(eq(reunioes.id, r.id));
+
+    await db.insert(interacoes).values({
+      leadId,
+      autorId: null,
+      tipo: "evento_sistema",
+      conteudo: `Reunião (${rotulo(r.inicio)}) transferida de ${anterior?.nome ?? "?"} para ${novoConsultor.nome} junto com o lead.`,
+      metadata: {
+        reuniaoId: r.id,
+        transferencia: true,
+        de: r.consultorId,
+        para: novoConsultor.id,
+      } as never,
+    });
+
+    transferidas.push({
+      reuniaoId: r.id,
+      rotulo: rotulo(r.inicio),
+      meetLink: r.meetLink,
+      futura,
+    });
+  }
+  return transferidas;
 }
 
 /** Cancela uma reunião agendada (remove do Google + marca status). */
