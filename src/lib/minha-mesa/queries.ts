@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   and,
+  asc,
   desc,
   eq,
   gte,
@@ -779,4 +780,55 @@ function formatTempoDecorrido(min: number): string {
   if (h < 24) return m > 0 ? `${h}h${m}min` : `${h}h`;
   const d = Math.floor(h / 24);
   return `${d}d`;
+}
+
+// ─── Próximas reuniões ──────────────────────────────────────────────────────
+
+export type ProximaReuniao = {
+  reuniaoId: string;
+  inicio: Date;
+  meetLink: string | null;
+  leadId: string;
+  leadNome: string;
+  leadStatus: string;
+  valorCreditoCentavos: number | null;
+  hoje: boolean;
+};
+
+/** TODAS as reuniões agendadas ainda por acontecer do consultor, na ordem em
+ *  que vão acontecer — a agenda de compromissos da Mesa. (As que já passaram
+ *  sem desfecho viram card de cobrança na fila, não entram aqui.) */
+export async function getProximasReunioes(
+  consultorId: string,
+): Promise<ProximaReuniao[]> {
+  const rows = await db
+    .select({
+      reuniaoId: reunioes.id,
+      inicio: reunioes.inicio,
+      meetLink: reunioes.meetLink,
+      leadId: leadsTable.id,
+      leadNome: leadsTable.nome,
+      leadStatus: leadsTable.status,
+      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
+    })
+    .from(reunioes)
+    .innerJoin(leadsTable, eq(leadsTable.id, reunioes.leadId))
+    .where(
+      and(
+        eq(reunioes.consultorId, consultorId),
+        eq(reunioes.status, "agendada"),
+        gte(reunioes.inicio, sql`now()`),
+        notInArray(leadsTable.status, STATUS_TERMINAIS),
+      ),
+    )
+    .orderBy(asc(reunioes.inicio));
+
+  const hojeYmd = todayYmdBrt();
+  const ymdBrt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return rows.map((r) => ({ ...r, hoje: ymdBrt.format(r.inicio) === hojeYmd }));
 }

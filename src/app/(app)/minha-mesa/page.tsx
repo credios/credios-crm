@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { BlocoCarteiraEmRisco } from "@/components/minha-mesa/bloco-carteira-em-risco";
 import { BlocoFaxina } from "@/components/minha-mesa/bloco-faxina";
 import { BlocoNovosParaMim } from "@/components/minha-mesa/bloco-novos-para-mim";
+import { BlocoProximasReunioes } from "@/components/minha-mesa/bloco-proximas-reunioes";
 import { FilaFazerAgora } from "@/components/minha-mesa/fila-fazer-agora";
 import { MiniPlacar } from "@/components/minha-mesa/mini-placar";
 import { ConsultorPicker } from "@/components/relatorios/consultor-picker";
@@ -16,6 +17,7 @@ import {
   getFilaFazerAgora,
   getMiniPlacar,
   getNovosParaMim,
+  getProximasReunioes,
 } from "@/lib/minha-mesa/queries";
 
 export const revalidate = 30;
@@ -49,12 +51,13 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       nome: user.nome,
     };
 
-  const [placar, fila, novos, risco, faxina] = await Promise.all([
+  const [placar, fila, novos, risco, faxina, reunioes] = await Promise.all([
     getMiniPlacar(consultorVisualizadoId),
     getFilaFazerAgora(consultorVisualizadoId),
     getNovosParaMim(consultorVisualizadoId),
     getCarteiraEmRisco(consultorVisualizadoId),
     getFaxina(consultorVisualizadoId),
+    getProximasReunioes(consultorVisualizadoId),
   ]);
 
   const primeiroNome = user.nome.split(" ")[0] || user.nome;
@@ -95,6 +98,8 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       </div>
 
       <MiniPlacar data={placar} />
+
+      <BlocoProximasReunioes items={reunioes} />
 
       {/* Faxina primeiro enquanto houver backlog — é o trabalho de onboarding
           do playbook; some sozinha quando drenar. */}
