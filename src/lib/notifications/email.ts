@@ -314,6 +314,87 @@ export async function sendReuniaoLembreteConsultorEmail(params: {
 }
 
 /**
+ * SOLICITAÇÃO DE SCORE: consultor pediu consulta (paga) — o admin aprova na
+ * Mesa ou direto no lead. Aviso imediato pro admin não deixar pendurado.
+ */
+export async function sendScoreSolicitacaoEmail(params: {
+  to: string;
+  adminNome: string;
+  solicitanteNome: string;
+  lead: Lead;
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!params.to) return { ok: false, reason: "destinatário vazio" };
+  const { lead } = params;
+  const primeiro = params.adminNome.split(" ")[0] || params.adminNome;
+  const html = renderEmailLayout({
+    preheader: `${params.solicitanteNome} pediu consulta de score pra ${lead.nome}`,
+    eyebrow: "Solicitação de score",
+    eyebrowTone: "warning",
+    title: lead.nome,
+    intro: `Olá, ${primeiro}. ${params.solicitanteNome} solicitou a consulta de score (Direct Data/QUOD, paga) deste lead. Aprove ou recuse na sua Mesa — ou direto na página do lead.`,
+    contentHtml: buildLeadKpis(lead),
+    ctas: [
+      { href: appUrl(`/minha-mesa`), label: "Abrir a Mesa" },
+      { href: appUrl(`/leads/${lead.id}`), label: "Ver o lead", tone: "secondary" },
+    ],
+  });
+  try {
+    const result = await resend.emails.send({
+      from,
+      to: params.to,
+      replyTo,
+      subject: `Score solicitado: ${lead.nome} (por ${params.solicitanteNome})`,
+      html,
+    });
+    if (result.error) return { ok: false, reason: result.error.message };
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-score-solicitacao] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+/**
+ * DOCS INICIADOS: o cliente começou a anexar documentos pelo portal (1º upload
+ * de um novo lote). Sem este aviso, o cliente anexava e ninguém ficava sabendo.
+ */
+export async function sendDocsIniciadosEmail(params: {
+  to: string;
+  consultorNome: string;
+  lead: Lead;
+  rotuloDocumento: string;
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!params.to) return { ok: false, reason: "destinatário vazio" };
+  const { lead } = params;
+  const primeiro = params.consultorNome.split(" ")[0] || params.consultorNome;
+  const html = renderEmailLayout({
+    preheader: `${lead.nome} começou a enviar documentos pelo portal`,
+    eyebrow: "Documentos chegando",
+    eyebrowTone: "success",
+    title: lead.nome,
+    intro: `Olá, ${primeiro}. O cliente começou a enviar documentos pelo portal agora — o primeiro foi "${params.rotuloDocumento}". Vale revisar e já dar um retorno pra manter o ritmo (o pedido de revisão também entrou na sua Mesa).`,
+    contentHtml: buildLeadKpis(lead),
+    ctas: [{ href: appUrl(`/leads/${lead.id}`), label: "Revisar documentos" }],
+  });
+  try {
+    const result = await resend.emails.send({
+      from,
+      to: params.to,
+      replyTo,
+      subject: `📎 ${lead.nome} começou a enviar documentos`,
+      html,
+    });
+    if (result.error) return { ok: false, reason: result.error.message };
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-docs-iniciados] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+/**
  * AUTO-PERDIDO da cadência: o coletor encerrou um lead cuja decisão de fim de
  * cadência ficou ignorada por 7+ dias. Avisa o CONSULTOR na hora (pedido do
  * owner: cobrir falha humana) — reverter é 1 clique no CRM (Mudar status).

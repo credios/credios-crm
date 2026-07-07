@@ -3,6 +3,7 @@
 import {
   Check,
   Clock,
+  FileSearch,
   Loader2,
   MessageSquare,
   Phone,
@@ -89,6 +90,42 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
         <Button size="sm" variant="outline" onClick={() => void desfecho("no_show")} disabled={!!pending}>
           {pending === "no_show" ? <Loader2 className="size-3.5 animate-spin" /> : <PhoneMissed className="size-3.5" />}
           Não aconteceu
+        </Button>
+      </div>
+    );
+  }
+
+  /* ── REVISAR DOCUMENTOS do portal: abre o lead + marca revisado ── */
+  if (acao.tipo === "revisar_docs") {
+    const revisei = async () => {
+      setPending("revisei");
+      const { ok, json } = await post(`/api/leads/${leadId}/interacoes`, {
+        tipo: "anotacao",
+        conteudo: `Documentos do portal revisados (${acao.quantidade} novo${acao.quantidade > 1 ? "s" : ""}).`,
+      });
+      setPending(null);
+      if (!ok) {
+        toast.error("Não deu certo", {
+          description: typeof json.error === "string" ? json.error : "Tente de novo.",
+        });
+        return;
+      }
+      toast.success("Revisão registrada.");
+      onResolved();
+    };
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <Button
+          size="sm"
+          className="bg-emerald-600 hover:bg-emerald-600/90 text-white"
+          onClick={() => window.open(`/leads/${leadId}`, "_blank", "noopener,noreferrer")}
+        >
+          <FileSearch className="size-3.5" />
+          Abrir documentos
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => void revisei()} disabled={!!pending}>
+          {pending === "revisei" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+          Revisei — dei retorno
         </Button>
       </div>
     );

@@ -1,10 +1,16 @@
 import crypto from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
-import { NextResponse, type NextRequest } from "next/server";
+import { and, eq, gte, sql } from "drizzle-orm";
+import { after, NextResponse, type NextRequest } from "next/server";
 
-import { interacoes, leadDocumentos } from "../../../../../../db/schema";
+import {
+  interacoes,
+  leadDocumentos,
+  leads as leadsTable,
+  users as usersTable,
+} from "../../../../../../db/schema";
 import { db } from "@/lib/db";
+import { sendDocsIniciadosEmail } from "@/lib/notifications/email";
 import { resolvePortalToken } from "@/lib/portal/token";
 import { createAdminClient, DOCUMENTOS_BUCKET } from "@/lib/supabase/admin";
 
@@ -148,6 +154,23 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       .returning({ id: leadDocumentos.id });
     docId = doc!.id;
 
+    // Detecta INÍCIO de envio (nenhum outro upload nas últimas 12h) ANTES de
+    // registrar este — pra avisar o consultor só no 1º arquivo do lote, não a
+    // cada foto que o cliente sobe em sequência.
+    const [uploadRecente] = await db
+      .select({ id: interacoes.id })
+      .from(interacoes)
+      .where(
+        and(
+          eq(interacoes.leadId, leadId),
+          eq(interacoes.tipo, "documento_recebido"),
+          // Upload nas últimas 12h = mesmo lote (não reavisa a cada arquivo).
+          gte(interacoes.criadoEm, sql`now() - interval '12 hours'`),
+        ),
+      )
+      .limit(1);
+    const inicioDeEnvio = !uploadRecente;
+
     await db.insert(interacoes).values({
       leadId,
       autorId: null,
@@ -155,6 +178,29 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       conteudo: `Documento recebido pelo portal: ${rotulo} (${file.name})`,
       metadata: { tipo, categoria, storagePath } as never,
     });
+
+    if (inicioDeEnvio) {
+      after(async () => {
+        const [lead] = await db
+          .select()
+          .from(leadsTable)
+          .where(eq(leadsTable.id, leadId))
+          .limit(1);
+        if (!lead?.consultorId) return;
+        const [c] = await db
+          .select({ nome: usersTable.nome, email: usersTable.email })
+          .from(usersTable)
+          .where(eq(usersTable.id, lead.consultorId))
+          .limit(1);
+        if (!c?.email) return;
+        await sendDocsIniciadosEmail({
+          to: c.email,
+          consultorNome: c.nome,
+          lead,
+          rotuloDocumento: rotulo,
+        }).catch((e) => console.error("[portal/upload] email docs falhou:", e));
+      });
+    }
   } catch (err) {
     // Falhou o metadado: remove o arquivo órfão pra não deixar lixo no bucket.
     await supabase.storage.from(DOCUMENTOS_BUCKET).remove([storagePath]).catch(() => {});

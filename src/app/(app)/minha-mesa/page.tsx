@@ -5,6 +5,7 @@ import { BlocoCarteiraEmRisco } from "@/components/minha-mesa/bloco-carteira-em-
 import { BlocoFaxina } from "@/components/minha-mesa/bloco-faxina";
 import { BlocoNovosParaMim } from "@/components/minha-mesa/bloco-novos-para-mim";
 import { BlocoProximasReunioes } from "@/components/minha-mesa/bloco-proximas-reunioes";
+import { BlocoSolicitacoesScore } from "@/components/minha-mesa/bloco-solicitacoes-score";
 import { FilaFazerAgora } from "@/components/minha-mesa/fila-fazer-agora";
 import { MiniPlacar } from "@/components/minha-mesa/mini-placar";
 import { ConsultorPicker } from "@/components/relatorios/consultor-picker";
@@ -18,6 +19,7 @@ import {
   getMiniPlacar,
   getNovosParaMim,
   getProximasReunioes,
+  getSolicitacoesScorePendentes,
 } from "@/lib/minha-mesa/queries";
 
 export const revalidate = 30;
@@ -51,14 +53,17 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       nome: user.nome,
     };
 
-  const [placar, fila, novos, risco, faxina, reunioes] = await Promise.all([
-    getMiniPlacar(consultorVisualizadoId),
-    getFilaFazerAgora(consultorVisualizadoId),
-    getNovosParaMim(consultorVisualizadoId),
-    getCarteiraEmRisco(consultorVisualizadoId),
-    getFaxina(consultorVisualizadoId),
-    getProximasReunioes(consultorVisualizadoId),
-  ]);
+  const [placar, fila, novos, risco, faxina, reunioes, solicitacoesScore] =
+    await Promise.all([
+      getMiniPlacar(consultorVisualizadoId),
+      getFilaFazerAgora(consultorVisualizadoId),
+      getNovosParaMim(consultorVisualizadoId),
+      getCarteiraEmRisco(consultorVisualizadoId),
+      getFaxina(consultorVisualizadoId),
+      getProximasReunioes(consultorVisualizadoId),
+      // Fila de aprovação do admin — global, independe da mesa visualizada.
+      user.perfil === "admin" ? getSolicitacoesScorePendentes() : Promise.resolve([]),
+    ]);
 
   const primeiroNome = user.nome.split(" ")[0] || user.nome;
 
@@ -98,6 +103,8 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       </div>
 
       <MiniPlacar data={placar} />
+
+      {user.perfil === "admin" && <BlocoSolicitacoesScore items={solicitacoesScore} />}
 
       <BlocoProximasReunioes items={reunioes} />
 

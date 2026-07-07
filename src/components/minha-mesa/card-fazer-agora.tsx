@@ -26,6 +26,7 @@ const MOTIVO_TONE: Record<
 > = {
   reuniao_sem_desfecho: { border: "border-l-destructive", pill: "danger" },
   sla_estourado: { border: "border-l-destructive", pill: "danger" },
+  docs_novos: { border: "border-l-teal-500", pill: "info" },
   cadencia: { border: "border-l-emerald-500", pill: "info" },
   novo_hoje: { border: "border-l-blue-500", pill: "info" },
   negociacao_parada: { border: "border-l-amber-500", pill: "warning" },

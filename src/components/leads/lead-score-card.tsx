@@ -23,6 +23,8 @@ type Props = {
     criadoEm: string; // ISO
     autorNome: string | null; // null = automática
   } | null;
+  /** Solicitação PENDENTE de consulta (consultor pediu, admin decide). */
+  solicitacao: { id: string; solicitanteNome: string; criadoEm: string } | null;
 };
 
 // Faixas oficiais do QUOD Score (fonte: Direct Data + blog da QUOD). A escala
@@ -90,11 +92,43 @@ function idadeConsulta(iso: string): string {
   return `há ${dias}d`;
 }
 
-export function LeadScoreCard({ leadId, temCpf, isAdmin, consulta }: Props) {
+export function LeadScoreCard({ leadId, temCpf, isAdmin, consulta, solicitacao }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState(false);
   const [pending, setPending] = useState(false);
+  const [pendingSol, setPendingSol] = useState<string | null>(null);
+
+  async function solicitar() {
+    setPendingSol("solicitar");
+    const res = await fetch(`/api/leads/${leadId}/score/solicitar`, { method: "POST" });
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    setPendingSol(null);
+    if (!res.ok) {
+      toast.error("Não deu pra solicitar", { description: json.error ?? "Tente de novo." });
+      return;
+    }
+    toast.success("Solicitação enviada — o admin foi avisado por e-mail.");
+    startTransition(() => router.refresh());
+  }
+
+  async function resolver(acao: "aprovar" | "recusar") {
+    if (!solicitacao) return;
+    setPendingSol(acao);
+    const res = await fetch(`/api/score/solicitacoes/${solicitacao.id}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ acao }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    setPendingSol(null);
+    if (!res.ok) {
+      toast.error("Não deu certo", { description: json.error ?? "Tente de novo." });
+      return;
+    }
+    toast.success(acao === "aprovar" ? "Aprovado — score consultado." : "Solicitação recusada.");
+    startTransition(() => router.refresh());
+  }
 
   async function consultar() {
     setPending(true);
@@ -154,20 +188,49 @@ export function LeadScoreCard({ leadId, temCpf, isAdmin, consulta }: Props) {
 
         {consulta?.score != null && <GuiaQuod score={consulta.score} />}
 
+        {solicitacao && isAdmin && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+            <p className="text-xs">
+              <span className="font-semibold">{solicitacao.solicitanteNome}</span>{" "}
+              solicitou a consulta de score {idadeConsulta(solicitacao.criadoEm)}.
+              Consulta paga na Direct Data — aprovar?
+            </p>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" onClick={() => void resolver("aprovar")} disabled={!!pendingSol}
+                className="bg-emerald-600 hover:bg-emerald-600/90 text-white">
+                {pendingSol === "aprovar" ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                Aprovar e consultar
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => void resolver("recusar")} disabled={!!pendingSol}>
+                Recusar
+              </Button>
+            </div>
+          </div>
+        )}
+
         {!temCpf ? (
           <p className="text-xs text-muted-foreground">
             Lead sem CPF — preencha o CPF para poder consultar.
           </p>
         ) : !isAdmin ? (
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" disabled>
-              <Lock className="size-3.5" />
-              Consultar score
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              Somente admin pode requisitar.
-            </span>
-          </div>
+          solicitacao ? (
+            <p className="text-xs text-muted-foreground">
+              <Lock className="size-3 inline mr-1" />
+              Solicitação enviada {idadeConsulta(solicitacao.criadoEm)} — aguardando
+              aprovação do admin.
+            </p>
+          ) : (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button size="sm" variant="outline" disabled={!!pendingSol}
+                onClick={() => void solicitar()}>
+                {pendingSol === "solicitar" ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                Solicitar consulta ao admin
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                A consulta é paga — o admin aprova e o score aparece aqui.
+              </span>
+            </div>
+          )
         ) : confirmando ? (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
             <p className="text-xs">

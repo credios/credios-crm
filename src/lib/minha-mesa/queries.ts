@@ -18,7 +18,9 @@ import {
   interacoes,
   leads as leadsTable,
   reunioes,
+  scoreSolicitacoes,
   slaAlertas,
+  users as usersTable,
 } from "../../../db/schema";
 import { db } from "@/lib/db";
 import { endOfDayBrt, startOfDayBrt, todayYmdBrt } from "@/lib/datetime/brt";
@@ -32,6 +34,7 @@ import { NAO_CONTATO_TIPOS } from "@/lib/leads/interacao-tipos";
 export type FilaItemTipo =
   | "reuniao_sem_desfecho"
   | "sla_estourado"
+  | "docs_novos"
   | "cadencia"
   | "novo_hoje"
   | "negociacao_parada"
@@ -48,6 +51,7 @@ export type FilaAcao =
       atrasoDias: number;
     }
   | { tipo: "desfecho_reuniao"; reuniaoId: string; quando: string }
+  | { tipo: "revisar_docs"; quantidade: number }
   | {
       /** Contato de 1 toque fora da cadência: todo card da fila tem uma ação
        *  concreta — nunca só um aviso. */
@@ -79,6 +83,7 @@ export type FilaItem = {
 const SCORE: Record<FilaItemTipo, number> = {
   reuniao_sem_desfecho: 100,
   sla_estourado: 98,
+  docs_novos: 95, // cliente enviou docs e ninguém olhou — ponto de inflexão nº 2
   cadencia: 90, // +5 se atrasado (calculado no bucket)
   novo_hoje: 85,
   negociacao_parada: 75,
@@ -129,10 +134,11 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
   const statusComCadencia = (await listCadencias())
     .filter((c) => c.ativa)
     .map((c) => c.statusKey);
-  const [reunioesSemDesfecho, sla, cadencia, novosHoje, negociacaoParada, altoValorParado] =
+  const [reunioesSemDesfecho, sla, docsNovos, cadencia, novosHoje, negociacaoParada, altoValorParado] =
     await Promise.all([
       qReuniaoSemDesfecho(consultorId),
       qSlaEstourado(consultorId),
+      qDocsNovos(consultorId),
       qCadenciaDue(consultorId),
       qNovosHoje(consultorId),
       qNegociacaoParada(consultorId),
@@ -142,6 +148,7 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
   const todos: FilaItem[] = [
     ...reunioesSemDesfecho,
     ...sla,
+    ...docsNovos,
     ...cadencia,
     ...novosHoje,
     ...negociacaoParada,
@@ -221,6 +228,63 @@ async function qReuniaoSemDesfecho(consultorId: string): Promise<FilaItem[]> {
       reuniaoId: r.reuniaoId,
       quando: fmt.format(r.inicio),
     },
+  }));
+}
+
+async function qDocsNovos(consultorId: string): Promise<FilaItem[]> {
+  // Cliente anexou documento(s) pelo portal e o consultor ainda não fez NADA
+  // depois disso (nenhuma interação manual) → card cobrando revisão. Some
+  // assim que o consultor age no lead (registrar contato, "Revisei", status…).
+  const rows = await db
+    .select({
+      leadId: leadsTable.id,
+      leadNome: leadsTable.nome,
+      whatsapp: leadsTable.whatsapp,
+      status: leadsTable.status,
+      origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
+      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
+      docsNovos: sql<number>`(
+        select count(*)::int from ${interacoes} d
+        where d.lead_id = ${leadsTable.id}
+          and d.tipo = 'documento_recebido'
+          and d.criado_em > coalesce((
+            select max(i.criado_em) from ${interacoes} i
+            where i.lead_id = ${leadsTable.id} and i.autor_id is not null
+          ), '-infinity')
+      )`,
+    })
+    .from(leadsTable)
+    .where(
+      and(
+        eq(leadsTable.consultorId, consultorId),
+        notInArray(leadsTable.status, STATUS_TERMINAIS),
+        sql`exists (
+          select 1 from ${interacoes} d
+          where d.lead_id = ${leadsTable.id}
+            and d.tipo = 'documento_recebido'
+            and d.criado_em > coalesce((
+              select max(i.criado_em) from ${interacoes} i
+              where i.lead_id = ${leadsTable.id} and i.autor_id is not null
+            ), '-infinity')
+        )`,
+      ),
+    )
+    .limit(15);
+  return rows.map((r) => ({
+    leadId: r.leadId,
+    leadNome: r.leadNome,
+    whatsapp: r.whatsapp,
+    status: r.status,
+    origem: r.origem,
+    cidade: r.cidade,
+    estado: r.estado,
+    valorCreditoCentavos: r.valorCreditoCentavos,
+    motivo: `${r.docsNovos} documento${r.docsNovos > 1 ? "s" : ""} novo${r.docsNovos > 1 ? "s" : ""} no portal — revise e dê retorno`,
+    motivoTipo: "docs_novos" as const,
+    score: SCORE.docs_novos,
+    acao: { tipo: "revisar_docs" as const, quantidade: r.docsNovos },
   }));
 }
 
@@ -903,4 +967,35 @@ export async function getProximasReunioes(
     day: "2-digit",
   });
   return rows.map((r) => ({ ...r, hoje: ymdBrt.format(r.inicio) === hojeYmd }));
+}
+
+// ─── Solicitações de score pendentes (fila de aprovação do ADMIN) ───────────
+
+export type SolicitacaoScorePendente = {
+  id: string;
+  criadoEm: Date;
+  solicitanteNome: string;
+  leadId: string;
+  leadNome: string;
+  valorCreditoCentavos: number | null;
+};
+
+export async function getSolicitacoesScorePendentes(): Promise<
+  SolicitacaoScorePendente[]
+> {
+  return db
+    .select({
+      id: scoreSolicitacoes.id,
+      criadoEm: scoreSolicitacoes.criadoEm,
+      solicitanteNome: usersTable.nome,
+      leadId: leadsTable.id,
+      leadNome: leadsTable.nome,
+      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
+    })
+    .from(scoreSolicitacoes)
+    .innerJoin(leadsTable, eq(leadsTable.id, scoreSolicitacoes.leadId))
+    .innerJoin(usersTable, eq(usersTable.id, scoreSolicitacoes.solicitadoPor))
+    .where(eq(scoreSolicitacoes.status, "pendente"))
+    .orderBy(asc(scoreSolicitacoes.criadoEm))
+    .limit(20);
 }

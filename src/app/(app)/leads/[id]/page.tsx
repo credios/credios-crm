@@ -10,6 +10,7 @@ import {
   leads as leadsTable,
   mensagensTemplate,
   reunioes,
+  scoreSolicitacoes,
   users as usersTable,
 } from "../../../../../db/schema";
 import { LeadBancosCard } from "@/components/leads/lead-bancos-card";
@@ -746,6 +747,22 @@ async function ScoreBlock(props: {
   isAdmin: boolean;
 }) {
   const consulta = await ultimaConsultaScore(props.leadId);
+  // Solicitação pendente (consultor pediu, admin decide) — join do solicitante.
+  const [solRow] = await db
+    .select({
+      id: scoreSolicitacoes.id,
+      criadoEm: scoreSolicitacoes.criadoEm,
+      solicitanteNome: usersTable.nome,
+    })
+    .from(scoreSolicitacoes)
+    .innerJoin(usersTable, eq(usersTable.id, scoreSolicitacoes.solicitadoPor))
+    .where(
+      and(
+        eq(scoreSolicitacoes.leadId, props.leadId),
+        eq(scoreSolicitacoes.status, "pendente"),
+      ),
+    )
+    .limit(1);
   let autorNome: string | null = null;
   if (consulta?.consultadoPor) {
     autorNome = await db
@@ -768,6 +785,15 @@ async function ScoreBlock(props: {
               faixa: consulta.faixa,
               criadoEm: consulta.criadoEm.toISOString(),
               autorNome,
+            }
+          : null
+      }
+      solicitacao={
+        solRow
+          ? {
+              id: solRow.id,
+              solicitanteNome: solRow.solicitanteNome,
+              criadoEm: solRow.criadoEm.toISOString(),
             }
           : null
       }

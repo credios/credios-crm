@@ -598,6 +598,31 @@ export const consultasScore = pgTable(
 );
 
 // ============================================================================
+// score_solicitacoes — consultor pede consulta de score, admin aprova
+// ============================================================================
+
+export const scoreSolicitacoes = pgTable(
+  "score_solicitacoes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    solicitadoPor: uuid("solicitado_por")
+      .notNull()
+      .references(() => users.id),
+    /** pendente | aprovada | recusada */
+    status: text("status").notNull().default("pendente"),
+    resolvidoPor: uuid("resolvido_por").references(() => users.id),
+    resolvidoEm: timestamp("resolvido_em", { withTimezone: true }),
+    criadoEm: timestamp("criado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_score_solicitacoes_lead").on(t.leadId, t.criadoEm.desc())],
+);
+
+// ============================================================================
 // duplicidades_pendentes — CPFs duplicados pendentes de revisão
 // ============================================================================
 
