@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 
 import { interacoes, reunioes, users as usersTable } from "../../../db/schema";
 import {
@@ -282,4 +282,38 @@ export async function cancelarReuniao(reuniaoId: string): Promise<void> {
     .update(reunioes)
     .set({ status: "cancelada", updatedAt: new Date() })
     .where(eq(reunioes.id, reuniaoId));
+}
+
+/**
+ * Reuniões passadas ainda 'agendada' viram REALIZADA implicitamente quando o
+ * lead muda de status depois do horário — se o consultor avançou o lead, a
+ * reunião obviamente aconteceu; cobrar desfecho na Mesa seria ruído. Chamado
+ * pelo endpoint de status (exceto perdido/desqualificado, onde a semântica
+ * "realizada" seria mentirosa — lá o card já some pelo filtro de terminais).
+ */
+export async function concluirReunioesImplicitas(leadId: string): Promise<number> {
+  const passadas = await db
+    .select({ id: reunioes.id, inicio: reunioes.inicio })
+    .from(reunioes)
+    .where(
+      and(
+        eq(reunioes.leadId, leadId),
+        eq(reunioes.status, "agendada"),
+        lt(reunioes.inicio, new Date()),
+      ),
+    );
+  for (const r of passadas) {
+    await db
+      .update(reunioes)
+      .set({ status: "realizada", updatedAt: new Date() })
+      .where(eq(reunioes.id, r.id));
+    await db.insert(interacoes).values({
+      leadId,
+      autorId: null,
+      tipo: "evento_sistema",
+      conteudo: `Reunião de ${rotulo(r.inicio)} considerada realizada — o lead avançou de status após o horário.`,
+      metadata: { reuniaoId: r.id, desfecho: "realizada", implicito: true } as never,
+    });
+  }
+  return passadas.length;
 }

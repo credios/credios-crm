@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads/bancos";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
+import { concluirReunioesImplicitas } from "@/lib/sdr/agendar";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { updateStatusSchema } from "@/lib/validators/lead";
 import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
@@ -137,6 +138,14 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   }
   // Liga/desliga a cadência de follow-up do novo estágio.
   await aoMudarStatusCadencia(id, data.status);
+  // Lead avançou de status com reunião passada ainda sem desfecho → a reunião
+  // obviamente aconteceu; marca realizada e some o card de cobrança da Mesa.
+  // (perdido/desqualificado ficam de fora — pode ter sido no-show.)
+  if (!["perdido", "desqualificado"].includes(data.status)) {
+    await concluirReunioesImplicitas(id).catch((e) =>
+      console.error("[status] concluirReunioesImplicitas falhou:", e),
+    );
+  }
 
   if (isLeadBankStage(data.status) && "bancos" in data && data.bancos?.length) {
     for (const banco of data.bancos) {

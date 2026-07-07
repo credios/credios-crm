@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  let body: { resultado?: string };
+  let body: { resultado?: string; nota?: string };
   try {
     body = await request.json();
   } catch {
@@ -57,6 +57,10 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   if (resultado !== "realizada" && resultado !== "no_show") {
     return NextResponse.json({ error: "resultado inválido" }, { status: 400 });
   }
+  const nota =
+    typeof body.nota === "string" && body.nota.trim()
+      ? body.nota.trim().slice(0, 500)
+      : null;
 
   await db
     .update(reunioes)
@@ -67,18 +71,19 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   // registra o desfecho e pronto.
   const deveMover = desfechoReuniaoMoveLead(lead.status);
 
+  const conteudoBase =
+    resultado === "realizada"
+      ? deveMover
+        ? "✅ Reunião realizada — próximo passo: documentação."
+        : "✅ Reunião realizada."
+      : deveMover
+        ? "❌ Reunião não aconteceu (no-show) — iniciando resgate."
+        : "❌ Reunião não aconteceu (no-show).";
   await db.insert(interacoes).values({
     leadId: lead.id,
     autorId: user.id,
     tipo: "reuniao",
-    conteudo:
-      resultado === "realizada"
-        ? deveMover
-          ? "✅ Reunião realizada — próximo passo: documentação."
-          : "✅ Reunião realizada."
-        : deveMover
-          ? "❌ Reunião não aconteceu (no-show) — iniciando resgate."
-          : "❌ Reunião não aconteceu (no-show).",
+    conteudo: nota ? `${conteudoBase}\nFeedback: ${nota}` : conteudoBase,
     metadata: { reuniaoId: id, desfecho: resultado } as never,
   });
 

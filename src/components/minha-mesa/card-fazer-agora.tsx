@@ -113,6 +113,11 @@ export function CardFazerAgora({ item, onResolved, readOnly = false }: Props) {
             {item.acao.energia}
           </p>
         )}
+        {item.acao?.tipo === "contato_direto" && (
+          <p className="font-serif italic text-xs text-muted-foreground">
+            {item.acao.instrucao}
+          </p>
+        )}
       </div>
 
       {readOnly ? (

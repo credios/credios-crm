@@ -94,6 +94,96 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
     );
   }
 
+  /* ── CONTATO DIRETO (fora da cadência): registra e abre o canal ── */
+  if (acao.tipo === "contato_direto") {
+    const fone = (whatsapp ?? "").replace(/\D/g, "");
+    const registrar = async (
+      tipo: "whatsapp_enviado" | "ligacao",
+      conteudo: string | null,
+      sucesso: string,
+      chave: string,
+    ) => {
+      setPending(chave);
+      const { ok, json } = await post(`/api/leads/${leadId}/interacoes`, {
+        tipo,
+        ...(conteudo ? { conteudo } : {}),
+      });
+      setPending(null);
+      if (!ok) {
+        toast.error("Não deu certo", {
+          description: typeof json.error === "string" ? json.error : "Tente de novo.",
+        });
+        return false;
+      }
+      toast.success(sucesso);
+      onResolved();
+      return true;
+    };
+    const abrirWhats = async () => {
+      const ok = await registrar(
+        "whatsapp_enviado",
+        acao.mensagem,
+        "Contato registrado — só apertar enviar no WhatsApp 🚀",
+        "whats",
+      );
+      if (ok && fone) {
+        const url = acao.mensagem
+          ? `https://wa.me/${fone}?text=${encodeURIComponent(acao.mensagem)}`
+          : `https://wa.me/${fone}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    };
+
+    if (acao.canal === "ligacao") {
+      return (
+        <div className="space-y-2">
+          {fone && (
+            <a
+              href={`tel:+${fone}`}
+              className="inline-flex items-center gap-2 font-mono text-base font-semibold tabular-nums text-foreground hover:text-primary"
+            >
+              <Phone className="size-4 text-emerald-600" />
+              {formatPhoneBr(whatsapp)}
+            </a>
+          )}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button size="sm" disabled={!!pending}
+              onClick={() => void registrar("ligacao", "Atendeu", "Boa ligação! Contato registrado.", "atendeu")}
+              className="bg-emerald-600 hover:bg-emerald-600/90 text-white">
+              {pending === "atendeu" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+              Liguei — atendeu
+            </Button>
+            <Button size="sm" variant="outline" disabled={!!pending}
+              onClick={() => void registrar("ligacao", "Não atendeu", "Registrado.", "nao_atendeu")}>
+              {pending === "nao_atendeu" ? <Loader2 className="size-3.5 animate-spin" /> : <PhoneMissed className="size-3.5" />}
+              Não atendeu
+            </Button>
+            {fone && (
+              <Button size="sm" variant="ghost" disabled={!!pending} onClick={() => void abrirWhats()}>
+                {pending === "whats" ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
+                WhatsApp
+              </Button>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <Button size="sm" onClick={() => void abrirWhats()} disabled={!!pending || !fone}
+          className="bg-emerald-600 hover:bg-emerald-600/90 text-white">
+          {pending === "whats" ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
+          Abrir WhatsApp com a mensagem pronta
+        </Button>
+        <Button size="sm" variant="ghost" disabled={!!pending}
+          onClick={() => void registrar("ligacao", null, "Ligação registrada.", "liguei")}>
+          {pending === "liguei" ? <Loader2 className="size-3.5 animate-spin" /> : <Phone className="size-3.5" />}
+          Liguei
+        </Button>
+      </div>
+    );
+  }
+
   /* ── Passo de MENSAGEM: abre WhatsApp com a mensagem pronta ── */
   if (acao.tipo === "mensagem") {
     const executar = async () => {

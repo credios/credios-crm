@@ -47,7 +47,17 @@ export type FilaAcao =
       energia: string | null;
       atrasoDias: number;
     }
-  | { tipo: "desfecho_reuniao"; reuniaoId: string; quando: string };
+  | { tipo: "desfecho_reuniao"; reuniaoId: string; quando: string }
+  | {
+      /** Contato de 1 toque fora da cadência: todo card da fila tem uma ação
+       *  concreta — nunca só um aviso. */
+      tipo: "contato_direto";
+      canal: "whatsapp" | "ligacao";
+      instrucao: string;
+      /** Mensagem pré-pronta pro wa.me (só chars BMP — emoji "novo" quebra
+       *  no WhatsApp Desktop/Windows). */
+      mensagem: string | null;
+    };
 
 export type FilaItem = {
   leadId: string;
@@ -77,6 +87,35 @@ const SCORE: Record<FilaItemTipo, number> = {
 
 const ALTO_VALOR_CENTAVOS = 30_000_000; // R$ 300.000
 const STATUS_TERMINAIS = ["fechado", "perdido", "desqualificado"];
+
+function primeiroNome(nome: string): string {
+  return nome.trim().split(/\s+/)[0] ?? nome;
+}
+
+function brl(centavos: number | null): string | null {
+  if (!centavos) return null;
+  return (centavos / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  });
+}
+
+// Mensagens default dos cards fora da cadência (1º contato / reativação /
+// update). Sem emoji fora do BMP — pré-preenchidas via wa.me.
+function msgPrimeiroContato(nome: string, valorCentavos: number | null): string {
+  const v = brl(valorCentavos);
+  return `Olá, ${primeiroNome(nome)}! Aqui é da Credios — sou o consultor responsável pela sua solicitação de crédito com garantia de imóvel${v ? ` de ${v}` : ""}. Posso te ligar rapidinho pra entender o seu caso e já acelerar a análise?`;
+}
+
+function msgUpdateNegociacao(nome: string): string {
+  return `Oi, ${primeiroNome(nome)}! Passando pra te dar um retorno: a sua operação segue em análise e estou acompanhando de perto com os bancos. Qualquer novidade te aviso na hora. Precisa de algo enquanto isso?`;
+}
+
+function msgReativacao(nome: string, valorCentavos: number | null): string {
+  const v = brl(valorCentavos);
+  return `Oi, ${primeiroNome(nome)}! Não quero deixar o seu crédito${v ? ` de ${v}` : ""} parado. Me diz um horário bom hoje que eu te chamo e a gente define o próximo passo?`;
+}
 
 // ============================================================================
 // FILA "FAZER AGORA" — leads priorizados por urgência
@@ -146,6 +185,15 @@ async function qReuniaoSemDesfecho(consultorId: string): Promise<FilaItem[]> {
         // Lead já encerrado (desqualificado/perdido/fechado) não volta pra Mesa
         // cobrando desfecho — a decisão sobre o lead já foi tomada.
         notInArray(leadsTable.status, STATUS_TERMINAIS),
+        // Status mudou DEPOIS da reunião → ela obviamente aconteceu (o
+        // endpoint de status já marca realizada; isto cobre dados antigos
+        // e caminhos que não passam por lá).
+        sql`not exists (
+          select 1 from ${interacoes} i
+          where i.lead_id = ${leadsTable.id}
+            and i.tipo = 'mudanca_status'
+            and i.criado_em > ${reunioes.inicio}
+        )`,
       ),
     )
     .limit(10);
@@ -283,6 +331,12 @@ async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
           : "SLA estourado · sem 1º contato",
       motivoTipo: "sla_estourado",
       score: SCORE.sla_estourado,
+      acao: {
+        tipo: "contato_direto" as const,
+        canal: "whatsapp" as const,
+        instrucao: "Faça o 1º contato AGORA — apresente-se como o consultor do caso.",
+        mensagem: msgPrimeiroContato(r.leadNome, r.valorCreditoCentavos),
+      },
     };
   });
 }
@@ -325,6 +379,12 @@ async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
       : "Novo · recebido hoje",
     motivoTipo: "novo_hoje",
     score: SCORE.novo_hoje,
+    acao: {
+      tipo: "contato_direto" as const,
+      canal: "whatsapp" as const,
+      instrucao: "Primeiro contato — quanto antes, maior a conversão.",
+      mensagem: msgPrimeiroContato(r.leadNome, r.valorCreditoCentavos),
+    },
   }));
 }
 
@@ -367,6 +427,12 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
       motivo: `Em negociação parada há ${dias}d`,
       motivoTipo: "negociacao_parada",
       score: SCORE.negociacao_parada,
+      acao: {
+        tipo: "contato_direto" as const,
+        canal: "ligacao" as const,
+        instrucao: `Ligue com um update da negociação — cliente sem notícias há ${dias}d.`,
+        mensagem: msgUpdateNegociacao(r.leadNome),
+      },
     };
   });
 }
@@ -423,6 +489,12 @@ async function qAltoValorParado(
       motivo: `Alto valor parado (R$ ${valorMi} mi)`,
       motivoTipo: "alto_valor_parado",
       score: SCORE.alto_valor_parado,
+      acao: {
+        tipo: "contato_direto" as const,
+        canal: "whatsapp" as const,
+        instrucao: "Reative agora — operação de alto valor sem próximo passo marcado.",
+        mensagem: msgReativacao(r.leadNome, r.valorCreditoCentavos),
+      },
     };
   });
 }

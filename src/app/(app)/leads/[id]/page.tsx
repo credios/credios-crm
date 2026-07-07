@@ -9,6 +9,7 @@ import {
   leadDocumentos,
   leads as leadsTable,
   mensagensTemplate,
+  reunioes,
   users as usersTable,
 } from "../../../../../db/schema";
 import { LeadBancosCard } from "@/components/leads/lead-bancos-card";
@@ -32,6 +33,7 @@ import { LeadSimulacaoCard } from "@/components/leads/lead-simulacao-card";
 import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
 import { LeadWhatsappConversa } from "@/components/leads/lead-whatsapp-conversa";
 import { MensagensSugeridas } from "@/components/leads/mensagens-sugeridas";
+import { ReuniaoDesfechoBanner } from "@/components/leads/reuniao-desfecho-banner";
 import { ValoresSuspeitosBanner } from "@/components/leads/valores-suspeitos-banner";
 import {
   SkeletonLeadBancos,
@@ -169,12 +171,62 @@ export default async function LeadDetailPage({ params }: Props) {
     row.valoresSuspeitos != null &&
     row.valoresRevisadoEm == null;
 
+  // Reunião passada sem desfecho → banner cobrando a decisão (a reunião ou
+  // aconteceu ou não; de qualquer forma o lead precisa avançar de estágio).
+  // Mesma regra do card da Mesa: some se o status já mudou depois da reunião
+  // ou se o lead está encerrado.
+  let reuniaoSemDesfecho: { id: string; quando: string } | null = null;
+  if (
+    !["fechado", "perdido", "desqualificado"].includes(row.status) &&
+    checkPermission(user, "lead.change_status", {
+      type: "lead",
+      consultorId: row.consultorId,
+    })
+  ) {
+    const [r] = await db
+      .select({ id: reunioes.id, inicio: reunioes.inicio })
+      .from(reunioes)
+      .where(
+        and(
+          eq(reunioes.leadId, row.id),
+          eq(reunioes.status, "agendada"),
+          sql`${reunioes.inicio} < now() - interval '30 minutes'`,
+          sql`not exists (
+            select 1 from ${interacoes} i
+            where i.lead_id = ${row.id}
+              and i.tipo = 'mudanca_status'
+              and i.criado_em > ${reunioes.inicio}
+          )`,
+        ),
+      )
+      .orderBy(desc(reunioes.inicio))
+      .limit(1);
+    if (r) {
+      const fmt = new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        weekday: "long",
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      reuniaoSemDesfecho = { id: r.id, quando: fmt.format(r.inicio) };
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {mostrarValoresSuspeitos && (
         <ValoresSuspeitosBanner
           leadId={lead.id}
           valoresSuspeitos={row.valoresSuspeitos as ValoresSuspeitos}
+        />
+      )}
+
+      {reuniaoSemDesfecho && (
+        <ReuniaoDesfechoBanner
+          reuniaoId={reuniaoSemDesfecho.id}
+          quando={reuniaoSemDesfecho.quando}
         />
       )}
 
