@@ -251,6 +251,9 @@ async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
         eq(leadsTable.consultorId, consultorId),
         eq(slaAlertas.tipo, "primeiro_contato_atrasado"),
         isNull(slaAlertas.resolvidoEm),
+        // SLA de 1º contato só faz sentido em 'novo' — lead encerrado (ou que
+        // já avançou de estágio) não pode cobrar 1º contato na Mesa.
+        eq(leadsTable.status, "novo"),
       ),
     )
     .limit(20);
@@ -599,6 +602,7 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
             eq(leadsTable.consultorId, consultorId),
             eq(slaAlertas.tipo, "primeiro_contato_atrasado"),
             isNull(slaAlertas.resolvidoEm),
+            eq(leadsTable.status, "novo"),
           ),
         ),
       db

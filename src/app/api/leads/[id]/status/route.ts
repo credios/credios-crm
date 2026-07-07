@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads/bancos";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
+import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { updateStatusSchema } from "@/lib/validators/lead";
 import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
 import { aoMudarStatusCadencia } from "@/lib/cadencia/engine";
@@ -130,6 +131,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
   // Mudança manual de status = consultor assumiu o lead → o bot cede a vez.
   await cederVezAoHumano(id, "status_manual");
+  // Lead encerrado → resolve alertas de SLA abertos (senão viram card zumbi).
+  if (["fechado", "perdido", "desqualificado"].includes(data.status)) {
+    await resolveSlaAlertsForLead(id);
+  }
   // Liga/desliga a cadência de follow-up do novo estágio.
   await aoMudarStatusCadencia(id, data.status);
 

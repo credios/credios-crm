@@ -173,6 +173,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         } as never,
       });
       await encerrarCadencia(id);
+      await resolveSlaAlertsForLead(id); // lead encerrado → some dos alertas
       const meta = extractRequestMeta(request);
       after(() =>
         logAction(null, user.id, "lead_status_mudou", "lead", id, {

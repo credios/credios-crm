@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { interacoes, leads as leadsTable } from "../../../../../db/schema";
 import { db } from "@/lib/db";
 import { cancelarReuniao, reuniaoAtivaDoLead } from "@/lib/sdr/agendar";
+import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest) {
     })
     .where(eq(leadsTable.id, lead.id));
 
+  await resolveSlaAlertsForLead(lead.id);
   await db.insert(interacoes).values({
     leadId: lead.id,
     autorId: null,

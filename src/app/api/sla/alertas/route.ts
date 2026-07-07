@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, notInArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import {
@@ -24,7 +24,11 @@ export async function GET() {
     return NextResponse.json({ data: [] });
   }
 
-  const conds = [isNull(slaAlertas.resolvidoEm)];
+  const conds = [
+    isNull(slaAlertas.resolvidoEm),
+    // Lead encerrado não gera notificação de SLA (alerta antigo não-resolvido).
+    notInArray(leadsTable.status, ["fechado", "perdido", "desqualificado"]),
+  ];
   if (user.perfil === "consultor") {
     conds.push(eq(leadsTable.consultorId, user.id));
   }

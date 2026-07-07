@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { sendAutoPerdidoEmail } from "@/lib/notifications/email";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
+import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -80,6 +81,7 @@ export async function GET(request: NextRequest) {
       } as never,
     });
     await encerrarCadencia(lead.id);
+    await resolveSlaAlertsForLead(lead.id);
     encerrados++;
 
     if (updated) {
