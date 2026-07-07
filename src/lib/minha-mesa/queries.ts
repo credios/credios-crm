@@ -142,6 +142,9 @@ async function qReuniaoSemDesfecho(consultorId: string): Promise<FilaItem[]> {
         eq(reunioes.consultorId, consultorId),
         eq(reunioes.status, "agendada"),
         lt(reunioes.inicio, sql`now() - interval '30 minutes'`),
+        // Lead já encerrado (desqualificado/perdido/fechado) não volta pra Mesa
+        // cobrando desfecho — a decisão sobre o lead já foi tomada.
+        notInArray(leadsTable.status, STATUS_TERMINAIS),
       ),
     )
     .limit(10);
