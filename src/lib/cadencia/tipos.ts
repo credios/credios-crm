@@ -36,3 +36,16 @@ export function proximaDataAposExecutar(
     proximaEm: new Date(agora.getTime() + passos[proximo]!.deltaDias * DIA_MS),
   };
 }
+
+/**
+ * Motivo canônico de PERDIDO quando o encerramento vem da cadência/faxina/
+ * auto-perdido (valores de MOTIVOS_PERDIDO — agrupam certo nos relatórios).
+ * Regra do owner: conversa_inicial e aguardando_resposta → "Sem resposta";
+ * estágios com esforço maior (docs) → "Sem retorno após várias tentativas".
+ */
+export function motivoPerdidoPadrao(status: string): string {
+  if (status === "conversa_inicial" || status === "aguardando_resposta" || status === "novo") {
+    return "Sem resposta";
+  }
+  return "Sem retorno após várias tentativas";
+}

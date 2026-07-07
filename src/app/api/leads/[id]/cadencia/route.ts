@@ -15,6 +15,7 @@ import {
   reagendarPorInteracao,
 } from "@/lib/cadencia/engine";
 import { prepararMensagemPasso } from "@/lib/cadencia/render";
+import { motivoPerdidoPadrao } from "@/lib/cadencia/tipos";
 import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
@@ -37,8 +38,6 @@ type Acao =
   | { acao: "decisao_desqualificado"; motivo: string; faxina?: boolean }
   | { acao: "decisao_manter"; nota: string }
   | { acao: "faxina_retomar" };
-
-const MOTIVO_SEM_RESPOSTA = "Sem resposta após cadência completa de follow-up";
 
 export async function POST(request: NextRequest, { params }: Ctx) {
   const user = await getAppUser();
@@ -146,7 +145,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       const novoStatus = body.acao === "decisao_perdido" ? "perdido" : "desqualificado";
       const motivo =
         (("motivo" in body && body.motivo) || "").trim() ||
-        (novoStatus === "perdido" ? MOTIVO_SEM_RESPOSTA : "outro");
+        (novoStatus === "perdido" ? motivoPerdidoPadrao(lead.status) : "Outro");
       const [updated] = await db
         .update(leadsTable)
         .set({

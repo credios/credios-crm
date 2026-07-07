@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { interacoes, leads as leadsTable, users as usersTable } from "../../../../../db/schema";
 import { listCadencias } from "@/lib/cadencia/config";
 import { encerrarCadencia } from "@/lib/cadencia/engine";
+import { motivoPerdidoPadrao } from "@/lib/cadencia/tipos";
 import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { sendAutoPerdidoEmail } from "@/lib/notifications/email";
@@ -20,7 +21,6 @@ export const maxDuration = 60;
 
 const DIAS_IGNORADO = 7;
 const LOTE = 25;
-const MOTIVO = "Sem resposta — cadência esgotada (auto)";
 
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -56,11 +56,12 @@ export async function GET(request: NextRequest) {
       ? Math.round((Date.now() - lead.cadenciaProximaEm.getTime()) / 86_400_000)
       : DIAS_IGNORADO;
 
+    const motivo = motivoPerdidoPadrao(lead.status);
     const [updated] = await db
       .update(leadsTable)
       .set({
         status: "perdido",
-        motivoDesqualificacao: MOTIVO,
+        motivoDesqualificacao: motivo,
         bancoAprovador: null,
         valorLiberadoCentavos: null,
         comissaoCentavos: null,
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
       metadata: {
         de: lead.status,
         para: "perdido",
-        motivo: MOTIVO,
+        motivo,
         auto_perdido: true,
       } as never,
     });
