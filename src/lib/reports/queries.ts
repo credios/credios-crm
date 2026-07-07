@@ -451,7 +451,18 @@ async function fetchVolumePorDiaUncached(
 
 export type FunilRow = { status: string; count: number };
 
-export async function fetchFunil(
+export function fetchFunil(
+  filters: ReportFilters,
+  period: PeriodRange,
+): Promise<FunilRow[]> {
+  return unstable_cache(
+    () => fetchFunilUncached(filters, period),
+    cacheKeyFor("reports:funil", filters, period),
+    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+  )();
+}
+
+async function fetchFunilUncached(
   filters: ReportFilters,
   period: PeriodRange,
 ): Promise<FunilRow[]> {
@@ -1066,7 +1077,6 @@ async function fetchConversionRatesUncached(
   } catch {
     progression = [...STAGE_PROGRESSION_FALLBACK];
   }
-  const idxOf = new Map(progression.map((k, i) => [k, i]));
 
   const periodo = and(
     gte(leads.createdAt, period.from),
@@ -1074,40 +1084,41 @@ async function fetchConversionRatesUncached(
     ...cb,
   );
 
-  // Snapshot (status atual) + histórico (todo status por onde o lead passou).
-  const [base, hist] = await Promise.all([
-    db.select({ id: leads.id, status: leads.status }).from(leads).where(periodo),
-    db
-      .select({
-        leadId: interacoes.leadId,
-        de: sql<string | null>`${interacoes.metadata}->>'de'`,
-        para: sql<string | null>`${interacoes.metadata}->>'para'`,
-      })
-      .from(interacoes)
-      .innerJoin(leads, eq(leads.id, interacoes.leadId))
-      .where(and(eq(interacoes.tipo, "mudanca_status"), periodo)),
-  ]);
-
-  // Estágio mais avançado que cada lead alcançou. Todo lead nasceu em 'novo'
-  // (índice 0); status fora da progressão (perdido, desqualificado, custom
-  // inativo) não avançam o índice — mas o histórico anterior conta.
-  const furthest = new Map<string, number>();
-  for (const b of base) furthest.set(b.id, idxOf.get(b.status) ?? 0);
-  for (const h of hist) {
-    const atual = furthest.get(h.leadId);
-    if (atual === undefined) continue;
-    let max = atual;
-    for (const st of [h.de, h.para]) {
-      const i = st ? idxOf.get(st) : undefined;
-      if (i !== undefined && i > max) max = i;
-    }
-    if (max > atual) furthest.set(h.leadId, max);
-  }
+  // Agregação 100% no SQL: estágio mais avançado por lead (status atual +
+  // histórico de mudanca_status via metadata de/para) → count por índice.
+  // Retorna ≤ nº de estágios em vez de N leads × M transições pro JS.
+  const stageValues = sql.join(
+    progression.map((k, i) => sql`(${k}, ${i})`),
+    sql`, `,
+  );
+  const rows = await db.execute<{ idx: number; n: number }>(sql`
+    with prog(status, idx) as (values ${stageValues}),
+    base as (
+      select l.id, coalesce(p.idx, 0) as atual
+      from ${leads} l
+      left join prog p on p.status = l.status
+      where ${periodo}
+    ),
+    hist as (
+      select i.lead_id, max(p.idx) as maxidx
+      from ${interacoes} i
+      join base b on b.id = i.lead_id
+      join prog p on p.status in (i.metadata->>'de', i.metadata->>'para')
+      where i.tipo = 'mudanca_status'
+      group by i.lead_id
+    ),
+    furthest as (
+      select b.id, greatest(b.atual, coalesce(h.maxidx, 0)) as idx
+      from base b left join hist h on h.lead_id = b.id
+    )
+    select idx::int, count(*)::int as n from furthest group by idx
+  `);
 
   // reached[i] = quantos alcançaram o estágio i (ou além)
   const reached = new Array<number>(progression.length).fill(0);
-  for (const idx of furthest.values()) {
-    for (let i = 0; i <= idx; i++) reached[i]!++;
+  for (const row of rows as unknown as Array<{ idx: number; n: number }>) {
+    const idx = Math.min(Number(row.idx), progression.length - 1);
+    for (let i = 0; i <= idx; i++) reached[i]! += Number(row.n);
   }
 
   const result: ConversionStage[] = [];

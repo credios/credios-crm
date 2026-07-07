@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm";
 
 import {
+  duplicidadesPendentes,
   interacoes,
   leads as leadsTable,
   reunioes,
@@ -260,32 +261,33 @@ async function qDocsNovos(consultorId: string): Promise<FilaItem[]> {
       and(
         eq(leadsTable.consultorId, consultorId),
         notInArray(leadsTable.status, STATUS_TERMINAIS),
+        // Pré-filtro BARATO (índice parcial de documento_recebido): a imensa
+        // maioria dos leads não tem doc nenhum e sai aqui sem tocar no max().
         sql`exists (
           select 1 from ${interacoes} d
           where d.lead_id = ${leadsTable.id}
             and d.tipo = 'documento_recebido'
-            and d.criado_em > coalesce((
-              select max(i.criado_em) from ${interacoes} i
-              where i.lead_id = ${leadsTable.id} and i.autor_id is not null
-            ), '-infinity')
         )`,
       ),
     )
-    .limit(15);
-  return rows.map((r) => ({
-    leadId: r.leadId,
-    leadNome: r.leadNome,
-    whatsapp: r.whatsapp,
-    status: r.status,
-    origem: r.origem,
-    cidade: r.cidade,
-    estado: r.estado,
-    valorCreditoCentavos: r.valorCreditoCentavos,
-    motivo: `${r.docsNovos} documento${r.docsNovos > 1 ? "s" : ""} novo${r.docsNovos > 1 ? "s" : ""} no portal — revise e dê retorno`,
-    motivoTipo: "docs_novos" as const,
-    score: SCORE.docs_novos,
-    acao: { tipo: "revisar_docs" as const, quantidade: r.docsNovos },
-  }));
+    .limit(50);
+  return rows
+    .filter((r) => r.docsNovos > 0)
+    .slice(0, 15)
+    .map((r) => ({
+      leadId: r.leadId,
+      leadNome: r.leadNome,
+      whatsapp: r.whatsapp,
+      status: r.status,
+      origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
+      valorCreditoCentavos: r.valorCreditoCentavos,
+      motivo: `${r.docsNovos} documento${r.docsNovos > 1 ? "s" : ""} novo${r.docsNovos > 1 ? "s" : ""} no portal — revise e dê retorno`,
+      motivoTipo: "docs_novos" as const,
+      score: SCORE.docs_novos,
+      acao: { tipo: "revisar_docs" as const, quantidade: r.docsNovos },
+    }));
 }
 
 async function qCadenciaDue(consultorId: string): Promise<FilaItem[]> {
@@ -998,4 +1000,13 @@ export async function getSolicitacoesScorePendentes(): Promise<
     .where(eq(scoreSolicitacoes.status, "pendente"))
     .orderBy(asc(scoreSolicitacoes.criadoEm))
     .limit(20);
+}
+
+/** Contagem de duplicidades de CPF pendentes (aviso na Mesa do admin). */
+export async function getDuplicidadesPendentesCount(): Promise<number> {
+  const [r] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(duplicidadesPendentes)
+    .where(isNull(duplicidadesPendentes.resolvidoEm));
+  return Number(r?.n ?? 0);
 }

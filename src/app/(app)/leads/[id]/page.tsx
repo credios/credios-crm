@@ -746,9 +746,10 @@ async function ScoreBlock(props: {
   temCpf: boolean;
   isAdmin: boolean;
 }) {
-  const consulta = await ultimaConsultaScore(props.leadId);
-  // Solicitação pendente (consultor pediu, admin decide) — join do solicitante.
-  const [solRow] = await db
+  // Consulta + solicitação pendente em paralelo (eram 3 awaits em série).
+  const [consulta, [solRow]] = await Promise.all([
+    ultimaConsultaScore(props.leadId),
+    db
     .select({
       id: scoreSolicitacoes.id,
       criadoEm: scoreSolicitacoes.criadoEm,
@@ -762,7 +763,8 @@ async function ScoreBlock(props: {
         eq(scoreSolicitacoes.status, "pendente"),
       ),
     )
-    .limit(1);
+      .limit(1),
+  ]);
   let autorNome: string | null = null;
   if (consulta?.consultadoPor) {
     autorNome = await db

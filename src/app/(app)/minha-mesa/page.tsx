@@ -1,4 +1,5 @@
 import { ClipboardList } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { BlocoCarteiraEmRisco } from "@/components/minha-mesa/bloco-carteira-em-risco";
@@ -18,6 +19,7 @@ import {
   getFilaFazerAgora,
   getMiniPlacar,
   getNovosParaMim,
+  getDuplicidadesPendentesCount,
   getProximasReunioes,
   getSolicitacoesScorePendentes,
 } from "@/lib/minha-mesa/queries";
@@ -53,7 +55,7 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       nome: user.nome,
     };
 
-  const [placar, fila, novos, risco, faxina, reunioes, solicitacoesScore] =
+  const [placar, fila, novos, risco, faxina, reunioes, solicitacoesScore, duplicidades] =
     await Promise.all([
       getMiniPlacar(consultorVisualizadoId),
       getFilaFazerAgora(consultorVisualizadoId),
@@ -63,6 +65,7 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       getProximasReunioes(consultorVisualizadoId),
       // Fila de aprovação do admin — global, independe da mesa visualizada.
       user.perfil === "admin" ? getSolicitacoesScorePendentes() : Promise.resolve([]),
+      user.perfil === "admin" ? getDuplicidadesPendentesCount() : Promise.resolve(0),
     ]);
 
   const primeiroNome = user.nome.split(" ")[0] || user.nome;
@@ -103,6 +106,18 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       </div>
 
       <MiniPlacar data={placar} />
+
+      {user.perfil === "admin" && duplicidades > 0 && (
+        <Link
+          href="/duplicidades"
+          prefetch={false}
+          className="block surface-solid rounded-xl border-l-4 border-l-amber-400 px-4 py-3 text-sm hover:shadow-sm transition-shadow"
+        >
+          <span className="font-semibold">{duplicidades}</span> possíve
+          {duplicidades > 1 ? "is duplicidades" : "l duplicidade"} de CPF aguardando
+          revisão — <span className="text-primary font-medium">revisar agora</span>
+        </Link>
+      )}
 
       {user.perfil === "admin" && <BlocoSolicitacoesScore items={solicitacoesScore} />}
 

@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
   });
 
   console.log(
-    `[desqualificar] lead ${lead.id} (${lead.nome}) desqualificado; msg enviada; reunião cancelada=${reuniaoCancelada}`,
+    `[desqualificar] lead ${lead.id} desqualificado; msg enviada; reunião cancelada=${reuniaoCancelada}`,
   );
   return NextResponse.json({
     ok: true,

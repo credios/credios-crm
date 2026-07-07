@@ -8,6 +8,7 @@ import { validarAgendaToken } from "@/lib/agenda/token";
 import { aoMudarStatusCadencia } from "@/lib/cadencia/engine";
 import { desfechoReuniaoMoveLead } from "@/lib/cadencia/tipos";
 import { db } from "@/lib/db";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import {
   sendReuniaoConfirmadaEmail,
   sendReuniaoConsultorEmail,
@@ -129,6 +130,10 @@ export async function GET(request: NextRequest, { params }: Ctx) {
 /** POST {inicio} → agenda a reunião (Meet + CRM + e-mails). */
 export async function POST(request: NextRequest, { params }: Ctx) {
   const headers = cors(request);
+  // 10 agendamentos/min por IP — cada POST cria evento no Google + e-mails.
+  if (!rateLimit(`agenda:${clientIp(request.headers)}`, 10, 60_000)) {
+    return NextResponse.json({ error: "rate limited" }, { status: 429, headers });
+  }
   const { token } = await params;
   const lead = await resolverLead(token);
   if (!lead) return NextResponse.json({ error: "not found" }, { status: 404, headers });

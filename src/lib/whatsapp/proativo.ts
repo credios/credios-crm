@@ -52,7 +52,7 @@ export async function enviarProativoWhatsapp(opts: {
     )
     .limit(1);
   if (emConversa.length > 0) {
-    console.log("[proativo] número já em conversa (outro lead) — não reabre:", to);
+    console.log("[proativo] número já em conversa (outro lead) — não reabre: ***" + to.slice(-4));
     return { sent: false };
   }
 
@@ -80,7 +80,7 @@ export async function enviarProativoWhatsapp(opts: {
       // wamid: id da msg no Meta — chave pra casar o status de ENTREGA depois.
       metadata: { canal: "whatsapp_ia", automatico: true, proativo: true, wamid: id ?? null } as never,
     });
-    console.log("[proativo] template enviado pra", to);
+    console.log("[proativo] template enviado pra ***" + to.slice(-4));
     return { sent: true };
   } catch (e) {
     console.error("[proativo] falhou — revertendo status:", e);

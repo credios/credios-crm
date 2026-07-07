@@ -545,7 +545,7 @@ export async function responderMensagem(
   console.log(
     "[whatsapp] lead:",
     lead
-      ? `${lead.id} (${lead.nome}) status=${lead.status} qualif=${lead.qualifWhatsappStatus}`
+      ? `${lead.id} status=${lead.status} qualif=${lead.qualifWhatsappStatus}`
       : "(não encontrado)",
   );
 

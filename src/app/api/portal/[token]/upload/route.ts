@@ -10,6 +10,7 @@ import {
   users as usersTable,
 } from "../../../../../../db/schema";
 import { db } from "@/lib/db";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { sendDocsIniciadosEmail } from "@/lib/notifications/email";
 import { resolvePortalToken } from "@/lib/portal/token";
 import { createAdminClient, DOCUMENTOS_BUCKET } from "@/lib/supabase/admin";
@@ -70,6 +71,10 @@ type Ctx = { params: Promise<{ token: string }> };
 
 export async function POST(request: NextRequest, { params }: Ctx) {
   const { token } = await params;
+  // 30 uploads/min por IP — corta flooding de storage (arquivos de até 25MB).
+  if (!rateLimit(`portal-upload:${clientIp(request.headers)}`, 30, 60_000)) {
+    return NextResponse.json({ error: "rate limited" }, { status: 429 });
+  }
   const leadId = await resolvePortalToken(token);
   if (!leadId) {
     return NextResponse.json(
@@ -88,7 +93,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   const file = form.get("file");
   const tipo = String(form.get("tipo") ?? "").trim();
   const categoria = String(form.get("categoria") ?? "").trim();
-  const rotulo = String(form.get("rotulo") ?? "").trim();
+  const rotulo = String(form.get("rotulo") ?? "").trim().slice(0, 120);
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "arquivo ausente" }, { status: 400 });
@@ -96,6 +101,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   if (!tipo || !categoria || !rotulo) {
     return NextResponse.json(
       { error: "metadados do documento ausentes" },
+      { status: 400 },
+    );
+  }
+  // `tipo` entra no path do storage — restringe a slug (nada de '/', '..').
+  const SLUG = /^[a-z0-9_-]{1,40}$/i;
+  if (!SLUG.test(tipo) || !SLUG.test(categoria)) {
+    return NextResponse.json(
+      { error: "tipo/categoria inválidos" },
       { status: 400 },
     );
   }

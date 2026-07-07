@@ -15,6 +15,7 @@ import {
 import { extractRequestMeta, logAction } from "@/lib/audit";
 import { dispatchCapi } from "@/lib/capi/dispatch";
 import { db } from "@/lib/db";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { sendPortalEmail } from "@/lib/portal/email";
@@ -163,6 +164,11 @@ function tokenAgendaSeElegivel(
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit da spec (§10): 60 req/min por IP.
+  if (!rateLimit(`webhook:${clientIp(request.headers)}`, 60, 60_000)) {
+    return NextResponse.json({ error: "rate limited" }, { status: 429 });
+  }
+
   // 1. Header secret.
   const expectedSecret = process.env.WEBHOOK_SECRET;
   if (!expectedSecret) {
