@@ -32,10 +32,12 @@ import {
 
 const STATUS_ORDER = [
   "novo",
-  "conversa_inicial",
   "aguardando_resposta",
+  "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_documentacao",
   "documentacao_enviada",
+  "aguardando_cadastro",
   "em_negociacao",
   "fechado",
   "perdido",
@@ -44,7 +46,12 @@ const STATUS_ORDER = [
 
 export function FunilChart({ rows }: { rows: FunilRow[] }) {
   const map = new Map(rows.map((r) => [r.status, r.count]));
-  const data = STATUS_ORDER.filter((s) => (map.get(s) ?? 0) > 0)
+  // Status custom fora da lista (criados pelo admin) entram no fim em vez
+  // de sumir do gráfico.
+  const extras = rows
+    .map((r) => r.status)
+    .filter((st) => !STATUS_ORDER.includes(st));
+  const data = [...STATUS_ORDER, ...extras].filter((s) => (map.get(s) ?? 0) > 0)
     .map((s) => ({
       status: STATUS_LEAD_LABEL[s] ?? s,
       key: s,

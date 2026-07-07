@@ -33,10 +33,12 @@ import {
 // Excluído: fechado, perdido, desqualificado (são finais).
 const NON_TERMINAL_STATUSES = [
   "novo",
-  "conversa_inicial",
   "aguardando_resposta",
+  "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_documentacao",
   "documentacao_enviada",
+  "aguardando_cadastro",
   "em_negociacao",
 ] as const;
 

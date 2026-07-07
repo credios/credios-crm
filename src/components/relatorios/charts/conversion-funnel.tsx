@@ -7,7 +7,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { STATUS_LEAD_LABEL } from "@/lib/constants";
 import type { ConversionStage } from "@/lib/reports/queries";
 import { cn } from "@/lib/utils";
 
@@ -41,12 +40,14 @@ export function ConversionFunnel({ stages }: Props) {
   // Monta lista flat de "estágios visíveis" (incluindo o último destino)
   const visualRows: Array<{
     status: string;
+    label: string;
     reached: number;
     pctOfTop: number;
   }> = [];
   for (const s of stages) {
     visualRows.push({
       status: s.fromStatus,
+      label: s.fromLabel,
       reached: s.reachedFrom,
       pctOfTop: topReached > 0 ? s.reachedFrom / topReached : 0,
     });
@@ -55,6 +56,7 @@ export function ConversionFunnel({ stages }: Props) {
   const last = stages[stages.length - 1]!;
   visualRows.push({
     status: last.toStatus,
+    label: last.toLabel,
     reached: last.reachedTo,
     pctOfTop: topReached > 0 ? last.reachedTo / topReached : 0,
   });
@@ -112,7 +114,7 @@ export function ConversionFunnel({ stages }: Props) {
                     }}
                   >
                     <span className="px-3 text-[13px] font-medium truncate">
-                      {STATUS_LEAD_LABEL[row.status] ?? row.status}
+                      {row.label}
                     </span>
                   </div>
                   <span className="font-mono tabular-nums text-[13px] font-medium text-foreground shrink-0">

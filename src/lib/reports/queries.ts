@@ -2,9 +2,10 @@ import { and, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
-import { leads, users as usersTable } from "../../../db/schema";
+import { interacoes, leads, users as usersTable } from "../../../db/schema";
 import { mvFechadosDiarios, mvLeadsDiarios } from "../../../db/views";
 import { db } from "@/lib/db";
+import { listActiveStatuses } from "@/lib/status/queries";
 import {
   normalizeFilters,
   type ReportFilters,
@@ -1002,15 +1003,23 @@ async function fetchSalesMetricsUncached(
 
 // ============================================================================
 // Conversion rates entre stages adjacentes (Hubspot-style funnel %)
-// Usa interações de mudança de status pra trackear progressão.
+// Usa o HISTÓRICO de mudanças de status (interacoes) pra medir progressão:
+// "chegou no stage X" = teve status X (ou além) em algum momento da vida,
+// mesmo que hoje esteja perdido/desqualificado. O snapshot atual escondia
+// os leads mortos de TODOS os stages (topo menor que o real) e inflava as
+// taxas — ex.: 100% novo→conversa_inicial só porque ninguém PARA em "novo".
 // ============================================================================
 
-const STAGE_PROGRESSION = [
+// Fallback se a config de status não carregar. A fonte da verdade é
+// status_lead_config (ordem do Kanban, sem terminais, fechado no fim).
+const STAGE_PROGRESSION_FALLBACK = [
   "novo",
-  "conversa_inicial",
   "aguardando_resposta",
+  "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_documentacao",
   "documentacao_enviada",
+  "aguardando_cadastro",
   "em_negociacao",
   "fechado",
 ] as const;
@@ -1018,16 +1027,13 @@ const STAGE_PROGRESSION = [
 export type ConversionStage = {
   fromStatus: string;
   toStatus: string;
+  fromLabel: string;
+  toLabel: string;
   reachedFrom: number; // quantos passaram pelo `fromStatus`
   reachedTo: number; // quantos avançaram pra `toStatus`
   rate: number; // 0..1
 };
 
-/**
- * Calcula taxa de conversão entre cada par adjacente de stages do pipeline.
- * Considera "passou pelo stage" quem está no stage OU em algum stage posterior
- * (incl. fechado). Quem foi pra perdido/desqualificado não conta como progressão.
- */
 export function fetchConversionRates(
   filters: ReportFilters,
   period: PeriodRange,
@@ -1044,44 +1050,77 @@ async function fetchConversionRatesUncached(
   period: PeriodRange,
 ): Promise<ConversionStage[]> {
   const cb = baseConds(filters);
-  // Pega leads criados no período (snapshot atual de status)
-  const rows = await db
-    .select({
-      status: leads.status,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(leads)
-    .where(
-      and(
-        gte(leads.createdAt, period.from),
-        lte(leads.createdAt, period.to),
-        ...cb,
-      ),
-    )
-    .groupBy(leads.status);
 
-  const map = new Map<string, number>();
-  for (const r of rows) map.set(String(r.status), Number(r.count));
+  // Progressão dinâmica: ordem do Kanban configurada pelo admin, excluindo
+  // terminais de perda (perdido/desqualificado) — fechado fica como estágio
+  // final de sucesso. Status custom (ex.: aguardando_cadastro) entram sozinhos.
+  let progression: string[];
+  const labels: Record<string, string> = {};
+  try {
+    const all = await listActiveStatuses();
+    for (const s of all) labels[s.key] = s.label;
+    progression = all
+      .filter((s) => !s.eTerminal || s.key === "fechado")
+      .map((s) => s.key);
+    if (progression.length < 2) progression = [...STAGE_PROGRESSION_FALLBACK];
+  } catch {
+    progression = [...STAGE_PROGRESSION_FALLBACK];
+  }
+  const idxOf = new Map(progression.map((k, i) => [k, i]));
 
-  // Quantos chegaram em cada stage (= count no stage + todos posteriores)
-  const reachedAt: Record<string, number> = {};
-  for (let i = 0; i < STAGE_PROGRESSION.length; i++) {
-    let total = 0;
-    for (let j = i; j < STAGE_PROGRESSION.length; j++) {
-      total += map.get(STAGE_PROGRESSION[j]!) ?? 0;
+  const periodo = and(
+    gte(leads.createdAt, period.from),
+    lte(leads.createdAt, period.to),
+    ...cb,
+  );
+
+  // Snapshot (status atual) + histórico (todo status por onde o lead passou).
+  const [base, hist] = await Promise.all([
+    db.select({ id: leads.id, status: leads.status }).from(leads).where(periodo),
+    db
+      .select({
+        leadId: interacoes.leadId,
+        de: sql<string | null>`${interacoes.metadata}->>'de'`,
+        para: sql<string | null>`${interacoes.metadata}->>'para'`,
+      })
+      .from(interacoes)
+      .innerJoin(leads, eq(leads.id, interacoes.leadId))
+      .where(and(eq(interacoes.tipo, "mudanca_status"), periodo)),
+  ]);
+
+  // Estágio mais avançado que cada lead alcançou. Todo lead nasceu em 'novo'
+  // (índice 0); status fora da progressão (perdido, desqualificado, custom
+  // inativo) não avançam o índice — mas o histórico anterior conta.
+  const furthest = new Map<string, number>();
+  for (const b of base) furthest.set(b.id, idxOf.get(b.status) ?? 0);
+  for (const h of hist) {
+    const atual = furthest.get(h.leadId);
+    if (atual === undefined) continue;
+    let max = atual;
+    for (const st of [h.de, h.para]) {
+      const i = st ? idxOf.get(st) : undefined;
+      if (i !== undefined && i > max) max = i;
     }
-    reachedAt[STAGE_PROGRESSION[i]!] = total;
+    if (max > atual) furthest.set(h.leadId, max);
+  }
+
+  // reached[i] = quantos alcançaram o estágio i (ou além)
+  const reached = new Array<number>(progression.length).fill(0);
+  for (const idx of furthest.values()) {
+    for (let i = 0; i <= idx; i++) reached[i]!++;
   }
 
   const result: ConversionStage[] = [];
-  for (let i = 0; i < STAGE_PROGRESSION.length - 1; i++) {
-    const from = STAGE_PROGRESSION[i]!;
-    const to = STAGE_PROGRESSION[i + 1]!;
-    const rFrom = reachedAt[from]!;
-    const rTo = reachedAt[to]!;
+  for (let i = 0; i < progression.length - 1; i++) {
+    const from = progression[i]!;
+    const to = progression[i + 1]!;
+    const rFrom = reached[i]!;
+    const rTo = reached[i + 1]!;
     result.push({
       fromStatus: from,
       toStatus: to,
+      fromLabel: labels[from] ?? from,
+      toLabel: labels[to] ?? to,
       reachedFrom: rFrom,
       reachedTo: rTo,
       rate: rFrom > 0 ? rTo / rFrom : 0,

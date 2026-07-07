@@ -17,8 +17,8 @@ import { cn } from "@/lib/utils";
 const TABS: { key: string; label: string; statuses: string[] | null }[] = [
   { key: "todos", label: "Todos", statuses: null },
   { key: "novos", label: "Novos", statuses: ["novo"] },
-  { key: "em_funil", label: "Em Funil", statuses: ["conversa_inicial", "aguardando_resposta"] },
-  { key: "qualificados", label: "Qualificados", statuses: ["aguardando_documentacao", "documentacao_enviada"] },
+  { key: "em_funil", label: "Em Funil", statuses: ["conversa_inicial", "aguardando_resposta", "reuniao_agendada"] },
+  { key: "qualificados", label: "Qualificados", statuses: ["aguardando_documentacao", "documentacao_enviada", "aguardando_cadastro"] },
   { key: "em_negociacao", label: "Em Negociação", statuses: ["em_negociacao"] },
   { key: "aguardando_doc", label: "Aguardando Doc", statuses: ["aguardando_documentacao"] },
   { key: "documentacao_enviada", label: "Documentação Enviada", statuses: ["documentacao_enviada"] },

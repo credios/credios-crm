@@ -39,9 +39,11 @@ export const CHANNEL_COLOR: Record<string, string> = {
 export const STATUS_COLOR: Record<string, string> = {
   novo: "#4b7be5",                  // blue-500   — entrada
   conversa_inicial: "#38bdf8",      // sky-400    — esquentando
+  reuniao_agendada: "#14b8a6",      // teal-500   — compromisso marcado
   aguardando_resposta: "#eab308",   // yellow-500 — atenção
   aguardando_documentacao: "#f97316", // orange-500 — urgente
   documentacao_enviada: "#6366f1",  // indigo-500 — andamento
+  aguardando_cadastro: "#818cf8",   // indigo-400 — custom pós-docs
   em_negociacao: "#8b5cf6",         // violet-500 — fechando
   fechado: "#10b981",               // emerald-500 — sucesso
   perdido: "#f43f5e",               // rose-500

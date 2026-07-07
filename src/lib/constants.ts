@@ -56,9 +56,11 @@ export const UFS = [
 export const STATUS_LEAD_LABEL: Record<string, string> = {
   novo: "Novo",
   conversa_inicial: "Conversa inicial",
+  reuniao_agendada: "Reunião agendada",
   aguardando_resposta: "Aguardando resposta",
   aguardando_documentacao: "Aguardando documentação",
   documentacao_enviada: "Documentação enviada",
+  aguardando_cadastro: "Aguardando Cadastro",
   em_negociacao: "Em negociação",
   fechado: "Fechado",
   perdido: "Perdido",

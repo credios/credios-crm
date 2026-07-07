@@ -13,10 +13,12 @@ import { STATUS_COLOR } from "./charts/theme";
 
 const STAGE_ORDER = [
   "novo",
-  "conversa_inicial",
   "aguardando_resposta",
+  "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_documentacao",
   "documentacao_enviada",
+  "aguardando_cadastro",
   "em_negociacao",
 ];
 
