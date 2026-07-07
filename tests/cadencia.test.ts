@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { proximaDataAposExecutar, type PassoCadencia } from "@/lib/cadencia/tipos";
+import {
+  desfechoReuniaoMoveLead,
+  proximaDataAposExecutar,
+  type PassoCadencia,
+} from "@/lib/cadencia/tipos";
 
 // Cadência exemplo — espelha a de aguardando_resposta aprovada pelo owner:
 // D0 msg1, D+1 msg2, D+3 ligação, D+5 msg3, D+8 msg final, D+10 decisão.
@@ -51,5 +55,19 @@ describe("proximaDataAposExecutar", () => {
     }
     expect(passo).toBe(5); // decisão
     expect((t.getTime() - inicio) / DIA).toBe(10);
+  });
+});
+
+describe("desfechoReuniaoMoveLead", () => {
+  it("move o lead nos estágios pré-reunião", () => {
+    for (const st of ["novo", "conversa_inicial", "aguardando_resposta", "sem_resposta", "reuniao_agendada"]) {
+      expect(desfechoReuniaoMoveLead(st)).toBe(true);
+    }
+  });
+
+  it("NÃO regride lead que já avançou além da reunião (bug real: em_negociacao → docs)", () => {
+    for (const st of ["aguardando_documentacao", "documentacao_enviada", "em_negociacao", "fechado", "perdido", "desqualificado"]) {
+      expect(desfechoReuniaoMoveLead(st)).toBe(false);
+    }
   });
 });

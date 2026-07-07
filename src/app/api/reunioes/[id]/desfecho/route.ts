@@ -6,6 +6,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { aoMudarStatusCadencia } from "@/lib/cadencia/engine";
+import { desfechoReuniaoMoveLead } from "@/lib/cadencia/tipos";
 import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
@@ -19,6 +20,8 @@ type Ctx = { params: Promise<{ id: string }> };
 //    dois pontos de inflexão do funil.
 //  - no_show → lead volta pra conversa_inicial e a cadência de resgate começa
 //    AGORA (passo 1 = convite de reunião com link da agenda = reagendamento).
+// Exceção: lead que JÁ avançou além da reunião (docs, negociação…) mantém o
+// status — o desfecho tardio só registra, nunca regride o funil.
 
 export async function POST(request: NextRequest, { params }: Ctx) {
   const user = await getAppUser();
@@ -60,21 +63,29 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     .set({ status: resultado, updatedAt: new Date() })
     .where(eq(reunioes.id, id));
 
+  // Lead que já avançou além da reunião (docs, negociação…) NÃO regride:
+  // registra o desfecho e pronto.
+  const deveMover = desfechoReuniaoMoveLead(lead.status);
+
   await db.insert(interacoes).values({
     leadId: lead.id,
     autorId: user.id,
     tipo: "reuniao",
     conteudo:
       resultado === "realizada"
-        ? "✅ Reunião realizada — próximo passo: documentação."
-        : "❌ Reunião não aconteceu (no-show) — iniciando resgate.",
+        ? deveMover
+          ? "✅ Reunião realizada — próximo passo: documentação."
+          : "✅ Reunião realizada."
+        : deveMover
+          ? "❌ Reunião não aconteceu (no-show) — iniciando resgate."
+          : "❌ Reunião não aconteceu (no-show).",
     metadata: { reuniaoId: id, desfecho: resultado } as never,
   });
 
   // Move o lead pro estágio certo e liga a cadência correspondente na hora.
   const novoStatus =
     resultado === "realizada" ? "aguardando_documentacao" : "conversa_inicial";
-  if (lead.status !== novoStatus) {
+  if (deveMover && lead.status !== novoStatus) {
     const [updated] = await db
       .update(leadsTable)
       .set({ status: novoStatus })
@@ -92,7 +103,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       after(() => onLeadStageChange(updated, novoStatus));
     }
   }
-  await aoMudarStatusCadencia(lead.id, novoStatus);
+  if (deveMover) await aoMudarStatusCadencia(lead.id, novoStatus);
 
   const meta = extractRequestMeta(request);
   after(() =>
@@ -102,5 +113,5 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     }, meta),
   );
 
-  return NextResponse.json({ ok: true, novoStatus });
+  return NextResponse.json({ ok: true, novoStatus: deveMover ? novoStatus : lead.status });
 }

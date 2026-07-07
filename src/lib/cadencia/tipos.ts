@@ -49,3 +49,20 @@ export function motivoPerdidoPadrao(status: string): string {
   }
   return "Sem retorno após várias tentativas";
 }
+
+/**
+ * O desfecho de reunião só move o lead automaticamente (realizada → docs,
+ * no-show → conversa_inicial) se ele ainda está num estágio PRÉ-reunião.
+ * Lead que já avançou além (docs, negociação, fechado…) mantém o status —
+ * o desfecho vira só registro. Caso real: card antigo de reunião respondido
+ * dias depois REGREDIU um lead em_negociacao pra aguardando_documentacao.
+ */
+export function desfechoReuniaoMoveLead(status: string): boolean {
+  return [
+    "novo",
+    "conversa_inicial",
+    "aguardando_resposta",
+    "sem_resposta",
+    "reuniao_agendada",
+  ].includes(status);
+}
