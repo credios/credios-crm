@@ -9,6 +9,7 @@ import {
 } from "@/lib/whatsapp/heloisa";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
+import { aoMudarStatusCadencia, reagendarPorInteracao } from "@/lib/cadencia/engine";
 import {
   sendLeadAssignedEmail,
   sendReuniaoConfirmadaEmail,
@@ -214,6 +215,8 @@ async function marcarReuniaoAgendada(lead: Lead, consultorId: string): Promise<v
       } as never,
     });
   }
+  // reuniao_agendada não tem cadência de follow-up → limpa estado anterior.
+  await aoMudarStatusCadencia(lead.id, "reuniao_agendada");
 }
 
 /**
@@ -405,6 +408,9 @@ async function fluxoRemarcacao(lead: Lead, mensagem: string): Promise<string> {
         qualifWhatsappEm: new Date(),
       })
       .where(eq(leads.id, lead.id));
+    // Cancelou → volta pro funil ativo e a cadência de resgate liga (passo 1 =
+    // convite de reunião com link da agenda).
+    await aoMudarStatusCadencia(lead.id, "conversa_inicial");
     await db.insert(interacoes).values({
       leadId: lead.id,
       autorId: null,
@@ -631,6 +637,8 @@ export async function responderMensagem(
         } as never,
       });
     }
+    // Cliente respondeu → conversa viva: empurra o lembrete da cadência (+2d).
+    await reagendarPorInteracao(lead.id);
     if (resposta) {
       await db.insert(interacoes).values({
         leadId: lead.id,

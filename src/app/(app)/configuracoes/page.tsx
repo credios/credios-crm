@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Compass, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
+import { Activity, ArrowRight, Compass, ListChecks, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -29,6 +29,13 @@ const SECTIONS = [
     description:
       "Editar o playbook que aparece dentro de cada lead, com variáveis e ordem.",
     icon: MessageSquare,
+  },
+  {
+    href: "/configuracoes/cadencias",
+    title: "Cadências de follow-up",
+    description:
+      "O playbook executável da Mesa: passos, dias, ligações obrigatórias e frases de energia por estágio.",
+    icon: ListChecks,
   },
   {
     href: "/configuracoes/status",

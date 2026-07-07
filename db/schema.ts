@@ -193,6 +193,16 @@ export const leads = pgTable(
     // lead) pra dar tempo de o cliente marcar sozinho.
     agendaOferecidaEm: timestamp("agenda_oferecida_em", { withTimezone: true }),
 
+    // --- Cadência de follow-up (playbook executável) ---
+    // Índice do passo atual na cadência do estágio (cadencia_config.passos).
+    // null = sem cadência ativa (status sem cadência, ou lead antigo → faxina).
+    cadenciaPasso: integer("cadencia_passo"),
+    // Quando o passo atual vence (aparece na Mesa "AGORA").
+    cadenciaProximaEm: timestamp("cadencia_proxima_em", { withTimezone: true }),
+    cadenciaInicioEm: timestamp("cadencia_inicio_em", { withTimezone: true }),
+    cadenciaAdiamentos: integer("cadencia_adiamentos").notNull().default(0),
+    cadenciaPulos: integer("cadencia_pulos").notNull().default(0),
+
     // --- Pipeline ---
     // text livre — validado em app-layer contra status_lead_config.key.
     status: text("status").notNull().default("novo"),
@@ -526,6 +536,22 @@ export const statusLeadConfig = pgTable(
   },
   (table) => [index("idx_status_config_ordem").on(table.ordem)],
 );
+
+// ============================================================================
+// cadencia_config — passos da cadência de follow-up por status (Admin edita)
+// ============================================================================
+
+export const cadenciaConfig = pgTable("cadencia_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // FK lógico pra status_lead_config.key (sem hard FK, como leads.status).
+  statusKey: text("status_key").notNull().unique(),
+  /** Array de passos: { titulo, deltaDias, tipo: 'mensagem'|'ligacao'|'decisao',
+   *  templateId (mensagens_template.id) | null, energia | null }. */
+  passos: jsonb("passos").notNull(),
+  ativa: boolean("ativa").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ============================================================================
 // duplicidades_pendentes — CPFs duplicados pendentes de revisão

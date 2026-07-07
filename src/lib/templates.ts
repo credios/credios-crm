@@ -38,11 +38,19 @@ export function getSaudacao(now: Date = new Date()): "Bom dia" | "Boa tarde" | "
  * — o cliente preenche o form em qualquer caixa ("FABIANA", "fabiana") mas a
  * mensagem que o consultor envia sai sempre com a forma canônica ("Fabiana").
  */
-export function renderTemplate(content: string, lead: TemplateLeadVars): string {
+export function renderTemplate(
+  content: string,
+  lead: TemplateLeadVars,
+  /** Links por lead ({{link_agenda}}, {{link_docs}}) — gerados server-side pela
+   *  cadência; quando ausentes, os placeholders ficam como estão. */
+  links?: { agenda?: string; docs?: string },
+): string {
   const nomeFormatado = formatProperName(lead.nome);
   const primeiroNome = nomeFormatado.split(/\s+/)[0] ?? "";
   const consultorFormatado = formatProperName(lead.consultor);
   const primeiroNomeConsultor = consultorFormatado.split(/\s+/)[0] ?? "";
+  if (links?.agenda) content = content.replace(/\{\{link_agenda\}\}/g, links.agenda);
+  if (links?.docs) content = content.replace(/\{\{link_docs\}\}/g, links.docs);
   return content
     .replace(/\{\{saudacao\}\}/g, getSaudacao())
     .replace(/\{\{nome\}\}/g, nomeFormatado)

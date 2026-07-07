@@ -15,6 +15,7 @@ import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { updateStatusSchema } from "@/lib/validators/lead";
 import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
+import { aoMudarStatusCadencia } from "@/lib/cadencia/engine";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -129,6 +130,8 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
 
   // Mudança manual de status = consultor assumiu o lead → o bot cede a vez.
   await cederVezAoHumano(id, "status_manual");
+  // Liga/desliga a cadência de follow-up do novo estágio.
+  await aoMudarStatusCadencia(id, data.status);
 
   if (isLeadBankStage(data.status) && "bancos" in data && data.bancos?.length) {
     for (const banco of data.bancos) {

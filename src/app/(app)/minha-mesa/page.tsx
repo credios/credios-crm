@@ -2,12 +2,14 @@ import { ClipboardList } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { BlocoCarteiraEmRisco } from "@/components/minha-mesa/bloco-carteira-em-risco";
+import { BlocoFaxina } from "@/components/minha-mesa/bloco-faxina";
 import { BlocoNovosParaMim } from "@/components/minha-mesa/bloco-novos-para-mim";
 import { FilaFazerAgora } from "@/components/minha-mesa/fila-fazer-agora";
 import { MiniPlacar } from "@/components/minha-mesa/mini-placar";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import {
   getCarteiraEmRisco,
+  getFaxina,
   getFilaFazerAgora,
   getMiniPlacar,
   getNovosParaMim,
@@ -24,11 +26,12 @@ export default async function MinhaMesaPage() {
   // então marketing logando cai aqui e segue pra /leads transparente.
   if (user.perfil === "marketing") redirect("/leads");
 
-  const [placar, fila, novos, risco] = await Promise.all([
+  const [placar, fila, novos, risco, faxina] = await Promise.all([
     getMiniPlacar(user.id),
     getFilaFazerAgora(user.id),
     getNovosParaMim(user.id),
     getCarteiraEmRisco(user.id),
+    getFaxina(user.id),
   ]);
 
   const primeiroNome = user.nome.split(" ")[0] || user.nome;
@@ -54,6 +57,8 @@ export default async function MinhaMesaPage() {
       <MiniPlacar data={placar} />
 
       <FilaFazerAgora items={fila} />
+
+      <BlocoFaxina data={faxina} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <BlocoNovosParaMim items={novos} />

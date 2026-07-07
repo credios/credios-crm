@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { isContatoComCliente } from "@/lib/leads/interacao-tipos";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
+import { reagendarPorInteracao } from "@/lib/cadencia/engine";
 import { createInteracaoSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -156,6 +157,8 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       .where(eq(leadsTable.id, id));
     // Consultor contatou o cliente → o bot (Heloísa) cede a vez, se estava ativo.
     await cederVezAoHumano(id, "contato_manual");
+    // Conversa viva → empurra o próximo lembrete da cadência (+2d).
+    await reagendarPorInteracao(id);
   }
 
   // Auto-resolve SLA ativos (interação manual indica que o lead foi atendido).

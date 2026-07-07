@@ -5,6 +5,7 @@ import { interacoes, leads as leadsTable, users as usersTable } from "../../../.
 import { consultorAgendaEmail, elegivelAgendaPublica } from "@/lib/agenda/prequal";
 import { diasAgendaPublica, validarSlotPublico } from "@/lib/agenda/slots";
 import { validarAgendaToken } from "@/lib/agenda/token";
+import { aoMudarStatusCadencia } from "@/lib/cadencia/engine";
 import { db } from "@/lib/db";
 import {
   sendReuniaoConfirmadaEmail,
@@ -65,13 +66,37 @@ async function consultorPorEmail(email: string) {
   return u ?? null;
 }
 
+type LeadRow = { consultorId: string | null; valorCreditoCentavos: number | null };
+
+/**
+ * Quem pode agendar: lead que passa na pré-qualificação do simulador OU lead
+ * que JÁ TEM consultor (o link veio da cadência de follow-up — o consultor
+ * decidiu convidar; a régua determinística não se aplica).
+ */
+function podeAgendar(lead: LeadRow & Parameters<typeof elegivelAgendaPublica>[0]): boolean {
+  return !!lead.consultorId || elegivelAgendaPublica(lead);
+}
+
+/** Consultor dono da agenda: o do lead, se atribuído; senão a régua por valor. */
+async function resolverConsultor(lead: LeadRow) {
+  if (lead.consultorId) {
+    const [u] = await db
+      .select({ id: usersTable.id, email: usersTable.email, nome: usersTable.nome })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, lead.consultorId), eq(usersTable.ativo, true)))
+      .limit(1);
+    if (u) return u;
+  }
+  return consultorPorEmail(consultorAgendaEmail(lead.valorCreditoCentavos));
+}
+
 /** GET → grade de horários (2 dias) do consultor certo pro lead. */
 export async function GET(request: NextRequest, { params }: Ctx) {
   const headers = cors(request);
   const { token } = await params;
   const lead = await resolverLead(token);
   if (!lead) return NextResponse.json({ error: "not found" }, { status: 404, headers });
-  if (!elegivelAgendaPublica(lead)) {
+  if (!podeAgendar(lead)) {
     return NextResponse.json({ error: "nao elegivel" }, { status: 403, headers });
   }
 
@@ -84,7 +109,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     );
   }
 
-  const consultor = await consultorPorEmail(consultorAgendaEmail(lead.valorCreditoCentavos));
+  const consultor = await resolverConsultor(lead);
   if (!consultor) {
     return NextResponse.json({ error: "indisponivel" }, { status: 503, headers });
   }
@@ -106,7 +131,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   const { token } = await params;
   const lead = await resolverLead(token);
   if (!lead) return NextResponse.json({ error: "not found" }, { status: 404, headers });
-  if (!elegivelAgendaPublica(lead)) {
+  if (!podeAgendar(lead)) {
     return NextResponse.json({ error: "nao elegivel" }, { status: 403, headers });
   }
 
@@ -130,7 +155,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     );
   }
 
-  const consultor = await consultorPorEmail(consultorAgendaEmail(lead.valorCreditoCentavos));
+  const consultor = await resolverConsultor(lead);
   if (!consultor) {
     return NextResponse.json({ error: "indisponivel" }, { status: 503, headers });
   }
@@ -185,6 +210,8 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     conteudo: `Cliente escolheu o horário na página do simulador — ${ag.rotulo}.`,
     metadata: { canal: "agenda_publica", reuniaoId: ag.reuniaoId } as never,
   });
+  // reuniao_agendada não tem cadência → limpa qualquer estado anterior.
+  await aoMudarStatusCadencia(lead.id, "reuniao_agendada");
 
   // E-mails (best-effort): confirmação branded pro cliente + aviso ao consultor.
   let docsUrl: string | null = null;

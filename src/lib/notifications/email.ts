@@ -261,6 +261,49 @@ export async function sendReuniaoConsultorEmail(params: {
 }
 
 /**
+ * AUTO-PERDIDO da cadência: o coletor encerrou um lead cuja decisão de fim de
+ * cadência ficou ignorada por 7+ dias. Avisa o CONSULTOR na hora (pedido do
+ * owner: cobrir falha humana) — reverter é 1 clique no CRM (Mudar status).
+ */
+export async function sendAutoPerdidoEmail(params: {
+  to: string;
+  consultorNome: string;
+  lead: Lead;
+  diasIgnorado: number;
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!params.to) return { ok: false, reason: "destinatário vazio" };
+  const { lead } = params;
+  const primeiro = params.consultorNome.split(" ")[0] || params.consultorNome;
+  const html = renderEmailLayout({
+    preheader: `${lead.nome} foi marcado como perdido automaticamente`,
+    eyebrow: "Auto-perdido — cadência esgotada",
+    eyebrowTone: "warning",
+    title: lead.nome,
+    intro: `Olá, ${primeiro}. Este lead completou a cadência de follow-up e a decisão ficou pendente por ${params.diasIgnorado} dias — o sistema o marcou como PERDIDO (sem resposta) pra manter o pipeline limpo. Se ele ainda vale, é 1 clique pra reverter: abra o lead e mude o status.`,
+    contentHtml: `${buildLeadKpis(lead)}`,
+    ctas: [{ href: appUrl(`/leads/${lead.id}`), label: "Abrir lead (reverter se preciso)" }],
+  });
+  try {
+    const result = await resend.emails.send({
+      from,
+      to: params.to,
+      replyTo,
+      subject: `Auto-perdido: ${lead.nome} (cadência esgotada sem decisão)`,
+      html,
+    });
+    if (result.error) {
+      console.error("[email-autoperdido] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-autoperdido] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+/**
  * LEMBRETE de reunião pro CLIENTE (~30 min antes) — complementa o lembrete por
  * WhatsApp (que fora da janela de 24h depende de template aprovado). Client-
  * facing: rodapé próprio, tom leve, CTA direto pro Meet.

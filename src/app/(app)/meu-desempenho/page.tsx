@@ -14,8 +14,10 @@ import { VolumePorDiaChart } from "@/components/relatorios/charts/volume-por-dia
 import { ConsultorPicker } from "@/components/relatorios/consultor-picker";
 import { DesempenhoFilters } from "@/components/relatorios/desempenho-filters";
 import { HistoricoFechamentos } from "@/components/relatorios/historico-fechamentos";
+import { DisciplinaFollowupCard } from "@/components/relatorios/disciplina-followup";
 import { KpiCard } from "@/components/relatorios/kpi-card";
 import { SaudeCards } from "@/components/relatorios/saude-cards";
+import { disciplinaFollowup } from "@/lib/cadencia/metricas";
 import { logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin, isAdminOrGerente } from "@/lib/auth/permissions";
@@ -215,6 +217,9 @@ export default async function MeuDesempenhoPage({ searchParams }: Props) {
         aguardandoAcao={saude.aguardandoAcao}
         consultorId={consultorVisualizadoId}
       />
+
+      {/* Disciplina de follow-up (playbook executável) */}
+      <DisciplinaFollowupCard data={await disciplinaFollowup(consultorVisualizadoId)} />
 
       {/* Funil pessoal */}
       <ConversionFunnel stages={conversionRates} />

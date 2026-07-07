@@ -3,6 +3,7 @@
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 
+import { CadenciaActions } from "./cadencia-actions";
 import { QuickActionsToolbar } from "./quick-actions-toolbar";
 import { StatusBadge } from "@/components/leads/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -20,11 +21,11 @@ const MOTIVO_TONE: Record<
   FilaItemTipo,
   { border: string; pill: "danger" | "warning" | "info" | "secondary" }
 > = {
+  reuniao_sem_desfecho: { border: "border-l-destructive", pill: "danger" },
   sla_estourado: { border: "border-l-destructive", pill: "danger" },
+  cadencia: { border: "border-l-emerald-500", pill: "info" },
   novo_hoje: { border: "border-l-blue-500", pill: "info" },
-  docs_paradas: { border: "border-l-amber-500", pill: "warning" },
   negociacao_parada: { border: "border-l-amber-500", pill: "warning" },
-  esfriando: { border: "border-l-amber-500", pill: "warning" },
   alto_valor_parado: { border: "border-l-violet-500", pill: "secondary" },
 };
 
@@ -97,16 +98,30 @@ export function CardFazerAgora({ item, onResolved }: Props) {
       </div>
 
       {/* Motivo destacado */}
-      <div className="mb-3">
+      <div className="mb-3 space-y-1.5">
         <Badge
           variant={PILL_VARIANT[tone.pill]}
           className="font-medium text-xs"
         >
           {item.motivo}
         </Badge>
+        {item.acao && "energia" in item.acao && item.acao.energia && (
+          <p className="font-serif italic text-xs text-muted-foreground">
+            {item.acao.energia}
+          </p>
+        )}
       </div>
 
-      <QuickActionsToolbar item={item} onResolved={onResolved} />
+      {item.acao ? (
+        <CadenciaActions
+          leadId={item.leadId}
+          whatsapp={item.whatsapp}
+          acao={item.acao}
+          onResolved={onResolved}
+        />
+      ) : (
+        <QuickActionsToolbar item={item} onResolved={onResolved} />
+      )}
     </article>
   );
 }

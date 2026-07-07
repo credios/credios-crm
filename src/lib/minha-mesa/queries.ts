@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   gte,
+  inArray,
   isNull,
   lt,
   notInArray,
@@ -15,10 +16,12 @@ import {
 import {
   interacoes,
   leads as leadsTable,
+  reunioes,
   slaAlertas,
 } from "../../../db/schema";
 import { db } from "@/lib/db";
-import { startOfDayBrt, todayYmdBrt } from "@/lib/datetime/brt";
+import { endOfDayBrt, startOfDayBrt, todayYmdBrt } from "@/lib/datetime/brt";
+import { listCadencias } from "@/lib/cadencia/config";
 import { NAO_CONTATO_TIPOS } from "@/lib/leads/interacao-tipos";
 
 // ============================================================================
@@ -26,12 +29,24 @@ import { NAO_CONTATO_TIPOS } from "@/lib/leads/interacao-tipos";
 // ============================================================================
 
 export type FilaItemTipo =
+  | "reuniao_sem_desfecho"
   | "sla_estourado"
+  | "cadencia"
   | "novo_hoje"
-  | "docs_paradas"
   | "negociacao_parada"
-  | "esfriando"
   | "alto_valor_parado";
+
+/** Ação executável do card (cadência / desfecho de reunião). */
+export type FilaAcao =
+  | {
+      tipo: "mensagem" | "ligacao" | "decisao";
+      passoIdx: number;
+      totalPassos: number;
+      passoTitulo: string;
+      energia: string | null;
+      atrasoDias: number;
+    }
+  | { tipo: "desfecho_reuniao"; reuniaoId: string; quando: string };
 
 export type FilaItem = {
   leadId: string;
@@ -46,14 +61,16 @@ export type FilaItem = {
   motivoTipo: FilaItemTipo;
   /** 0..100 — maior é mais urgente. */
   score: number;
+  /** Presente quando o card tem ação de 1 toque (cadência / reunião). */
+  acao?: FilaAcao;
 };
 
 const SCORE: Record<FilaItemTipo, number> = {
-  sla_estourado: 100,
+  reuniao_sem_desfecho: 100,
+  sla_estourado: 98,
+  cadencia: 90, // +5 se atrasado (calculado no bucket)
   novo_hoje: 85,
-  docs_paradas: 80,
   negociacao_parada: 75,
-  esfriando: 70,
   alto_valor_parado: 60,
 };
 
@@ -65,24 +82,26 @@ const STATUS_TERMINAIS = ["fechado", "perdido", "desqualificado"];
 // ============================================================================
 
 export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]> {
-  // 6 buckets em paralelo. Mesclamos no JS escolhendo o motivo de maior
+  // Buckets em paralelo. Mesclamos no JS escolhendo o motivo de maior
   // prioridade por lead — evita o mesmo lead aparecer duas vezes.
-  const [sla, novosHoje, docsParadas, negociacaoParada, esfriando, altoValorParado] =
+  // docs_paradas e esfriando foram substituídos pela CADÊNCIA (playbook
+  // executável): cada card já é uma ação pronta com data pra acontecer.
+  const [reunioesSemDesfecho, sla, cadencia, novosHoje, negociacaoParada, altoValorParado] =
     await Promise.all([
+      qReuniaoSemDesfecho(consultorId),
       qSlaEstourado(consultorId),
+      qCadenciaDue(consultorId),
       qNovosHoje(consultorId),
-      qDocsParadas(consultorId),
       qNegociacaoParada(consultorId),
-      qEsfriando(consultorId),
       qAltoValorParado(consultorId),
     ]);
 
   const todos: FilaItem[] = [
+    ...reunioesSemDesfecho,
     ...sla,
+    ...cadencia,
     ...novosHoje,
-    ...docsParadas,
     ...negociacaoParada,
-    ...esfriando,
     ...altoValorParado,
   ];
 
@@ -95,6 +114,121 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
   return Array.from(byLead.values())
     .sort((a, b) => b.score - a.score || (b.valorCreditoCentavos ?? 0) - (a.valorCreditoCentavos ?? 0))
     .slice(0, 30);
+}
+
+async function qReuniaoSemDesfecho(consultorId: string): Promise<FilaItem[]> {
+  // Reunião que já passou (30min de folga) e ninguém registrou o desfecho —
+  // o loop do ponto de inflexão nº 1 precisa fechar SEMPRE.
+  const rows = await db
+    .select({
+      reuniaoId: reunioes.id,
+      inicio: reunioes.inicio,
+      leadId: leadsTable.id,
+      leadNome: leadsTable.nome,
+      whatsapp: leadsTable.whatsapp,
+      status: leadsTable.status,
+      origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
+      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
+    })
+    .from(reunioes)
+    .innerJoin(leadsTable, eq(leadsTable.id, reunioes.leadId))
+    .where(
+      and(
+        eq(reunioes.consultorId, consultorId),
+        eq(reunioes.status, "agendada"),
+        lt(reunioes.inicio, sql`now() - interval '30 minutes'`),
+      ),
+    )
+    .limit(10);
+  const fmt = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return rows.map((r) => ({
+    leadId: r.leadId,
+    leadNome: r.leadNome,
+    whatsapp: r.whatsapp,
+    status: r.status,
+    origem: r.origem,
+    cidade: r.cidade,
+    estado: r.estado,
+    valorCreditoCentavos: r.valorCreditoCentavos,
+    motivo: `Reunião de ${fmt.format(r.inicio)} sem desfecho — aconteceu?`,
+    motivoTipo: "reuniao_sem_desfecho" as const,
+    score: SCORE.reuniao_sem_desfecho,
+    acao: {
+      tipo: "desfecho_reuniao" as const,
+      reuniaoId: r.reuniaoId,
+      quando: fmt.format(r.inicio),
+    },
+  }));
+}
+
+async function qCadenciaDue(consultorId: string): Promise<FilaItem[]> {
+  // Passos da cadência vencendo HOJE (ou atrasados) — o coração da Mesa:
+  // cada item já diz o que fazer, com que mensagem, e tem botão de 1 toque.
+  const fimHoje = endOfDayBrt(todayYmdBrt());
+  const rows = await db
+    .select({
+      leadId: leadsTable.id,
+      leadNome: leadsTable.nome,
+      whatsapp: leadsTable.whatsapp,
+      status: leadsTable.status,
+      origem: leadsTable.origem,
+      cidade: leadsTable.cidade,
+      estado: leadsTable.estado,
+      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
+      cadenciaPasso: leadsTable.cadenciaPasso,
+      cadenciaProximaEm: leadsTable.cadenciaProximaEm,
+    })
+    .from(leadsTable)
+    .where(
+      and(
+        eq(leadsTable.consultorId, consultorId),
+        notInArray(leadsTable.status, STATUS_TERMINAIS),
+        sql`${leadsTable.cadenciaPasso} is not null`,
+        lt(leadsTable.cadenciaProximaEm, fimHoje),
+      ),
+    )
+    .limit(40);
+  if (rows.length === 0) return [];
+  const cadencias = await listCadencias();
+  const out: FilaItem[] = [];
+  for (const r of rows) {
+    const cad = cadencias.find((c) => c.statusKey === r.status && c.ativa);
+    const passo = cad?.passos[r.cadenciaPasso ?? -1];
+    if (!cad || !passo) continue; // config mudou — some da fila, hook realinha
+    const atrasoDias = r.cadenciaProximaEm
+      ? Math.max(0, Math.floor((Date.now() - r.cadenciaProximaEm.getTime()) / 86_400_000))
+      : 0;
+    out.push({
+      leadId: r.leadId,
+      leadNome: r.leadNome,
+      whatsapp: r.whatsapp,
+      status: r.status,
+      origem: r.origem,
+      cidade: r.cidade,
+      estado: r.estado,
+      valorCreditoCentavos: r.valorCreditoCentavos,
+      motivo: `Passo ${(r.cadenciaPasso ?? 0) + 1}/${cad.passos.length} — ${passo.titulo}${atrasoDias > 0 ? ` · ${atrasoDias}d atrasado` : ""}`,
+      motivoTipo: "cadencia" as const,
+      score: SCORE.cadencia + (atrasoDias > 0 ? 5 : 0),
+      acao: {
+        tipo: passo.tipo,
+        passoIdx: r.cadenciaPasso ?? 0,
+        totalPassos: cad.passos.length,
+        passoTitulo: passo.titulo,
+        energia: passo.energia,
+        atrasoDias,
+      },
+    });
+  }
+  return out;
 }
 
 async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
@@ -184,54 +318,6 @@ async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
   }));
 }
 
-async function qDocsParadas(consultorId: string): Promise<FilaItem[]> {
-  const rows = await db
-    .select({
-      leadId: leadsTable.id,
-      leadNome: leadsTable.nome,
-      whatsapp: leadsTable.whatsapp,
-      status: leadsTable.status,
-      origem: leadsTable.origem,
-      cidade: leadsTable.cidade,
-      estado: leadsTable.estado,
-      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
-      ultimoContato: leadsTable.ultimoContato,
-    })
-    .from(leadsTable)
-    .where(
-      and(
-        eq(leadsTable.consultorId, consultorId),
-        eq(leadsTable.status, "aguardando_documentacao"),
-        or(
-          isNull(leadsTable.ultimoContato),
-          lt(leadsTable.ultimoContato, sql`now() - interval '5 days'`),
-        ),
-      ),
-    )
-    .limit(20);
-  return rows.map((r) => {
-    const dias = r.ultimoContato
-      ? Math.round((Date.now() - r.ultimoContato.getTime()) / (24 * 60 * 60 * 1000))
-      : null;
-    return {
-      leadId: r.leadId,
-      leadNome: r.leadNome,
-      whatsapp: r.whatsapp,
-      status: r.status,
-      origem: r.origem,
-      cidade: r.cidade,
-      estado: r.estado,
-      valorCreditoCentavos: r.valorCreditoCentavos,
-      motivo:
-        dias != null
-          ? `Aguardando documentação há ${dias}d sem contato`
-          : "Aguardando documentação · sem contato registrado",
-      motivoTipo: "docs_paradas",
-      score: SCORE.docs_paradas,
-    };
-  });
-}
-
 async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
   const rows = await db
     .select({
@@ -271,60 +357,6 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
       motivo: `Em negociação parada há ${dias}d`,
       motivoTipo: "negociacao_parada",
       score: SCORE.negociacao_parada,
-    };
-  });
-}
-
-async function qEsfriando(consultorId: string): Promise<FilaItem[]> {
-  // Status ativos não-novos sem contato há 5+ dias (novo já tá em SLA/novosHoje).
-  const rows = await db
-    .select({
-      leadId: leadsTable.id,
-      leadNome: leadsTable.nome,
-      whatsapp: leadsTable.whatsapp,
-      status: leadsTable.status,
-      origem: leadsTable.origem,
-      cidade: leadsTable.cidade,
-      estado: leadsTable.estado,
-      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
-      ultimoContato: leadsTable.ultimoContato,
-    })
-    .from(leadsTable)
-    .where(
-      and(
-        eq(leadsTable.consultorId, consultorId),
-        notInArray(leadsTable.status, [
-          ...STATUS_TERMINAIS,
-          "novo",
-          "aguardando_documentacao",
-          "em_negociacao",
-        ]),
-        or(
-          isNull(leadsTable.ultimoContato),
-          lt(leadsTable.ultimoContato, sql`now() - interval '5 days'`),
-        ),
-      ),
-    )
-    .limit(30);
-  return rows.map((r) => {
-    const dias = r.ultimoContato
-      ? Math.round((Date.now() - r.ultimoContato.getTime()) / (24 * 60 * 60 * 1000))
-      : null;
-    return {
-      leadId: r.leadId,
-      leadNome: r.leadNome,
-      whatsapp: r.whatsapp,
-      status: r.status,
-      origem: r.origem,
-      cidade: r.cidade,
-      estado: r.estado,
-      valorCreditoCentavos: r.valorCreditoCentavos,
-      motivo:
-        dias != null
-          ? `Sem contato há ${dias}d`
-          : "Sem contato registrado",
-      motivoTipo: "esfriando",
-      score: SCORE.esfriando,
     };
   });
 }
@@ -587,6 +619,136 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
     leadsContatadosHoje: contatadosHojeRow.count,
     slaPendente: slaRow.count,
     pipelineAtivoCentavos: Number(pipelineRow.valor ?? 0),
+  };
+}
+
+
+// ============================================================================
+// FAXINA DO PIPELINE — leads antigos sem cadência: decidir em 1 toque
+// ============================================================================
+
+export type FaxinaItem = {
+  leadId: string;
+  leadNome: string;
+  whatsapp: string | null;
+  status: string;
+  valorCreditoCentavos: number | null;
+  diasParado: number;
+  ultimaInteracao: string | null;
+};
+
+export type Faxina = {
+  feitasHoje: number;
+  quota: number;
+  restantes: number;
+  itens: FaxinaItem[];
+};
+
+const FAXINA_QUOTA_DIA = 20;
+
+/**
+ * Leads em status com cadência mas SEM cadência ativa (antigos, de antes do
+ * playbook executável) e parados há 3+ dias. O consultor decide em 1 toque:
+ * retomar cadência ou encerrar. Dosado em 20/dia pra não afogar a Mesa.
+ */
+export async function getFaxina(consultorId: string): Promise<Faxina> {
+  const cadencias = await listCadencias();
+  const statusComCadencia = cadencias.filter((c) => c.ativa).map((c) => c.statusKey);
+  if (statusComCadencia.length === 0) {
+    return { feitasHoje: 0, quota: FAXINA_QUOTA_DIA, restantes: 0, itens: [] };
+  }
+  const inicioDia = startOfDayBrt(todayYmdBrt());
+
+  const [feitasRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(interacoes)
+    .where(
+      and(
+        eq(interacoes.autorId, consultorId),
+        gte(interacoes.criadoEm, inicioDia),
+        sql`(${interacoes.metadata} ->> 'faxina') = 'true'`,
+      ),
+    );
+  const feitasHoje = feitasRow?.count ?? 0;
+  const quotaRestante = Math.max(0, FAXINA_QUOTA_DIA - feitasHoje);
+
+  const base = and(
+    eq(leadsTable.consultorId, consultorId),
+    notInArray(leadsTable.status, STATUS_TERMINAIS),
+    inArray(leadsTable.status, statusComCadencia),
+    sql`${leadsTable.cadenciaPasso} is null`,
+    sql`coalesce(${leadsTable.ultimoContato}, ${leadsTable.atribuidoEm}, ${leadsTable.createdAt}) < now() - interval '3 days'`,
+  );
+
+  const [totalRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(leadsTable)
+    .where(base);
+  const restantes = totalRow?.count ?? 0;
+
+  if (quotaRestante === 0 || restantes === 0) {
+    return { feitasHoje, quota: FAXINA_QUOTA_DIA, restantes, itens: [] };
+  }
+
+  const rows = await db
+    .select({
+      leadId: leadsTable.id,
+      leadNome: leadsTable.nome,
+      whatsapp: leadsTable.whatsapp,
+      status: leadsTable.status,
+      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
+      ultimoContato: leadsTable.ultimoContato,
+      atribuidoEm: leadsTable.atribuidoEm,
+      createdAt: leadsTable.createdAt,
+    })
+    .from(leadsTable)
+    .where(base)
+    .orderBy(desc(leadsTable.valorCreditoCentavos))
+    .limit(quotaRestante);
+
+  const leadIds = rows.map((r) => r.leadId);
+  // Última interação com conteúdo (1 linha de contexto pro card).
+  const ultimas =
+    leadIds.length > 0
+      ? await db
+          .select({
+            leadId: interacoes.leadId,
+            conteudo: interacoes.conteudo,
+            criadoEm: interacoes.criadoEm,
+          })
+          .from(interacoes)
+          .where(
+            and(
+              inArray(interacoes.leadId, leadIds),
+              sql`${interacoes.conteudo} is not null`,
+            ),
+          )
+          .orderBy(desc(interacoes.criadoEm))
+          .limit(200)
+      : [];
+  const ultimaPorLead = new Map<string, string>();
+  for (const u of ultimas) {
+    if (!ultimaPorLead.has(u.leadId) && u.conteudo) {
+      ultimaPorLead.set(u.leadId, u.conteudo.slice(0, 90));
+    }
+  }
+
+  return {
+    feitasHoje,
+    quota: FAXINA_QUOTA_DIA,
+    restantes,
+    itens: rows.map((r) => {
+      const ref = r.ultimoContato ?? r.atribuidoEm ?? r.createdAt;
+      return {
+        leadId: r.leadId,
+        leadNome: r.leadNome,
+        whatsapp: r.whatsapp,
+        status: r.status,
+        valorCreditoCentavos: r.valorCreditoCentavos,
+        diasParado: Math.round((Date.now() - ref.getTime()) / 86_400_000),
+        ultimaInteracao: ultimaPorLead.get(r.leadId) ?? null,
+      };
+    }),
   };
 }
 

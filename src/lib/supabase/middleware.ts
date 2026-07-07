@@ -13,6 +13,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/cron", // gate: Authorization: Bearer ${CRON_SECRET} (Vercel Cron)
   "/api/internal", // gate: Authorization: Bearer ${CRON_SECRET} (ações internas server-side)
   "/api/public", // gate: token HMAC no path (agenda pública do simulador)
+  "/agendar", // página pública de agendamento (gate: token HMAC na URL)
   "/api/version", // só retorna o SHA do commit — info já pública no GitHub
   "/portal", // gate: token do portal de documentos (validado no handler)
   "/api/portal", // gate: token do portal (upload/validação no handler)
