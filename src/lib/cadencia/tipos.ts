@@ -62,7 +62,6 @@ export function desfechoReuniaoMoveLead(status: string): boolean {
     "novo",
     "conversa_inicial",
     "aguardando_resposta",
-    "sem_resposta",
     "reuniao_agendada",
   ].includes(status);
 }

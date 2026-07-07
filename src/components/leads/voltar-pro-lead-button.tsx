@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
  *      kanban, sem passar pela simulação que ele já "encerrou".
  *
  *   2. MESMA JANELA (PWA, ou browser quando isStandalonePwa() detectou):
- *      o histórico tem [...origem, /leads/[id], /leads/[id]/simulacao].
+ *      o histórico tem [...origem, /leads/[id], /leads/[id]/proposta].
  *      router.back() volta pra /leads/[id] SEM adicionar nova entrada.
  *      Quando o consultor depois aperta o BackButton do header, ele
  *      vai pra origem (lista, kanban, minha-mesa) — não pra simulação.

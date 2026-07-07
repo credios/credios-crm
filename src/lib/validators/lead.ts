@@ -2,23 +2,6 @@ import { z } from "zod";
 
 import { SORT_LEAD_KEYS, type SortLeadKey } from "@/lib/leads/sort-options";
 
-// Mantemos os 9 keys "sistema" (referenciadas direto no código pra modais
-// e permissões). Status custom criadas pelo admin entram via DB e batem o
-// validator de "qualquer string snake_case 1..50 chars".
-//
-// Histórico: 'sem_resposta' foi removido em migration 0016 — virou motivo
-// dentro de `perdido` (em `motivo_desqualificacao`).
-export const SYSTEM_STATUS_LEAD_KEYS = [
-  "novo",
-  "conversa_inicial",
-  "aguardando_resposta",
-  "aguardando_documentacao",
-  "documentacao_enviada",
-  "em_negociacao",
-  "fechado",
-  "perdido",
-  "desqualificado",
-] as const;
 
 // Tipos de interação que a UI permite o consultor CRIAR via timeline.
 // Notas:

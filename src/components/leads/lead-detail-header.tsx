@@ -401,8 +401,7 @@ function DeleteLeadDialog({
           </p>
           <ul className="list-disc pl-5 text-muted-foreground space-y-0.5 text-[13px]">
             <li>Toda a timeline de interações</li>
-            <li>Tarefas associadas</li>
-            <li>Bancos parceiros vinculados</li>
+                        <li>Bancos parceiros vinculados</li>
             <li>Alertas de SLA e duplicidades</li>
           </ul>
           <p className="text-muted-foreground">

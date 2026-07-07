@@ -60,7 +60,7 @@ describe("proximaDataAposExecutar", () => {
 
 describe("desfechoReuniaoMoveLead", () => {
   it("move o lead nos estágios pré-reunião", () => {
-    for (const st of ["novo", "conversa_inicial", "aguardando_resposta", "sem_resposta", "reuniao_agendada"]) {
+    for (const st of ["novo", "conversa_inicial", "aguardando_resposta", "reuniao_agendada"]) {
       expect(desfechoReuniaoMoveLead(st)).toBe(true);
     }
   });

@@ -50,9 +50,11 @@ import type { LeadRow } from "@/lib/leads/list-leads";
 const NON_TERMINAL_STATUSES = [
   "novo",
   "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_resposta",
   "aguardando_documentacao",
   "documentacao_enviada",
+  "aguardando_cadastro",
   "em_negociacao",
 ];
 
@@ -636,7 +638,7 @@ function BulkDeleteDialog({
           </DialogTitle>
           <DialogDescription>
             Esta ação é <strong>irreversível</strong>. Todos os dados associados
-            (interações, tarefas, alertas SLA, propostas a bancos, duplicidades
+            (interações, alertas SLA, propostas a bancos, duplicidades
             pendentes) também serão removidos em cascata. Audit log preserva o
             histórico de quem excluiu.
           </DialogDescription>

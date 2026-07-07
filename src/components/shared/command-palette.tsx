@@ -97,7 +97,7 @@ export function CommandPalette({ defaultOpen = false }: Props) {
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
+    <CommandDialog title="Busca rápida" description="Busque leads e ações do CRM" open={open} onOpenChange={setOpen}>
       <CommandInput
         placeholder="Buscar lead por nome, email, CPF, telefone…"
         value={query}

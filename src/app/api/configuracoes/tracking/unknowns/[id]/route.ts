@@ -31,8 +31,11 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> },
 ) {
   const user = await getAppUser();
-  if (!user || !isAdmin(user)) {
+  if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!isAdmin(user)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   const { id } = await context.params;

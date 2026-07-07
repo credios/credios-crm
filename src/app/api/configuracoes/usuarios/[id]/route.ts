@@ -1,5 +1,5 @@
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import {
@@ -10,6 +10,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { SYSTEM_TERMINAL_KEYS } from "@/lib/status/canonical";
 import { updateUserSchema } from "@/lib/validators/user";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -138,14 +139,9 @@ export async function DELETE(request: NextRequest, { params }: Ctx) {
     .where(
       and(
         eq(leadsTable.consultorId, id),
-        inArray(leadsTable.status, [
-          "novo",
-          "conversa_inicial",
-          "aguardando_resposta",
-          "aguardando_documentacao",
-          "documentacao_enviada",
-          "em_negociacao",
-        ]),
+        // NOT IN terminais — robusto a status novos/custom (reuniao_agendada,
+        // aguardando_cadastro etc.), que a lista IN antiga deixava de contar.
+        notInArray(leadsTable.status, [...SYSTEM_TERMINAL_KEYS]),
       ),
     );
   const leadsAtribuidosAtivos = leadsCountRow?.count ?? 0;

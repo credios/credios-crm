@@ -20,8 +20,11 @@ const postSchema = z.object({
 
 export async function POST(request: NextRequest) {
   const user = await getAppUser();
-  if (!user || !isAdmin(user)) {
+  if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!isAdmin(user)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   let body: unknown;

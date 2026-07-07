@@ -40,12 +40,6 @@ export const SITUACOES_IMOVEL = [
 
 export const TIPOS_PESSOA = ["Pessoa Física", "Pessoa Jurídica"] as const;
 
-// ORIGENS legado removido (migration 0017). Fonte da verdade canônica:
-//   - Runtime: tabela `tracking_sources` (via listActiveSources)
-//   - Compile-time: src/lib/tracking/taxonomy.ts (CANONICAL_SOURCES)
-// Mantém o export vazio caso algum import legado restante quebre o build.
-// @deprecated
-export const ORIGENS: readonly string[] = [];
 
 export const UFS = [
   "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA",
@@ -117,20 +111,4 @@ export const STATUS_PROPOSTA_BANCO_LABEL: Record<string, string> = {
   proposta_emitida: "Proposta emitida",
 };
 
-export const ACAO_TAREFA_LABEL: Record<string, string> = {
-  liguei: "Liguei para o lead",
-  enviei_whatsapp: "Enviei WhatsApp",
-  recebi_resposta: "Recebi resposta do lead",
-  cobrei_documentacao: "Cobrei documentação",
-  atualizei_retorno_banco: "Atualizei o lead sobre retorno do banco",
-  atualizei_banco_parceiro: "Atualizei banco/parceiro da proposta",
-  cliente_pediu_retorno: "Cliente pediu retorno futuro",
-  nao_consegui_contato: "Não consegui contato",
-  outro: "Outro",
-};
 
-export const STATUS_TAREFA_LABEL: Record<string, string> = {
-  aberta: "Aberta",
-  concluida: "Concluída",
-  atrasada: "Atrasada",
-};

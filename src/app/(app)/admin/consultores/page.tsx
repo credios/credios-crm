@@ -283,9 +283,11 @@ async function ConsultorOverview({
 const STATUS_ORDER = [
   "novo",
   "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_resposta",
   "aguardando_documentacao",
   "documentacao_enviada",
+  "aguardando_cadastro",
   "em_negociacao",
 ];
 function statusOrdem(s: string): number {

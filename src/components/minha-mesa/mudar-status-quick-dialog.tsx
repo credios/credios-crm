@@ -36,6 +36,7 @@ import {
 const STATUS_SIMPLES = [
   "novo",
   "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_resposta",
   "aguardando_documentacao",
   "documentacao_enviada",

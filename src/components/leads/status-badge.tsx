@@ -8,12 +8,16 @@ const STATUS_CLASSNAMES: Record<string, string> = {
   novo: "bg-blue-500/15 text-blue-700 border-blue-500/30 dark:text-blue-300",
   conversa_inicial:
     "bg-sky-400/15 text-sky-700 border-sky-400/30 dark:text-sky-300",
+  reuniao_agendada:
+    "bg-teal-500/15 text-teal-700 border-teal-500/30 dark:text-teal-300",
   aguardando_resposta:
     "bg-yellow-500/15 text-yellow-800 border-yellow-500/35 dark:text-yellow-200",
   aguardando_documentacao:
     "bg-orange-500/15 text-orange-700 border-orange-500/35 dark:text-orange-300",
   documentacao_enviada:
     "bg-indigo-500/15 text-indigo-700 border-indigo-500/30 dark:text-indigo-300",
+  aguardando_cadastro:
+    "bg-indigo-400/15 text-indigo-600 border-indigo-400/30 dark:text-indigo-200",
   em_negociacao:
     "bg-violet-500/15 text-violet-700 border-violet-500/30 dark:text-violet-300",
   fechado:

@@ -51,7 +51,7 @@ import type { SavedLeadView } from "@/lib/validators/lead-view";
 import { statusBadgeColor } from "./status-badge";
 
 // Status agora vêm do servidor (status_lead_config). Custom statuses entram
-// como colunas extras. As 4 system terminals (fechado/desq/perdido/sem_resp)
+// como colunas extras. As 3 system terminals (fechado/desqualificado/perdido)
 // e as 2 que pedem bancos (documentacao_enviada/em_negociacao) ainda têm
 // modais especiais — checkados por key.
 type Status = string;

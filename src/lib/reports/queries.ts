@@ -446,45 +446,6 @@ async function fetchVolumePorDiaUncached(
 }
 
 // ============================================================================
-// Funil de conversão (count por status no snapshot atual, scoped por filtros)
-// ============================================================================
-
-export type FunilRow = { status: string; count: number };
-
-export function fetchFunil(
-  filters: ReportFilters,
-  period: PeriodRange,
-): Promise<FunilRow[]> {
-  return unstable_cache(
-    () => fetchFunilUncached(filters, period),
-    cacheKeyFor("reports:funil", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
-  )();
-}
-
-async function fetchFunilUncached(
-  filters: ReportFilters,
-  period: PeriodRange,
-): Promise<FunilRow[]> {
-  const cb = baseConds(filters);
-  const rows = await db
-    .select({
-      status: leads.status,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(leads)
-    .where(
-      and(
-        gte(leads.createdAt, period.from),
-        lte(leads.createdAt, period.to),
-        ...cb,
-      ),
-    )
-    .groupBy(leads.status);
-  return rows.map((r) => ({ status: r.status, count: Number(r.count) }));
-}
-
-// ============================================================================
 // Tempo médio em cada status (horas)
 // ============================================================================
 
