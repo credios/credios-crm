@@ -694,8 +694,8 @@ export async function POST(request: NextRequest) {
 
   // 15. CAPI dispatch — Meta, TikTok, LinkedIn em paralelo. Envio "lead_created"
   // pra cada plataforma configurada com env vars. Plataformas não configuradas
-  // retornam skipped graciosamente.  Eventos de qualificação/fechamento são
-  // disparados em outros pontos do app (status change handlers).
+  // retornam skipped graciosamente. Eventos de qualificação/fechamento saem de
+  // capiOnStageChange (via onLeadStageChange, chamado em toda transição).
   after(() =>
     dispatchCapi({
       event: "lead_created",

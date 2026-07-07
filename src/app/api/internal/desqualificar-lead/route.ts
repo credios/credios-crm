@@ -3,6 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { interacoes, leads as leadsTable } from "../../../../../db/schema";
 import { db } from "@/lib/db";
+import { encerrarCadencia } from "@/lib/cadencia/engine";
+import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
+import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { cancelarReuniao, reuniaoAtivaDoLead } from "@/lib/sdr/agendar";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
@@ -88,7 +91,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 4) Desqualifica (limpa dados financeiros, espelhando o endpoint de status).
-  await db
+  const [updated] = await db
     .update(leadsTable)
     .set({
       status: "desqualificado",
@@ -98,9 +101,15 @@ export async function POST(request: NextRequest) {
       comissaoCentavos: null,
       dataFechamento: null,
     })
-    .where(eq(leadsTable.id, lead.id));
+    .where(eq(leadsTable.id, lead.id))
+    .returning();
 
   await resolveSlaAlertsForLead(lead.id);
+  await encerrarCadencia(lead.id).catch(() => {});
+  if (updated) {
+    await notifyPartnerPortal(updated, "desqualificado").catch(() => {});
+    await onLeadStageChange(updated, "desqualificado").catch(() => {});
+  }
   await db.insert(interacoes).values({
     leadId: lead.id,
     autorId: null,

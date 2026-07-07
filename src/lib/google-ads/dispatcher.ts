@@ -2,6 +2,7 @@ import "server-only";
 
 import { and, eq, inArray, lt } from "drizzle-orm";
 
+import { capiOnStageChange } from "@/lib/capi/dispatch";
 import { googleAdsConversions } from "../../../db/schema";
 import { db } from "@/lib/db";
 
@@ -65,6 +66,13 @@ export async function onLeadStageChange(
   lead: LeadForConversion,
   newStatus: string,
 ): Promise<void> {
+  // CAPI (Meta/TikTok/LinkedIn) roda ANTES dos early-returns do Google Ads —
+  // são gates independentes (lead orgânico do Insta não tem gclid, mas tem
+  // fbclid). Best-effort; adapters não configurados retornam skipped.
+  await capiOnStageChange(lead as never, newStatus).catch((e) =>
+    console.error("[capi] stage change falhou:", e),
+  );
+
   if (!isGoogleAdsEnabled()) return;
   const isAds = lead.gclid || lead.wbraid || lead.gbraid;
   if (!isAds) return; // orgânico/direto → no-op

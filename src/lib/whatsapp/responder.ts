@@ -10,6 +10,8 @@ import {
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
 import { aoMudarStatusCadencia, reagendarPorInteracao } from "@/lib/cadencia/engine";
+import { desfechoReuniaoMoveLead } from "@/lib/cadencia/tipos";
+import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import {
   sendLeadAssignedEmail,
   sendReuniaoConfirmadaEmail,
@@ -191,17 +193,20 @@ async function concluirQualif(leadId: string): Promise<void> {
  * quando o status de fato mudou — evita ruído em remarcações.
  */
 async function marcarReuniaoAgendada(lead: Lead, consultorId: string): Promise<void> {
+  // Lead que já avançou além da reunião (docs, negociação) não regride —
+  // a reunião entra na agenda e o status fica onde está.
+  const deveMover = desfechoReuniaoMoveLead(lead.status);
   await db
     .update(leads)
     .set({
-      status: "reuniao_agendada",
+      ...(deveMover ? { status: "reuniao_agendada" } : {}),
       consultorId,
       atribuidoEm: lead.atribuidoEm ?? new Date(),
       qualifWhatsappStatus: "concluida",
       qualifWhatsappEm: new Date(),
     })
     .where(eq(leads.id, lead.id));
-  if (lead.status !== "reuniao_agendada") {
+  if (deveMover && lead.status !== "reuniao_agendada") {
     await db.insert(interacoes).values({
       leadId: lead.id,
       autorId: null,
@@ -214,9 +219,13 @@ async function marcarReuniaoAgendada(lead: Lead, consultorId: string): Promise<v
         automatico: true,
       } as never,
     });
+    const [atualizado] = await db.select().from(leads).where(eq(leads.id, lead.id)).limit(1);
+    if (atualizado) {
+      await notifyPartnerPortal(atualizado, "reuniao_agendada").catch(() => {});
+    }
   }
   // reuniao_agendada não tem cadência de follow-up → limpa estado anterior.
-  await aoMudarStatusCadencia(lead.id, "reuniao_agendada");
+  if (deveMover) await aoMudarStatusCadencia(lead.id, "reuniao_agendada");
 }
 
 /**
@@ -400,30 +409,40 @@ async function fluxoRemarcacao(lead: Lead, mensagem: string): Promise<string> {
         tipo: "cancelada",
       }).catch((e) => console.error("[sdr] email de cancelamento falhou:", e));
     }
+    // Só REGRIDE pra conversa_inicial se o lead ainda está em estágio
+    // pré-reunião — lead que já avançou (docs, negociação, fechado) mantém o
+    // status: cancelar a reunião não desfaz o progresso do funil.
+    const deveVoltar = desfechoReuniaoMoveLead(lead.status);
     await db
       .update(leads)
       .set({
-        status: "conversa_inicial",
+        ...(deveVoltar ? { status: "conversa_inicial" } : {}),
         qualifWhatsappStatus: "concluida",
         qualifWhatsappEm: new Date(),
       })
       .where(eq(leads.id, lead.id));
-    // Cancelou → volta pro funil ativo e a cadência de resgate liga (passo 1 =
-    // convite de reunião com link da agenda).
-    await aoMudarStatusCadencia(lead.id, "conversa_inicial");
-    await db.insert(interacoes).values({
-      leadId: lead.id,
-      autorId: null,
-      tipo: "mudanca_status",
-      conteudo: `Status alterado de ${lead.status} para conversa_inicial (reunião cancelada pelo cliente)`,
-      metadata: {
-        de: lead.status,
-        para: "conversa_inicial",
-        canal: "whatsapp_ia",
-        automatico: true,
-        reuniao_cancelada: true,
-      } as never,
-    });
+    if (deveVoltar) {
+      // Cancelou → volta pro funil ativo e a cadência de resgate liga (passo 1 =
+      // convite de reunião com link da agenda).
+      await aoMudarStatusCadencia(lead.id, "conversa_inicial");
+      await db.insert(interacoes).values({
+        leadId: lead.id,
+        autorId: null,
+        tipo: "mudanca_status",
+        conteudo: `Status alterado de ${lead.status} para conversa_inicial (reunião cancelada pelo cliente)`,
+        metadata: {
+          de: lead.status,
+          para: "conversa_inicial",
+          canal: "whatsapp_ia",
+          automatico: true,
+          reuniao_cancelada: true,
+        } as never,
+      });
+      const [atualizado] = await db.select().from(leads).where(eq(leads.id, lead.id)).limit(1);
+      if (atualizado) {
+        await notifyPartnerPortal(atualizado, "conversa_inicial").catch(() => {});
+      }
+    }
     return turn.resposta;
   }
 

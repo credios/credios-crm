@@ -1,9 +1,10 @@
 import "server-only";
 
-import { and, asc, eq, lt, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 
-import { leads, statusLeadConfig } from "../../../db/schema";
+import { interacoes, leads, slaAlertas, statusLeadConfig } from "../../../db/schema";
 import { db } from "@/lib/db";
+import { SYSTEM_TERMINAL_KEYS } from "@/lib/status/canonical";
 
 /**
  * Quando admin desativa ou exclui o status X, todos os leads em X precisam
@@ -88,12 +89,48 @@ export async function cascadeLeadsFromStatus(
     resolvedTarget = "novo";
   }
 
-  // Move os leads.
+  // Move os leads — e dispara os efeitos que TODA transição de status tem:
+  // registro em `interacoes` (o funil dos relatórios é histórico-based; sem
+  // isso a transição some das métricas), limpeza do estado de cadência (o
+  // cadencia_passo antigo indexaria os passos da cadência do status NOVO) e
+  // resolução de alertas de SLA quando o destino é terminal.
   const result = await db
     .update(leads)
-    .set({ status: resolvedTarget })
+    .set({
+      status: resolvedTarget,
+      cadenciaPasso: null,
+      cadenciaProximaEm: null,
+      cadenciaInicioEm: null,
+    })
     .where(eq(leads.status, removedKey))
     .returning({ id: leads.id });
+
+  if (result.length > 0) {
+    await db.insert(interacoes).values(
+      result.map((r) => ({
+        leadId: r.id,
+        autorId: null,
+        tipo: "mudanca_status" as const,
+        conteudo: `Status alterado de ${removedKey} para ${resolvedTarget} (status desativado pelo admin)`,
+        metadata: {
+          de: removedKey,
+          para: resolvedTarget,
+          cascade: true,
+        } as never,
+      })),
+    );
+    if (SYSTEM_TERMINAL_KEYS.has(resolvedTarget)) {
+      await db
+        .update(slaAlertas)
+        .set({ resolvidoEm: new Date() })
+        .where(
+          and(
+            inArray(slaAlertas.leadId, result.map((r) => r.id)),
+            isNull(slaAlertas.resolvidoEm),
+          ),
+        );
+    }
+  }
 
   return { target: resolvedTarget, movedCount: result.length };
 }

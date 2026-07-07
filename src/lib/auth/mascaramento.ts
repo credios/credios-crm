@@ -89,11 +89,20 @@ export function maskLeadForPerfil<T extends LeadLikeForMasking>(
       whatsapp: null,
       rendaMensalCentavos: null,
       rendaFaixa: rendaParaFaixa(out.rendaMensalCentavos),
-      // Cônjuge — mesmo tratamento de PII do titular.
+      // Cônjuge — mesmo tratamento de PII do titular (renda vira null, sem faixa).
       conjugeCpf: maskCpf(out.conjugeCpf),
       conjugeEmail: maskEmail(out.conjugeEmail),
       conjugeWhatsapp: null,
+      conjugeRendaCentavos: null,
+      conjugeOcupacao: null,
+      conjugeNascimento: null,
     };
+  }
+
+  // raw_payload é o JSON bruto do webhook — carrega CPF/telefone/renda EM
+  // CLARO e furava todo o mascaramento acima. Só admin vê (é campo de debug).
+  if (perfil !== "admin" && "rawPayload" in out) {
+    out = { ...out, rawPayload: null };
   }
 
   if (shouldMaskFinancial(perfil)) {

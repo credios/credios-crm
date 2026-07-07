@@ -8,6 +8,7 @@ import { checkPermission } from "@/lib/auth/permissions";
 import { aoMudarStatusCadencia } from "@/lib/cadencia/engine";
 import { desfechoReuniaoMoveLead } from "@/lib/cadencia/tipos";
 import { db } from "@/lib/db";
+import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 
@@ -109,6 +110,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     }
   }
   if (deveMover) await aoMudarStatusCadencia(lead.id, novoStatus);
+  // Desfecho é ação manual do consultor → bot cede a vez (evita a Heloísa
+  // atropelar o atendimento humano pós-reunião).
+  await cederVezAoHumano(lead.id, "status_manual").catch(() => {});
 
   const meta = extractRequestMeta(request);
   after(() =>

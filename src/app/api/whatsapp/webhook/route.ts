@@ -55,8 +55,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const raw = await request.text();
 
-  // Verifica a assinatura do Meta (X-Hub-Signature-256) se o app secret estiver setado.
+  // Verifica a assinatura do Meta (X-Hub-Signature-256). Sem o app secret o
+  // endpoint fica FAIL-OPEN (qualquer POST forja mensagem de cliente) — loga
+  // erro alto a cada request até o secret ser configurado na Vercel. Não
+  // bloqueamos pra não derrubar o bot, mas isto precisa aparecer nos logs.
   const appSecret = process.env.WHATSAPP_APP_SECRET;
+  if (!appSecret && process.env.NODE_ENV === "production") {
+    console.error(
+      "[whatsapp] ⚠️ WHATSAPP_APP_SECRET AUSENTE — webhook aceitando POSTs sem assinatura. Configure o App Secret (Meta → App settings → Basic) na Vercel.",
+    );
+  }
   if (appSecret) {
     const sig = request.headers.get("x-hub-signature-256") ?? "";
     const expected =

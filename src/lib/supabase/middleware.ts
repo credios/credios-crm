@@ -93,5 +93,19 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // API autenticada: sessão com MFA cadastrado mas NÃO verificado (aal1 com
+  // nextLevel aal2) não pode chamar a API — senão o TOTP protege só as
+  // páginas e uma senha vazada opera tudo via fetch direto. As páginas já
+  // redirecionam pra /desafio-mfa no layout; aqui é a barreira da API.
+  if (path.startsWith("/api")) {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2") {
+      return NextResponse.json(
+        { error: "mfa_required" },
+        { status: 401 },
+      );
+    }
+  }
+
   return supabaseResponse;
 }

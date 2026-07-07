@@ -6,6 +6,7 @@ import { consultorAgendaEmail, elegivelAgendaPublica } from "@/lib/agenda/prequa
 import { diasAgendaPublica, validarSlotPublico } from "@/lib/agenda/slots";
 import { validarAgendaToken } from "@/lib/agenda/token";
 import { aoMudarStatusCadencia } from "@/lib/cadencia/engine";
+import { desfechoReuniaoMoveLead } from "@/lib/cadencia/tipos";
 import { db } from "@/lib/db";
 import {
   sendReuniaoConfirmadaEmail,
@@ -134,6 +135,11 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   if (!podeAgendar(lead)) {
     return NextResponse.json({ error: "nao elegivel" }, { status: 403, headers });
   }
+  // Lead encerrado (fechado/perdido/desqualificado) não agenda por link antigo
+  // — reabrir funil é decisão do time, não de um clique 48h depois.
+  if (["fechado", "perdido", "desqualificado"].includes(lead.status)) {
+    return NextResponse.json({ error: "nao elegivel" }, { status: 403, headers });
+  }
 
   let body: { inicio?: unknown };
   try {
@@ -179,17 +185,35 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   // Move o lead no funil + atribui + SUPRIME a Heloísa (cliente já agendou —
   // desnecessário a IA entrar em contato; o proativo pula qualif != null e o
   // fluxo de remarcação continua disponível se o cliente escrever).
+  // Lead que JÁ AVANÇOU além da reunião (docs, negociação) agenda normalmente
+  // mas NÃO regride — a reunião entra na agenda e o status fica onde está.
+  const deveMoverStatus = desfechoReuniaoMoveLead(lead.status);
   await db
     .update(leadsTable)
     .set({
-      status: "reuniao_agendada",
+      ...(deveMoverStatus ? { status: "reuniao_agendada" } : {}),
       consultorId: consultor.id,
       atribuidoEm: lead.atribuidoEm ?? new Date(),
       qualifWhatsappStatus: "concluida",
       qualifWhatsappEm: new Date(),
     })
     .where(eq(leadsTable.id, lead.id));
-  if (lead.status !== "reuniao_agendada") {
+  if (lead.consultorId !== consultor.id) {
+    // Atribuição visível na timeline/auditoria (antes ficava invisível).
+    await db.insert(interacoes).values({
+      leadId: lead.id,
+      autorId: null,
+      tipo: "mudanca_atribuicao",
+      conteudo: `Atribuído a ${consultor.nome} pela agenda pública (cliente escolheu o horário).`,
+      metadata: {
+        de: lead.consultorId,
+        para: consultor.id,
+        canal: "agenda_publica",
+        automatico: true,
+      } as never,
+    });
+  }
+  if (deveMoverStatus && lead.status !== "reuniao_agendada") {
     await db.insert(interacoes).values({
       leadId: lead.id,
       autorId: null,
@@ -211,7 +235,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     metadata: { canal: "agenda_publica", reuniaoId: ag.reuniaoId } as never,
   });
   // reuniao_agendada não tem cadência → limpa qualquer estado anterior.
-  await aoMudarStatusCadencia(lead.id, "reuniao_agendada");
+  if (deveMoverStatus) await aoMudarStatusCadencia(lead.id, "reuniao_agendada");
 
   // E-mails (best-effort): confirmação branded pro cliente + aviso ao consultor.
   let docsUrl: string | null = null;

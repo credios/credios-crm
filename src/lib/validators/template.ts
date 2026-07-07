@@ -3,9 +3,11 @@ import { z } from "zod";
 const STATUS_LEAD_VALUES = [
   "novo",
   "conversa_inicial",
+  "reuniao_agendada",
   "aguardando_resposta",
   "aguardando_documentacao",
   "documentacao_enviada",
+  "aguardando_cadastro",
   "em_negociacao",
   "fechado",
   "perdido",

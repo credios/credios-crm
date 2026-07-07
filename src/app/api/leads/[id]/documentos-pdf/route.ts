@@ -15,6 +15,11 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function GET(request: NextRequest, { params }: Ctx) {
   const user = await getAppUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Documentos são PII pesada (RG, renda, matrícula) — marketing vê o lead
+  // mascarado e NÃO pode baixar o dossiê (consistente com bancos/interações).
+  if (user.perfil === "marketing") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
   const tipo = request.nextUrl.searchParams.get("tipo");

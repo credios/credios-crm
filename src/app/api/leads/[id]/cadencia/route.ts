@@ -142,6 +142,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     // ── Decisões de fim de cadência (e faxina) ──
     case "decisao_perdido":
     case "decisao_desqualificado": {
+      // 'fechado' é terminal protegido: sair dele (apagando banco/valor/
+      // comissão) é admin-only — mesmo guard da rota canônica de status.
+      if (lead.status === "fechado" && !checkPermission(user, "lead.close_or_reopen")) {
+        return NextResponse.json(
+          { error: "Somente admin pode reabrir/alterar um lead fechado." },
+          { status: 403 },
+        );
+      }
       const novoStatus = body.acao === "decisao_perdido" ? "perdido" : "desqualificado";
       const motivo =
         (("motivo" in body && body.motivo) || "").trim() ||
@@ -173,6 +181,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       });
       await encerrarCadencia(id);
       await resolveSlaAlertsForLead(id); // lead encerrado → some dos alertas
+      // Decisão manual do consultor → o bot cede a vez (lead perdido não pode
+      // continuar sendo atendido pela Heloísa se o cliente escrever).
+      await cederVezAoHumano(id, "status_manual").catch(() => {});
       const meta = extractRequestMeta(request);
       after(() =>
         logAction(null, user.id, "lead_status_mudou", "lead", id, {
