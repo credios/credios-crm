@@ -109,7 +109,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       after(() => onLeadStageChange(updated, novoStatus));
     }
   }
-  if (deveMover) await aoMudarStatusCadencia(lead.id, novoStatus);
+  // primeiraEm explícito: o passo pós-reunião (pedir docs / reconvite) deve
+  // cobrar AGORA — sem o guard de contato recente do início de cadência.
+  if (deveMover) await aoMudarStatusCadencia(lead.id, novoStatus, { primeiraEm: new Date() });
   // Desfecho é ação manual do consultor → bot cede a vez (evita a Heloísa
   // atropelar o atendimento humano pós-reunião).
   await cederVezAoHumano(lead.id, "status_manual").catch(() => {});

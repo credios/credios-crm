@@ -39,7 +39,25 @@ export async function iniciarCadencia(
     return false;
   }
   const agora = new Date();
-  const primeira = opts?.primeiraEm ?? emDias(cad.passos[0]!.deltaDias, agora);
+  let primeira = opts?.primeiraEm ?? emDias(cad.passos[0]!.deltaDias, agora);
+  if (!opts?.primeiraEm) {
+    // Contato manual RECENTE (últimas 24h) → o 1º passo nasce reagendado
+    // (+2d do contato, mesma convenção do reagendarPorInteracao). Sem isso,
+    // registrar contato e mudar o status em seguida fazia a Mesa cobrar
+    // "mande mensagem AGORA" pra um lead contactado minutos antes (caso
+    // Heron). Fluxos que precisam do passo imediato (desfecho de reunião)
+    // passam primeiraEm explícito.
+    const [l] = await db
+      .select({ ultimoContato: leads.ultimoContato })
+      .from(leads)
+      .where(eq(leads.id, leadId))
+      .limit(1);
+    const DIA_MS = 24 * 60 * 60 * 1000;
+    if (l?.ultimoContato && agora.getTime() - l.ultimoContato.getTime() < DIA_MS) {
+      const aposContato = new Date(l.ultimoContato.getTime() + 2 * DIA_MS);
+      if (aposContato > primeira) primeira = aposContato;
+    }
+  }
   await db
     .update(leads)
     .set({
@@ -61,9 +79,13 @@ export async function encerrarCadencia(leadId: string): Promise<void> {
 }
 
 /** Hook de mudança de status (rota de status, desfecho de reunião, decisões). */
-export async function aoMudarStatusCadencia(leadId: string, novoStatus: string): Promise<void> {
+export async function aoMudarStatusCadencia(
+  leadId: string,
+  novoStatus: string,
+  opts?: { primeiraEm?: Date },
+): Promise<void> {
   try {
-    await iniciarCadencia(leadId, novoStatus);
+    await iniciarCadencia(leadId, novoStatus, opts);
   } catch (e) {
     console.error("[cadencia] aoMudarStatus falhou (não bloqueia):", e);
   }
