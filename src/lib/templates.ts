@@ -17,13 +17,18 @@ export type TemplateLeadVars = {
  *   12:00 – 17:59 → "Boa tarde"
  *   18:00 – 23:59 → "Boa noite"
  *
- * Aceita Date opcional pra teste; default é "agora no timezone local do caller".
- * Como renderTemplate é chamada client-side (no momento que o consultor
- * copia a mensagem ou abre o preview), o timezone é o do browser do
- * consultor — correto pra BR sem precisar de lib de timezone.
+ * SEMPRE em horário de Brasília — renderTemplate também roda no SERVER
+ * (cadência da Mesa, links do wa.me), e a Vercel opera em UTC: usar a hora
+ * local do processo dava "Boa noite" às 17h de Brasília (20h UTC).
  */
 export function getSaudacao(now: Date = new Date()): "Bom dia" | "Boa tarde" | "Boa noite" {
-  const h = now.getHours();
+  const h = Number(
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(now),
+  );
   if (h < 12) return "Bom dia";
   if (h < 18) return "Boa tarde";
   return "Boa noite";

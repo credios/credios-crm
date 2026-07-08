@@ -9,7 +9,8 @@ describe("getSaudacao", () => {
   // Helper: cria Date com hora local arbitrária (mês/dia/ano fixos pra
   // determinismo, hora variável). new Date(year, month, day, hour) usa
   // timezone local — alinhado com o que getSaudacao consome.
-  const at = (h: number) => new Date(2026, 0, 15, h, 0, 0);
+  // Instante com hora H em BRT (UTC-3), independente do timezone da máquina.
+  const at = (h: number) => new Date(Date.UTC(2026, 0, 15, h + 3, 0, 0));
 
   it("retorna 'Bom dia' entre 0h e 11h59", () => {
     expect(getSaudacao(at(0))).toBe("Bom dia");
