@@ -182,12 +182,18 @@ export default async function LeadDetailPage({ params }: Props) {
   // Mesma regra do card da Mesa: some se o status já mudou depois da reunião
   // ou se o lead está encerrado.
   let reuniaoSemDesfecho: { id: string; quando: string } | null = null;
+  const cobraDesfecho =
+    // A cobrança é de QUEM É DONO do lead — admin/gerente vendo lead alheio
+    // não deve ser cobrado pelo desfecho do consultor (feedback do owner).
+    row.consultorId === user.id ||
+    (!row.consultorId &&
+      checkPermission(user, "lead.change_status", {
+        type: "lead",
+        consultorId: row.consultorId,
+      }));
   if (
     !["fechado", "perdido", "desqualificado"].includes(row.status) &&
-    checkPermission(user, "lead.change_status", {
-      type: "lead",
-      consultorId: row.consultorId,
-    })
+    cobraDesfecho
   ) {
     const [r] = await db
       .select({ id: reunioes.id, inicio: reunioes.inicio })
