@@ -30,9 +30,33 @@ export function getSaudacao(now: Date = new Date()): "Bom dia" | "Boa tarde" | "
 }
 
 /**
+ * Arredonda o valor buscado pro número "redondo" mais próximo, em linguagem
+ * de conversa: 480k → "R$ 500 mil", 620k → "R$ 600 mil", 1.35M → "R$ 1,4
+ * milhão". Usado em mensagens de prova social ("atendi um caso parecido, na
+ * faixa dos X") — o valor precisa soar natural, não exato. Sem valor no lead,
+ * cai num meio-de-mercado genérico.
+ */
+export function valorCreditoRedondo(valorCentavos: number | null): string {
+  const reais = valorCentavos != null ? valorCentavos / 100 : null;
+  if (!reais || reais <= 0) return "R$ 500 mil";
+  if (reais < 1_000_000) {
+    // passo de 50 mil (mínimo 100 mil pra frase fazer sentido)
+    const redondo = Math.max(100_000, Math.round(reais / 50_000) * 50_000);
+    if (redondo >= 1_000_000) return "R$ 1 milhão";
+    return `R$ ${Math.round(redondo / 1000)} mil`;
+  }
+  // acima de 1M: passo de 100 mil → "R$ 1,4 milhão" / "R$ 2 milhões"
+  const milhoes = Math.round(reais / 100_000) / 10;
+  const inteiro = Number.isInteger(milhoes);
+  const num = inteiro ? String(milhoes) : milhoes.toFixed(1).replace(".", ",");
+  return `R$ ${num} ${milhoes >= 2 ? "milhões" : "milhão"}`;
+}
+
+/**
  * Substitui variáveis {{saudacao}}, {{nome}}, {{primeiro_nome}},
  * {{primeiro_nome_consultor}}, {{consultor}}, {{valor_credito}},
- * {{valor_imovel}}, {{cidade}}, {{estado}} no conteúdo do template.
+ * {{valor_credito_redondo}}, {{valor_imovel}}, {{cidade}}, {{estado}} no
+ * conteúdo do template.
  *
  * Nomes (lead e consultor) passam por `formatProperName` antes da substituição
  * — o cliente preenche o form em qualquer caixa ("FABIANA", "fabiana") mas a
@@ -62,6 +86,10 @@ export function renderTemplate(
       lead.valorCreditoCentavos != null
         ? formatBrlFromCents(lead.valorCreditoCentavos)
         : "—",
+    )
+    .replace(
+      /\{\{valor_credito_redondo\}\}/g,
+      valorCreditoRedondo(lead.valorCreditoCentavos),
     )
     .replace(
       /\{\{valor_imovel\}\}/g,
