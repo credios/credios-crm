@@ -77,12 +77,20 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       if (!mensagem) {
         return NextResponse.json({ error: "template do passo indisponível" }, { status: 500 });
       }
+      // Registro COMPACTO na timeline (feedback do consultor: a transcrição
+      // inteira poluía a ficha). O texto completo fica no metadata pra
+      // auditoria; a timeline mostra só o essencial.
       await db.insert(interacoes).values({
         leadId: id,
         autorId: user.id,
         tipo: "whatsapp_enviado",
-        conteudo: mensagem,
-        metadata: { cadencia: true, cadencia_passo: lead.cadenciaPasso, passo_titulo: passo.titulo } as never,
+        conteudo: `Mensagem da cadência enviada pelo WhatsApp — "${passo.titulo}".`,
+        metadata: {
+          cadencia: true,
+          cadencia_passo: lead.cadenciaPasso,
+          passo_titulo: passo.titulo,
+          mensagem,
+        } as never,
       });
       await db.update(leadsTable).set({ ultimoContato: agora }).where(eq(leadsTable.id, id));
       await resolveSlaAlertsForLead(id);

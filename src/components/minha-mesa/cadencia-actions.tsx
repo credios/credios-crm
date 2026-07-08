@@ -139,11 +139,13 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
       conteudo: string | null,
       sucesso: string,
       chave: string,
+      metadata?: Record<string, unknown>,
     ) => {
       setPending(chave);
       const { ok, json } = await post(`/api/leads/${leadId}/interacoes`, {
         tipo,
         ...(conteudo ? { conteudo } : {}),
+        ...(metadata ? { metadata } : {}),
       });
       setPending(null);
       if (!ok) {
@@ -157,11 +159,14 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
       return true;
     };
     const abrirWhats = async () => {
+      // Timeline compacta: registra O QUE foi feito, não a transcrição.
+      // O texto completo vai no metadata pra auditoria.
       const ok = await registrar(
         "whatsapp_enviado",
-        acao.mensagem,
+        "Mensagem pré-pronta enviada pelo WhatsApp (Mesa).",
         "Contato registrado — só apertar enviar no WhatsApp 🚀",
         "whats",
+        acao.mensagem ? { mensagem: acao.mensagem, mesa: true } : { mesa: true },
       );
       if (ok && fone) {
         const url = acao.mensagem
