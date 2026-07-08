@@ -16,6 +16,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { dispatchCapi } from "@/lib/capi/dispatch";
 import { db } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { consultarCadastroPfLead } from "@/lib/score/cadastro-pf";
 import {
   consultarScoreParaGate,
   dentroCriteriosConsultaScore,
@@ -123,6 +124,9 @@ async function aplicarGateDeScore(
   lead: { id: string; cpf: string | null; valorImovelCentavos: number | null; valorCreditoCentavos: number | null },
   token: string | null,
 ): Promise<string | null> {
+  // Cadastro PF Plus: TODO form completo com CPF (sem critério de valor —
+  // consulta barata, decisão do owner). Dedup e falha silenciosa na lib.
+  after(() => consultarCadastroPfLead(lead.id));
   if (!dentroCriteriosConsultaScore(lead)) return token;
   if (!token) {
     after(() => consultarScoreParaGate(lead.id));

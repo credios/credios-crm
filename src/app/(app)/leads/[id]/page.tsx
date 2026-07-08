@@ -30,6 +30,7 @@ import {
   LeadPessoaisCard,
   LeadQualificacaoCard,
 } from "@/components/leads/lead-detail-sections";
+import { LeadCadastroCard } from "@/components/leads/lead-cadastro-card";
 import { LeadScoreCard } from "@/components/leads/lead-score-card";
 import { LeadPropostaCard } from "@/components/leads/lead-proposta-card";
 import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
@@ -48,6 +49,7 @@ import { checkPermission, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { listConsultoresAtivos } from "@/lib/leads/list-leads";
 import type { ValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
+import type { CadastroPf } from "@/lib/score/cadastro-pf";
 import { ultimaConsultaScore } from "@/lib/score/directd";
 import { getSimulacaoConfig } from "@/lib/simulador/config";
 import { listActiveStatuses } from "@/lib/status/queries";
@@ -273,6 +275,18 @@ export default async function LeadDetailPage({ params }: Props) {
                 isAdmin={user.perfil === "admin"}
               />
             </Suspense>
+          )}
+
+          {/* Cadastro PF (Direct Data) — PII pesada, oculto pra marketing. */}
+          {!isMarketing && row.cadastroPf != null && row.cadastroPfEm && (
+            <LeadCadastroCard
+              cadastro={row.cadastroPf as CadastroPf}
+              consultadoLabel={labelIdadeConsulta(row.cadastroPfEm)}
+              declarado={{
+                nome: row.nome,
+                rendaMensalCentavos: row.rendaMensalCentavos,
+              }}
+            />
           )}
 
           {/* Conversa do WhatsApp (Heloísa ↔ cliente). PII em texto livre →
@@ -824,4 +838,9 @@ async function PropostaBlock(props: {
       }}
     />
   );
+}
+
+function labelIdadeConsulta(em: Date): string {
+  const dias = Math.floor((Date.now() - em.getTime()) / 86_400_000);
+  return dias < 1 ? "hoje" : `há ${dias}d`;
 }

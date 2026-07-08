@@ -137,6 +137,8 @@ async function buildSamples(adminNome: string): Promise<
     cadenciaInicioEm: null,
     cadenciaAdiamentos: 0,
     cadenciaPulos: 0,
+  cadastroPf: null,
+  cadastroPfEm: null,
     status: "novo",
     motivoDesqualificacao: null,
     consultorId: null,

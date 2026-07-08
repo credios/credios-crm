@@ -203,6 +203,12 @@ export const leads = pgTable(
     cadenciaAdiamentos: integer("cadencia_adiamentos").notNull().default(0),
     cadenciaPulos: integer("cadencia_pulos").notNull().default(0),
 
+    /** Cadastro PF Plus (Direct Data): `retorno` bruto da consulta — nome
+     *  oficial, situação na Receita, óbito, renda estimada, CBO, contatos.
+     *  Consultado automaticamente em todo form completo com CPF. */
+    cadastroPf: jsonb("cadastro_pf"),
+    cadastroPfEm: timestamp("cadastro_pf_em", { withTimezone: true }),
+
     // --- Pipeline ---
     // text livre — validado em app-layer contra status_lead_config.key.
     status: text("status").notNull().default("novo"),
