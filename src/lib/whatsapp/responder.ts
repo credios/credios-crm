@@ -12,6 +12,8 @@ import { generatePortalToken, portalUrl } from "@/lib/portal/token";
 import { aoMudarStatusCadencia, reagendarPorInteracao } from "@/lib/cadencia/engine";
 import { desfechoReuniaoMoveLead } from "@/lib/cadencia/tipos";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
+import { ultimaConsultaScore } from "@/lib/score/directd";
+import { registrarSupressaoPorScore, scoreBloqueiaReuniao } from "@/lib/score/gate";
 import {
   sendLeadAssignedEmail,
   sendReuniaoConfirmadaEmail,
@@ -314,6 +316,36 @@ async function fluxoSdr(lead: Lead, turn: HeloisaTurn): Promise<string> {
 
   // ── Qualificado → roteia por valor e oferta horários ──
   if (qualificado) {
+    // GATE DE SCORE: score consultado < corte → NÃO oferece reunião. A
+    // qualificação conclui normalmente e o caso vai pra análise manual do
+    // consultor (regra do owner; sem score = fail-open, oferta normal).
+    if (await scoreBloqueiaReuniao(lead.id)) {
+      const consultorGate = await escolherConsultor(lead.valorCreditoCentavos);
+      if (consultorGate) {
+        await db
+          .update(leads)
+          .set({ consultorId: consultorGate.id, atribuidoEm: lead.atribuidoEm ?? new Date() })
+          .where(eq(leads.id, lead.id));
+        await db.insert(interacoes).values({
+          leadId: lead.id,
+          autorId: null,
+          tipo: "mudanca_atribuicao",
+          conteudo: `Atribuído a ${consultorGate.nome} pela Heloísa (qualificado — análise manual por score).`,
+          metadata: { canal: "whatsapp_ia", consultorId: consultorGate.id, automatico: true } as never,
+        });
+        await sendLeadAssignedEmail(lead, consultorGate.email, consultorGate.nome).catch(
+          (e) => console.error("[sdr] email de atribuição falhou:", e),
+        );
+      }
+      const c = await ultimaConsultaScore(lead.id);
+      if (c?.score != null) {
+        await registrarSupressaoPorScore(lead.id, c.score, "heloisa").catch(() => {});
+      }
+      await concluirQualif(lead.id);
+      const fecho = `Perfeito${nome ? `, ${nome}` : ""}! Já tenho tudo o que preciso 🙂 Vou repassar o seu caso pro consultor responsável — ele analisa os detalhes e entra em contato com você em breve. Pra adiantar a análise, você já pode enviar seus documentos com segurança:`;
+      return anexarLinkDocumentos(lead.id, fecho);
+    }
+
     const consultor = await escolherConsultor(lead.valorCreditoCentavos);
     if (consultor) {
       const slots = await horariosDisponiveis(consultor.email);

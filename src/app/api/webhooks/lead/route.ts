@@ -16,6 +16,12 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { dispatchCapi } from "@/lib/capi/dispatch";
 import { db } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import {
+  consultarScoreParaGate,
+  dentroCriteriosConsultaScore,
+  registrarSupressaoPorScore,
+  SCORE_MINIMO_REUNIAO,
+} from "@/lib/score/gate";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { sendPortalEmail } from "@/lib/portal/email";
@@ -107,6 +113,29 @@ async function invitePortal(opts: {
  * e disparam na hora. Idempotência fica no claim atômico de enviarProativoWhatsapp.
  * Roda no after() (não bloqueia a resposta do webhook).
  */
+/**
+ * GATE DE SCORE da agenda pública: com o token candidato em mãos, consulta o
+ * score (dedup 30d) e SUPRIME a grade quando score < corte. Sem token mas
+ * dentro dos critérios de consulta, consulta em after() (não bloqueia a
+ * resposta) — o score fica no CRM pro time analisar. Fail-open em falha.
+ */
+async function aplicarGateDeScore(
+  lead: { id: string; cpf: string | null; valorImovelCentavos: number | null; valorCreditoCentavos: number | null },
+  token: string | null,
+): Promise<string | null> {
+  if (!dentroCriteriosConsultaScore(lead)) return token;
+  if (!token) {
+    after(() => consultarScoreParaGate(lead.id));
+    return token;
+  }
+  const score = await consultarScoreParaGate(lead.id);
+  if (score != null && score < SCORE_MINIMO_REUNIAO) {
+    await registrarSupressaoPorScore(lead.id, score, "agenda_publica").catch(() => {});
+    return null;
+  }
+  return token;
+}
+
 function agendarProativoSeCompleto(opts: {
   leadId: string;
   nome: string;
@@ -334,10 +363,13 @@ export async function POST(request: NextRequest) {
         notify: payload.notify,
       });
 
-      const agendaTokenEnriched = tokenAgendaSeElegivel(
+      const agendaTokenEnriched = await aplicarGateDeScore(
         enrichedLead,
-        payload.notify,
-        !!enrichedLead.objetivoCredito,
+        tokenAgendaSeElegivel(
+          enrichedLead,
+          payload.notify,
+          !!enrichedLead.objetivoCredito,
+        ),
       );
       if (agendaTokenEnriched) {
         // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
@@ -733,11 +765,11 @@ export async function POST(request: NextRequest) {
     notify: payload.notify,
   });
 
-  const agendaTokenCreated = tokenAgendaSeElegivel(
+  const agendaTokenCreated = await aplicarGateDeScore(newLead, tokenAgendaSeElegivel(
     newLead,
     payload.notify,
     !!newLead.objetivoCredito,
-  );
+  ));
   if (agendaTokenCreated) {
     // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
     after(() =>
