@@ -20,6 +20,7 @@ import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
+import { aoEncerrarLead } from "@/lib/leads/encerramento";
 import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -196,6 +197,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       if (updated) {
         after(() => notifyPartnerPortal(updated, novoStatus));
         after(() => onLeadStageChange(updated, novoStatus));
+        // Cancela reuniões futuras; desqualificado também avisa o cliente
+        // (Heloísa se janela aberta + e-mail educado).
+        after(() => aoEncerrarLead(updated, novoStatus as "perdido" | "desqualificado"));
       }
       return NextResponse.json({ ok: true });
     }

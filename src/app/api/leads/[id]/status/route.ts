@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads/bancos";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
+import { aoEncerrarLead } from "@/lib/leads/encerramento";
 import { concluirReunioesImplicitas } from "@/lib/sdr/agendar";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { updateStatusSchema } from "@/lib/validators/lead";
@@ -135,6 +136,11 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   // Lead encerrado → resolve alertas de SLA abertos (senão viram card zumbi).
   if (["fechado", "perdido", "desqualificado"].includes(data.status)) {
     await resolveSlaAlertsForLead(id);
+  }
+  // Perdido/desqualificado: cancela reuniões futuras (Google + CRM); no
+  // desqualificado, avisa o cliente com educação (Heloísa + e-mail).
+  if ((data.status === "perdido" || data.status === "desqualificado") && updated) {
+    after(() => aoEncerrarLead(updated, data.status as "perdido" | "desqualificado"));
   }
   // Liga/desliga a cadência de follow-up do novo estágio.
   await aoMudarStatusCadencia(id, data.status);

@@ -314,6 +314,58 @@ export async function sendReuniaoLembreteConsultorEmail(params: {
 }
 
 /**
+ * "NÃO SEGUIREMOS" — aviso educado ao CLIENTE quando o lead é desqualificado
+ * (layout de cliente, from cliente@). Complementa a mensagem da Heloísa no
+ * WhatsApp — o e-mail garante a entrega quando a janela de 24h está fechada.
+ */
+export async function sendNaoSeguiremosEmail(params: {
+  to: string;
+  primeiroNome: string;
+  tinhaReuniao: boolean;
+}): Promise<{ ok: boolean; reason?: string }> {
+  if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!params.to) return { ok: false, reason: "destinatário vazio" };
+  const p = params.primeiroNome;
+  const F = "'Helvetica Neue', Helvetica, Arial, sans-serif";
+  const bodyHtml = `
+    <p style="margin:0 0 14px;font-family:${F};font-size:15px;line-height:1.6;color:#475467">
+      Nossa equipe analisou o seu caso com atenção e, neste momento, não vamos
+      conseguir avançar com a sua operação de crédito com garantia de imóvel.
+      ${params.tinhaReuniao ? "A conversa que estava marcada já foi cancelada — você não precisa fazer nada." : ""}
+    </p>
+    <p style="margin:0;font-family:${F};font-size:15px;line-height:1.6;color:#475467">
+      Sabemos que cenários mudam: renda, imóvel, momento. Se a sua situação se
+      transformar lá na frente, vai ser um prazer olhar o seu caso novamente —
+      é só nos chamar.
+    </p>`;
+  const html = renderClientEmail({
+    preheader: "Uma atualização sobre a sua solicitação de crédito",
+    title: `${p ? `${p}, o` : "O"}brigado pela confiança`,
+    intro: "Passando para te dar um retorno transparente sobre a sua solicitação:",
+    bodyHtml,
+    footer:
+      "Credios · consultoria gratuita de crédito com garantia de imóvel. Este e-mail é uma cortesia — nenhuma ação é necessária.",
+  });
+  try {
+    const result = await resend.emails.send({
+      from: CLIENT_EMAIL_FROM,
+      to: params.to,
+      replyTo,
+      subject: "Sobre a sua solicitação de crédito — Credios",
+      html,
+    });
+    if (result.error) {
+      console.error("[email-nao-seguiremos] resend error:", result.error);
+      return { ok: false, reason: result.error.message };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email-nao-seguiremos] envio falhou:", err);
+    return { ok: false, reason: err instanceof Error ? err.message : "erro" };
+  }
+}
+
+/**
  * SOLICITAÇÃO DE SCORE: consultor pediu consulta (paga) — o admin aprova na
  * Mesa ou direto no lead. Aviso imediato pro admin não deixar pendurado.
  */

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte, notInArray } from "drizzle-orm";
 
 import { interacoes, leads, reunioes, users as usersTable } from "../../../db/schema";
 import { db } from "@/lib/db";
@@ -81,6 +81,7 @@ export async function processarLembretesReuniao(): Promise<ResultadoLembretes> {
         eq(reunioes.lembreteEnviado, false),
         gte(reunioes.inicio, min),
         lte(reunioes.inicio, max),
+        notInArray(leads.status, ["fechado", "perdido", "desqualificado"]),
       ),
     )
     .limit(LOTE);
@@ -176,6 +177,7 @@ export async function processarLembretesConsultor(): Promise<ResultadoLembretes>
         eq(reunioes.lembreteConsultorEnviado, false),
         gte(reunioes.inicio, min),
         lte(reunioes.inicio, max),
+        notInArray(leads.status, ["fechado", "perdido", "desqualificado"]),
       ),
     )
     .limit(LOTE);
