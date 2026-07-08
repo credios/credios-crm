@@ -759,12 +759,21 @@ export function LeadQualificacaoCard({ lead }: { lead: LeadDetailData }) {
   );
 }
 
-export function LeadOrigemCard({ lead }: { lead: LeadDetailData }) {
+export function LeadOrigemCard({
+  lead,
+  detalhado = true,
+}: {
+  lead: LeadDetailData;
+  /** false = versão ENXUTA pro consultor (só canal/fonte/tipo). O tracking
+   *  completo (UTMs, GCLID, referrer, página) é ferramenta de admin/marketing
+   *  — pro consultor é só ruído na ficha. */
+  detalhado?: boolean;
+}) {
   // Source canônico (migration 0017) + fallback pro legado `origem`.
   const sourceLabel = lead.source ?? lead.origem;
   const channelLabel = lead.channel;
 
-  const items = [
+  const basicos = [
     { label: "Canal", value: channelLabel },
     { label: "Fonte", value: sourceLabel },
     {
@@ -776,6 +785,33 @@ export function LeadOrigemCard({ lead }: { lead: LeadDetailData }) {
             ? "Pago"
             : "Orgânico",
     },
+  ];
+
+  if (!detalhado) {
+    const visiveis = basicos.filter((i) => i.value);
+    if (visiveis.length === 0) return null;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Origem</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm">
+            {visiveis.map((i, idx) => (
+              <span key={i.label}>
+                {idx > 0 && <span className="text-foreground/20"> · </span>}
+                <span className="text-muted-foreground">{i.label}: </span>
+                <span className="font-medium">{i.value}</span>
+              </span>
+            ))}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const items = [
+    ...basicos,
     { label: "Dispositivo", value: lead.dispositivo },
     { label: "Rede", value: lead.rede },
     { label: "Campanha", value: lead.utmCampaign },

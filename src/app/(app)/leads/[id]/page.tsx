@@ -313,7 +313,10 @@ export default async function LeadDetailPage({ params }: Props) {
             </Suspense>
           )}
 
-          <LeadOrigemCard lead={lead} />
+          <LeadOrigemCard
+            lead={lead}
+            detalhado={user.perfil === "admin" || user.perfil === "marketing"}
+          />
 
           {/* Card de simulação — só pra perfis que veem dados não-mascarados.
               Marketing vê CPF/valores mascarados, então a simulação seria
