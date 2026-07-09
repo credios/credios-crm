@@ -38,6 +38,11 @@ import {
 import { contextFromWebhook } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
 import { aplicarRoteamento } from "@/lib/routing/engine";
+import { encerrarCadencia } from "@/lib/cadencia/engine";
+import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
+import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
+import { resolveSlaAlertsForLead } from "@/lib/sla/check";
+import { isSystemTerminal } from "@/lib/status/canonical";
 import { resolveSource } from "@/lib/tracking/resolver";
 import {
   emptyToNull,
@@ -315,6 +320,62 @@ export async function POST(request: NextRequest) {
         conteudo: "Lead enriquecido com dados completos do simulador",
         metadata: {} as never,
       });
+
+      // ── Pré-qualificação automática do site ──────────────────────────
+      // O /continuar-simulacao recusou o lead (renda/saldo devedor fora da
+      // política) DEPOIS de o parcial já existir aqui. Aplica a mesma
+      // sequência do endpoint de status (SLA, cadência, portal de parceiros,
+      // conversões offline) e retorna cedo: lead recusado não recebe e-mail
+      // de enriquecimento, convite de portal, agenda pública nem proativo da
+      // Heloísa. Se a equipe já moveu o lead pra um status terminal, não
+      // sobrescreve.
+      if (payload.auto_desqualificar && payload.motivo_desqualificacao) {
+        if (!isSystemTerminal(existing.status)) {
+          const [desqualificado] = await db
+            .update(leads)
+            .set({
+              status: "desqualificado",
+              motivoDesqualificacao: payload.motivo_desqualificacao,
+            })
+            .where(eq(leads.id, existing.id))
+            .returning();
+          await db.insert(interacoes).values({
+            leadId: existing.id,
+            autorId: null,
+            tipo: "mudanca_status",
+            conteudo: `Status alterado de ${existing.status} para desqualificado`,
+            metadata: {
+              de: existing.status,
+              para: "desqualificado",
+              motivo: payload.motivo_desqualificacao,
+              automatico: true,
+              origem: "site_prequal",
+            } as never,
+          });
+          await resolveSlaAlertsForLead(existing.id).catch(() => {});
+          await encerrarCadencia(existing.id).catch(() => {});
+          if (desqualificado) {
+            await notifyPartnerPortal(desqualificado, "desqualificado").catch(() => {});
+            await onLeadStageChange(desqualificado, "desqualificado").catch(() => {});
+          }
+          const prequalMeta = extractRequestMeta(request);
+          after(() =>
+            logAction(
+              null,
+              null,
+              "lead_desqualificado_prequal_site",
+              "lead",
+              existing.id,
+              { motivo: payload.motivo_desqualificacao },
+              prequalMeta,
+            ),
+          );
+        }
+        return NextResponse.json(
+          { leadId: existing.id, enriched: true, desqualificado: true, portalUrl: null, agendaToken: null },
+          { status: 200 },
+        );
+      }
 
       // E-mail de ENRIQUECIMENTO — conteúdo diferente do "Novo lead" pra não
       // duplicar. Re-busca o lead atualizado pra refletir os dados completos.

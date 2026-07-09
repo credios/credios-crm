@@ -77,6 +77,14 @@ export const webhookLeadPayloadSchema = z
     // CRM atualiza o lead mas NÃO dispara o e-mail de "Cadastro completo".
     notify: z.coerce.boolean().optional(),
 
+    // ── Pré-qualificação automática do site ──────────────────────────────
+    // O /continuar-simulacao recusa na hora (renda/saldo devedor fora da
+    // política) e manda o enriquecimento com este flag: o lead parcial vira
+    // `desqualificado` com o motivo, sem portal/agenda/proativo. Só tem efeito
+    // no fluxo de ENRIQUECIMENTO (lead_id presente e existente).
+    auto_desqualificar: z.coerce.boolean().optional(),
+    motivo_desqualificacao: z.string().trim().max(500).optional().or(z.literal("")),
+
     // ── Parceria (Portal de Parceiros) ───────────────────────────────────
     // Enviados pelo portal quando o lead é uma indicação de parceiro.
     parceiro_nome: z.string().trim().max(200).optional().or(z.literal("")),
