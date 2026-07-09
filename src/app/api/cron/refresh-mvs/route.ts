@@ -2,6 +2,18 @@ import { sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
+import { comparisonPeriod } from "@/lib/reports/comparativos";
+import { periodFromFilters } from "@/lib/reports/period";
+import {
+  fetchConversionRates,
+  fetchDistribuicoes,
+  fetchKpis,
+  fetchMqlSql,
+  fetchPipelineAtivoPorStatus,
+  fetchTempoMedioPorStatus,
+  fetchVolumePorDia,
+} from "@/lib/reports/queries";
+import { reportFiltersSchema } from "@/lib/validators/report";
 
 export const dynamic = "force-dynamic";
 // Refresh CONCURRENTLY pode ser lento em datasets grandes (escala com nº
@@ -53,6 +65,32 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Pré-aquecimento do cache dos relatórios ──
+  // As queries dos relatórios são unstable_cache de 5 min; a PRIMEIRA visita
+  // depois do TTL pagava a carga fria (a sensação de "clicar e recarregar até
+  // aparecer"). O cron reaquece o combo default (sem filtros, últimos 30d) a
+  // cada 30 min — quem abre /relatorios cai em cache quente. Best-effort.
+  let warmMs = 0;
+  try {
+    const t0 = Date.now();
+    const filters = reportFiltersSchema.parse({});
+    const period = periodFromFilters(filters);
+    const compPeriod = comparisonPeriod(period, "anterior_equivalente");
+    await Promise.allSettled([
+      fetchKpis(filters, period),
+      ...(compPeriod ? [fetchKpis(filters, compPeriod)] : []),
+      fetchConversionRates(filters, period),
+      fetchVolumePorDia(filters, period),
+      fetchPipelineAtivoPorStatus(filters),
+      fetchTempoMedioPorStatus(filters, period),
+      fetchDistribuicoes(filters, period),
+      fetchMqlSql(filters, period),
+    ]);
+    warmMs = Date.now() - t0;
+  } catch (e) {
+    console.error("[cron:refresh-mvs] cache warm falhou:", e);
+  }
+
   const totalMs = Date.now() - startedAt;
   const hasFailure = results.some((r) => r.error);
 
@@ -60,6 +98,7 @@ export async function GET(request: NextRequest) {
     {
       ok: !hasFailure,
       totalMs,
+      warmMs,
       refreshed: results,
     },
     { status: hasFailure ? 500 : 200 },

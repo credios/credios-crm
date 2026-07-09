@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
@@ -1754,7 +1754,7 @@ async function fetchTempoPercentisUncached(
   const toIso = period.to.toISOString();
 
   // 1. Atribuição → 1º contato (minutos) — pra leads atribuídos no período
-  const r1 = await db.execute<{
+  const r1p = db.execute<{
     p25: string;
     p50: string;
     p75: string;
@@ -1780,7 +1780,7 @@ async function fetchTempoPercentisUncached(
   `));
 
   // 2. Criação → fechamento (dias) — pra leads fechados no período
-  const r2 = await db.execute<{
+  const r2p = db.execute<{
     p25: string;
     p50: string;
     p75: string;
@@ -1802,7 +1802,7 @@ async function fetchTempoPercentisUncached(
   `));
 
   // 3. Atribuição → fechamento (dias) — quanto tempo tomou nas mãos do consultor
-  const r3 = await db.execute<{
+  const r3p = db.execute<{
     p25: string;
     p50: string;
     p75: string;
@@ -1844,6 +1844,9 @@ async function fetchTempoPercentisUncached(
       p90: conv(r.p90),
     };
   }
+
+  // Os 3 percentile_cont são independentes — paralelos corta a latência a 1/3.
+  const [r1, r2, r3] = await Promise.all([r1p, r2p, r3p]);
 
   return [
     { metrica: "Atribuição → 1º contato", unidade: "min", ...pickRow(r1) },
@@ -2367,7 +2370,7 @@ export async function fetchKpisConsultor(
   period: PeriodRange,
 ): Promise<KpisConsultor> {
   // Atribuídos NO PERÍODO (atribuido_em entre from..to, mesmo consultor).
-  const [atribRow] = await db
+  const atribP = db
     .select({ count: sql<number>`count(*)::int` })
     .from(leads)
     .where(
@@ -2379,7 +2382,7 @@ export async function fetchKpisConsultor(
     );
 
   // Pipeline ATUAL (snapshot agora) — desse consultor, status não-terminal.
-  const [pipelineRow] = await db
+  const pipelineP = db
     .select({
       count: sql<number>`count(*)::int`,
       valor: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
@@ -2397,7 +2400,7 @@ export async function fetchKpisConsultor(
     );
 
   // Fechados no período (data_fechamento entre from..to, mesmo consultor).
-  const [fechRow] = await db
+  const fechP = db
     .select({
       count: sql<number>`count(*)::int`,
       valorLiberado: sql<string>`coalesce(sum(${leads.valorLiberadoCentavos}), 0)::text`,
@@ -2413,8 +2416,11 @@ export async function fetchKpisConsultor(
       ),
     );
 
+  // 3 agregações independentes — paralelas.
+  const [[atribRow], [pipelineRow], [fechRow]] = await Promise.all([atribP, pipelineP, fechP]);
   const atribuidos = atribRow.count;
   const fechados = fechRow.count;
+
   return {
     atribuidosCount: atribuidos,
     pipelineCount: pipelineRow.count,
@@ -2543,6 +2549,86 @@ async function fetchMqlSqlPorOrigemUncached(
       fechados,
       taxaAceite: mql > 0 ? sqlCount / mql : 0,
       winRate: sqlCount > 0 ? fechados / sqlCount : 0,
+    };
+  });
+}
+
+// ============================================================================
+// Qualidade de dados — leads com valores atípicos DENTRO dos relatórios
+// ============================================================================
+
+export type LeadDadoAtipico = {
+  leadId: string;
+  nome: string;
+  motivos: string[];
+  rendaMensalCentavos: number | null;
+  valorCreditoCentavos: number | null;
+  valorImovelCentavos: number | null;
+  flagged: boolean; // já marcado pelo detector do webhook (valores_suspeitos)
+};
+
+// Cortes de "incomum" pro público CGI (bem abaixo dos thresholds do detector
+// do webhook, que só pega absurdos): renda ≥ 150k/mês, imóvel ≥ 20M,
+// crédito ≥ 5M, ou crédito > valor do imóvel (LTV impossível).
+const ATIPICO_RENDA = 15_000_000; // centavos = R$ 150k/mês
+const ATIPICO_IMOVEL = 2_000_000_000; // R$ 20M
+const ATIPICO_CREDITO = 500_000_000; // R$ 5M
+
+/** Leads do período com valores possivelmente errados e ainda NÃO revisados —
+ *  entram nas médias dos relatórios e distorcem os números. */
+export async function fetchLeadsDadosAtipicos(
+  period: PeriodRange,
+): Promise<LeadDadoAtipico[]> {
+  const rows = await db
+    .select({
+      leadId: leads.id,
+      nome: leads.nome,
+      rendaMensalCentavos: leads.rendaMensalCentavos,
+      valorCreditoCentavos: leads.valorCreditoCentavos,
+      valorImovelCentavos: leads.valorImovelCentavos,
+      valoresSuspeitos: leads.valoresSuspeitos,
+    })
+    .from(leads)
+    .where(
+      and(
+        gte(leads.createdAt, period.from),
+        lte(leads.createdAt, period.to),
+        sql`${leads.valoresRevisadoEm} is null`,
+        sql`(
+          ${leads.valoresSuspeitos} is not null
+          or coalesce(${leads.rendaMensalCentavos}, 0) >= ${ATIPICO_RENDA}
+          or coalesce(${leads.valorImovelCentavos}, 0) >= ${ATIPICO_IMOVEL}
+          or coalesce(${leads.valorCreditoCentavos}, 0) >= ${ATIPICO_CREDITO}
+          or (coalesce(${leads.valorImovelCentavos}, 0) > 0
+              and coalesce(${leads.valorCreditoCentavos}, 0) > ${leads.valorImovelCentavos})
+        )`,
+      ),
+    )
+    .orderBy(desc(leads.createdAt))
+    .limit(30);
+
+  return rows.map((r) => {
+    const motivos: string[] = [];
+    if ((r.rendaMensalCentavos ?? 0) >= ATIPICO_RENDA) motivos.push("renda muito alta");
+    if ((r.valorImovelCentavos ?? 0) >= ATIPICO_IMOVEL) motivos.push("imóvel muito alto");
+    if ((r.valorCreditoCentavos ?? 0) >= ATIPICO_CREDITO) motivos.push("crédito muito alto");
+    if (
+      (r.valorImovelCentavos ?? 0) > 0 &&
+      (r.valorCreditoCentavos ?? 0) > (r.valorImovelCentavos ?? 0)
+    ) {
+      motivos.push("crédito maior que o imóvel");
+    }
+    if (r.valoresSuspeitos != null && motivos.length === 0) {
+      motivos.push("marcado pelo detector do formulário");
+    }
+    return {
+      leadId: r.leadId,
+      nome: r.nome,
+      motivos,
+      rendaMensalCentavos: r.rendaMensalCentavos,
+      valorCreditoCentavos: r.valorCreditoCentavos,
+      valorImovelCentavos: r.valorImovelCentavos,
+      flagged: r.valoresSuspeitos != null,
     };
   });
 }

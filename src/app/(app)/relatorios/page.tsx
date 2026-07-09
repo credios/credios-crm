@@ -10,6 +10,8 @@ import {
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { Suspense } from "react";
+
+import { QualidadeDadosBanner } from "@/components/relatorios/qualidade-dados";
 import type { ReactNode } from "react";
 
 import { ConversionFunnel } from "@/components/relatorios/charts/conversion-funnel";
@@ -53,6 +55,7 @@ import {
   fetchSlaCompliance,
   fetchTempoMedioPorStatus,
   fetchUfsDistintas,
+  fetchLeadsDadosAtipicos,
   fetchVolumePorDia,
 } from "@/lib/reports/queries";
 import {
@@ -132,6 +135,12 @@ export default async function RelatoriosPage({ searchParams }: Props) {
       <Suspense fallback={<FiltersSkeleton />}>
         <FiltersSection isMarketing={isMarketing} />
       </Suspense>
+
+      {isAdminGerente && (
+        <Suspense fallback={null}>
+          <QualidadeDadosSection period={period} />
+        </Suspense>
+      )}
 
       <Suspense fallback={<KpisSkeleton />}>
         <KpisSection
@@ -576,3 +585,12 @@ async function SaudeOperacionalSection({
   });
 }
 
+
+async function QualidadeDadosSection({ period }: { period: PeriodRange }) {
+  // Qualidade de dados nunca derruba a página — falhou, some.
+  const items = await fetchLeadsDadosAtipicos(period).catch(
+    () => [] as Awaited<ReturnType<typeof fetchLeadsDadosAtipicos>>,
+  );
+  if (items.length === 0) return null;
+  return <QualidadeDadosBanner items={items} />;
+}
