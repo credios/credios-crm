@@ -11,7 +11,9 @@ const DURACAO_MIN = 15;
 const PASSO_MIN = 15;
 const HORA_INICIO_MIN = 8 * 60; // 08:00
 const ULTIMO_INICIO_MIN = 19 * 60 + 30; // 19:30 (inclusive)
-const ANTECEDENCIA_MIN = 120; // 2h — ajustável
+// 1h após o preenchimento do formulário (owner, 2026-07-09; antes 2h) —
+// speed-to-lead: o cliente ainda está quente e o consultor tem fôlego.
+const ANTECEDENCIA_MIN = 60;
 
 export type SlotPublico = { inicioISO: string; hora: string };
 export type DiaAgenda = {
