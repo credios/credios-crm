@@ -32,10 +32,37 @@ describe("elegivelAgendaPublica", () => {
     expect(elegivelAgendaPublica({ ...base, valorImovelCentavos: 29_900_000 })).toBe(false);
   });
 
-  it("piso de renda: 6k passa, 5.9k não; renda ausente não passa", () => {
-    expect(elegivelAgendaPublica({ ...base, rendaMensalCentavos: 600_000 })).toBe(true);
-    expect(elegivelAgendaPublica({ ...base, rendaMensalCentavos: 590_000 })).toBe(false);
+  it("renda (régua do funil): 5k passa, 4.9k não; renda ausente não passa", () => {
+    expect(elegivelAgendaPublica({ ...base, rendaMensalCentavos: 500_000 })).toBe(true);
+    expect(elegivelAgendaPublica({ ...base, rendaMensalCentavos: 490_000 })).toBe(false);
     expect(elegivelAgendaPublica({ ...base, rendaMensalCentavos: null })).toBe(false);
+  });
+
+  it("renda composta: 4k + 4k do cônjuge que compõe passa; soma < 8k não; cônjuge que não compõe não conta", () => {
+    expect(
+      elegivelAgendaPublica({
+        ...base,
+        rendaMensalCentavos: 400_000,
+        conjugeCompoeRenda: true,
+        conjugeRendaCentavos: 400_000,
+      }),
+    ).toBe(true);
+    expect(
+      elegivelAgendaPublica({
+        ...base,
+        rendaMensalCentavos: 400_000,
+        conjugeCompoeRenda: true,
+        conjugeRendaCentavos: 390_000,
+      }),
+    ).toBe(false);
+    expect(
+      elegivelAgendaPublica({
+        ...base,
+        rendaMensalCentavos: 400_000,
+        conjugeCompoeRenda: false,
+        conjugeRendaCentavos: 900_000,
+      }),
+    ).toBe(false);
   });
 
   it("tipos aceitos (com/sem acento e caixa); demais tipos não", () => {

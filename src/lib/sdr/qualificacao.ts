@@ -8,11 +8,15 @@
 //  - faltando:    dado(s) ainda não confirmados → a IA precisa perguntar antes.
 //
 // "Não qualificado" NUNCA é "desqualificado" — é só "não agenda automaticamente".
-// Limiares aqui como constantes (fáceis de ajustar; viram tela na Fase 3).
+// Limiares vêm da política central (src/lib/politica-credito.ts).
 
-const PISO_CREDITO_CENTAVOS = 10_000_000; // R$ 100.000
-const LTV_MAX = 0.6; // 60%
-const SALDO_MAX_PCT = 0.25; // 25% do valor do imóvel, se financiado
+import {
+  LTV_MAX,
+  REUNIAO_MIN_CREDITO_CENTAVOS,
+  SALDO_MAX_RATIO,
+  saldoForaDaPolitica,
+} from "@/lib/politica-credito";
+
 const TIPO_IMOVEL_MANUAL = "Outros"; // tipo "Outros" → revisão manual
 
 export type FatosQualificacao = {
@@ -47,9 +51,9 @@ export function avaliarQualificacao(f: FatosQualificacao): ResultadoQualificacao
   if (f.temImovelGarantia === false) reprovados.push("não possui imóvel para dar em garantia");
   else if (f.temImovelGarantia == null) faltando.push("se possui imóvel para garantia");
 
-  // 2. Crédito ≥ piso
+  // 2. Crédito ≥ piso de reunião
   if (f.valorCreditoCentavos == null) faltando.push("valor do crédito");
-  else if (f.valorCreditoCentavos < PISO_CREDITO_CENTAVOS)
+  else if (f.valorCreditoCentavos < REUNIAO_MIN_CREDITO_CENTAVOS)
     reprovados.push("crédito abaixo de R$ 100.000");
 
   // 3. LTV ≤ 60% (precisa do valor do imóvel)
@@ -68,13 +72,17 @@ export function avaliarQualificacao(f: FatosQualificacao): ResultadoQualificacao
   if (f.pendenciaBloqueante == null) faltando.push("se há pendência jurídica no imóvel");
   else if (f.pendenciaBloqueante === true) reprovados.push("pendência jurídica no imóvel");
 
-  // 6. Se financiado: saldo devedor ≤ 25% do valor do imóvel
+  // 6. Se financiado: saldo devedor abaixo de 50% do valor do imóvel — mesma
+  //    régua do funil (unificação de 09/07/2026; antes reunia só até 25%).
   if (ehFinanciado(f.situacaoImovel, f.saldoDevedorCentavos)) {
     if (f.saldoDevedorCentavos == null) faltando.push("saldo devedor do financiamento");
     else if (f.valorImovelCentavos && f.valorImovelCentavos > 0) {
-      const pct = f.saldoDevedorCentavos / f.valorImovelCentavos;
-      if (pct > SALDO_MAX_PCT)
-        reprovados.push(`saldo devedor ${Math.round(pct * 100)}% acima de 25% do imóvel`);
+      if (saldoForaDaPolitica(f.saldoDevedorCentavos, f.valorImovelCentavos)) {
+        const pct = Math.round((f.saldoDevedorCentavos / f.valorImovelCentavos) * 100);
+        reprovados.push(
+          `saldo devedor ${pct}% do imóvel — no limite de ${Math.round(SALDO_MAX_RATIO * 100)}% ou acima`,
+        );
+      }
     }
   }
 

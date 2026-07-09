@@ -2,20 +2,26 @@ import "server-only";
 
 import { interacoes } from "../../../db/schema";
 import { db } from "@/lib/db";
+import {
+  FUNIL_MIN_CREDITO_CENTAVOS,
+  FUNIL_MIN_IMOVEL_CENTAVOS,
+  SCORE_MINIMO_REUNIAO,
+} from "@/lib/politica-credito";
 import { consultarScoreLead, ultimaConsultaScore } from "@/lib/score/directd";
 
-// GATE DE SCORE pra oferta de reunião (regra do owner, 2026-07-07):
-//   - Consulta automática no fim do formulário SÓ pra quem tem imóvel ≥ 300k
-//     e busca crédito ≥ 100k (com CPF). Dedup de 30 dias já protege o custo.
+// GATE DE SCORE pra oferta de reunião (regra do owner, 2026-07-07; critérios
+// unificados com o nível FUNIL da política central em 09/07/2026):
+//   - Consulta automática no fim do formulário pra quem tem CPF e está no
+//     funil (imóvel ≥ 300k, crédito ≥ 75k — antes o corte era 100k). Dedup
+//     de 30 dias já protege o custo.
 //   - Score < 650 → NÃO oferecer reunião (nem grade na tela de sucesso, nem
 //     oferta da Heloísa). O lead segue o fluxo normal: Heloísa atende e
 //     qualifica; marketing/comercial analisam manualmente (score no CRM).
 //   - Sem score (sem CPF, critérios não batem, API falhou) → FAIL-OPEN: a
 //     pré-qualificação determinística decide sozinha, como antes.
 
-export const SCORE_MINIMO_REUNIAO = 650;
-const GATE_MIN_IMOVEL_CENTAVOS = 30_000_000; // R$ 300k
-const GATE_MIN_CREDITO_CENTAVOS = 10_000_000; // R$ 100k
+// Re-export pra compatibilidade (webhook e Heloísa importam daqui).
+export { SCORE_MINIMO_REUNIAO };
 
 export function dentroCriteriosConsultaScore(lead: {
   cpf: string | null;
@@ -24,8 +30,8 @@ export function dentroCriteriosConsultaScore(lead: {
 }): boolean {
   return (
     (lead.cpf ?? "").replace(/\D/g, "").length === 11 &&
-    (lead.valorImovelCentavos ?? 0) >= GATE_MIN_IMOVEL_CENTAVOS &&
-    (lead.valorCreditoCentavos ?? 0) >= GATE_MIN_CREDITO_CENTAVOS
+    (lead.valorImovelCentavos ?? 0) >= FUNIL_MIN_IMOVEL_CENTAVOS &&
+    (lead.valorCreditoCentavos ?? 0) >= FUNIL_MIN_CREDITO_CENTAVOS
   );
 }
 

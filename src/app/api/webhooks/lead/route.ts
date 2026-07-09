@@ -186,6 +186,9 @@ function tokenAgendaSeElegivel(
     valorImovelCentavos: number | null;
     rendaMensalCentavos: number | null;
     tipoImovel: string | null;
+    // Composição de renda (regra 5k/8k da política central).
+    conjugeCompoeRenda: boolean | null;
+    conjugeRendaCentavos: number | null;
   },
   notify: boolean | undefined,
   completo: boolean,

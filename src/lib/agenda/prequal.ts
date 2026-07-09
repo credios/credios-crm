@@ -2,11 +2,16 @@
 // simulador). Diferente da qualificação conversacional da Heloísa: aqui só
 // entram critérios calculáveis a partir do próprio formulário — quem passa
 // pode escolher um horário na agenda do consultor direto na página.
-// Critérios definidos pelo owner em 2026-07-06.
+// Limiares vêm da política central (src/lib/politica-credito.ts); a renda
+// segue a régua do funil (5k titular / 8k somando com cônjuge, unificação
+// de 09/07/2026 — antes era 6k fixo).
 
-const PISO_CREDITO_CENTAVOS = 10_000_000; // R$ 100.000
-const PISO_IMOVEL_CENTAVOS = 30_000_000; // R$ 300.000
-const PISO_RENDA_CENTAVOS = 600_000; // R$ 6.000
+import {
+  FUNIL_MIN_IMOVEL_CENTAVOS,
+  REUNIAO_MIN_CREDITO_CENTAVOS,
+  rendaQualificaCentavos,
+} from "@/lib/politica-credito";
+
 // Acima de R$ 500k o dono do caso é o Gabriel; até 500k, Rodrigo.
 const CREDITO_LIMITE_GABRIEL_CENTAVOS = 50_000_000;
 
@@ -29,13 +34,18 @@ export type LeadPrequal = {
   valorImovelCentavos: number | null;
   rendaMensalCentavos: number | null;
   tipoImovel: string | null;
+  // Composição de renda com cônjuge (regra 5k/8k do funil). Opcionais pra
+  // não quebrar chamadas antigas — ausentes contam como "não compõe".
+  conjugeCompoeRenda?: boolean | null;
+  conjugeRendaCentavos?: number | null;
 };
 
 /** O lead pode ver a agenda pública? Todos os critérios precisam passar. */
 export function elegivelAgendaPublica(l: LeadPrequal): boolean {
-  if ((l.valorCreditoCentavos ?? 0) < PISO_CREDITO_CENTAVOS) return false;
-  if ((l.valorImovelCentavos ?? 0) < PISO_IMOVEL_CENTAVOS) return false;
-  if ((l.rendaMensalCentavos ?? 0) < PISO_RENDA_CENTAVOS) return false;
+  if ((l.valorCreditoCentavos ?? 0) < REUNIAO_MIN_CREDITO_CENTAVOS) return false;
+  if ((l.valorImovelCentavos ?? 0) < FUNIL_MIN_IMOVEL_CENTAVOS) return false;
+  const rendaConjuge = l.conjugeCompoeRenda === true ? (l.conjugeRendaCentavos ?? 0) : 0;
+  if (!rendaQualificaCentavos(l.rendaMensalCentavos ?? 0, rendaConjuge)) return false;
   if (!l.tipoImovel || !TIPOS_ACEITOS.has(normalizar(l.tipoImovel))) return false;
   return true;
 }

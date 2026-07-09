@@ -71,23 +71,25 @@ describe("avaliarQualificacao", () => {
     expect(r.reprovados.some((x) => /Outros/.test(x))).toBe(true);
   });
 
-  it("financiado: reprova saldo acima de 25%", () => {
+  it("financiado: reprova saldo em 50% ou mais do imóvel (régua unificada com o funil)", () => {
     const r = avaliarQualificacao({
       ...base,
       situacaoImovel: "Financiado",
-      saldoDevedorCentavos: 30_000_000, // 30% de R$ 1M
+      saldoDevedorCentavos: 50_000_000, // exatamente 50% de R$ 1M
     });
     expect(r.qualificado).toBe(false);
     expect(r.reprovados.some((x) => /saldo/.test(x))).toBe(true);
   });
 
-  it("financiado: aceita saldo dentro de 25%", () => {
-    const r = avaliarQualificacao({
-      ...base,
-      situacaoImovel: "Financiado",
-      saldoDevedorCentavos: 20_000_000, // 20%
-    });
-    expect(r.qualificado).toBe(true);
+  it("financiado: aceita saldo abaixo de 50% (30% e 49% passam)", () => {
+    for (const saldo of [30_000_000, 49_000_000]) {
+      const r = avaliarQualificacao({
+        ...base,
+        situacaoImovel: "Financiado",
+        saldoDevedorCentavos: saldo,
+      });
+      expect(r.qualificado).toBe(true);
+    }
   });
 
   it("dado faltando vira 'faltando', não reprovação", () => {
