@@ -1048,8 +1048,11 @@ async function fetchConversionRatesUncached(
   // Agregação 100% no SQL: estágio mais avançado por lead (status atual +
   // histórico de mudanca_status via metadata de/para) → count por índice.
   // Retorna ≤ nº de estágios em vez de N leads × M transições pro JS.
+  // idx como literal raw: parametrizado o Postgres tipa como text e o
+  // coalesce(idx, 0) quebra ("COALESCE types text and integer cannot be
+  // matched"). i vem de código (índice do array) — sem risco de injection.
   const stageValues = sql.join(
-    progression.map((k, i) => sql`(${k}, ${i})`),
+    progression.map((k, i) => sql`(${k}, ${sql.raw(String(i))})`),
     sql`, `,
   );
   const rows = await db.execute<{ idx: number; n: number }>(sql`

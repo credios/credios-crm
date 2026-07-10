@@ -306,6 +306,23 @@ async function fluxoSdr(lead: Lead, turn: HeloisaTurn): Promise<string> {
       }
       return anexarLinkDocumentos(lead.id, turn.resposta);
     }
+    // GUARD anti-alucinação: a IA às vezes CONFIRMA o agendamento no texto
+    // sem preencher `agendar` — o cliente recebia "está agendado!" e nenhuma
+    // reunião existia (caso Stephanie). Se o texto afirma agendamento sem o
+    // payload, troca por um pedido determinístico de confirmação do horário.
+    if (
+      /\b(agendad[oa]|marcad[oa]|combinado.*\d{1,2}[h:]|confirmad[oa].*reuni)/i.test(
+        turn.resposta,
+      )
+    ) {
+      console.warn("[sdr] IA confirmou agendamento SEM payload agendar — reoferta");
+      const consultorG = lead.consultorId ? await consultorDoLead(lead.consultorId) : null;
+      if (consultorG) {
+        const slotsG = await horariosDisponiveis(consultorG.email);
+        if (slotsG.length) return msgReoferta(slotsG);
+      }
+      return `Só pra eu confirmar certinho na agenda${nome ? `, ${nome}` : ""}: me diz de novo o dia e o horário que você prefere? Assim eu já te envio o convite com o link da reunião 🙂`;
+    }
     // ainda negociando horário, sem confirmação → segue a resposta da IA
     return turn.resposta;
   }
