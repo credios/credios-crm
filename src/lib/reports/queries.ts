@@ -1058,9 +1058,9 @@ async function fetchConversionRatesUncached(
   const rows = await db.execute<{ idx: number; n: number }>(sql`
     with prog(status, idx) as (values ${stageValues}),
     base as (
-      select l.id, coalesce(p.idx, 0) as atual
-      from ${leads} l
-      left join prog p on p.status = l.status
+      select ${leads.id} as id, coalesce(p.idx, 0) as atual
+      from ${leads}
+      left join prog p on p.status = ${leads.status}
       where ${periodo}
     ),
     hist as (
