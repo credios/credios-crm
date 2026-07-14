@@ -31,7 +31,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 type Acao =
   | { acao: "executar_mensagem" }
-  | { acao: "executar_ligacao"; resultado: "atendeu" | "nao_atendeu" }
+  | { acao: "executar_ligacao"; resultado: "atendeu" | "nao_atendeu"; enviarMensagem?: boolean }
   | { acao: "respondeu" }
   | { acao: "adiar" }
   | { acao: "pular" }
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ ok: true, waUrl, mensagem });
     }
 
-    // ── Executar passo de LIGAÇÃO ──
+    // ── Executar passo de LIGAÇÃO (opcionalmente com mensagem de backup) ──
     case "executar_ligacao": {
       if (!passo || passo.tipo !== "ligacao") {
         return NextResponse.json({ error: "passo atual não é ligação" }, { status: 409 });
@@ -116,11 +116,28 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         conteudo: `Ligação da cadência — ${atendeu ? "atendeu" : "não atendeu"} (${passo.titulo})`,
         metadata: { cadencia: true, cadencia_passo: lead.cadenciaPasso, atendeu } as never,
       });
+      // "Não atendeu" com template anexo → prepara a mensagem de backup no
+      // mesmo toque (ligação + mensagem, pedido do owner) e devolve o wa.me.
+      let waUrlLigacao: string | null = null;
+      if (body.enviarMensagem && passo.templateId) {
+        const msg = await prepararMensagemPasso(lead, passo, user.nome);
+        if (msg) {
+          await db.insert(interacoes).values({
+            leadId: id,
+            autorId: user.id,
+            tipo: "whatsapp_enviado",
+            conteudo: `Mensagem da cadência enviada pelo WhatsApp — "${passo.titulo}" (após ligação sem resposta).`,
+            metadata: { cadencia: true, cadencia_passo: lead.cadenciaPasso, mensagem: msg } as never,
+          });
+          const dig = (lead.whatsapp ?? "").replace(/\D/g, "");
+          waUrlLigacao = dig ? `https://wa.me/${dig}?text=${encodeURIComponent(msg)}` : null;
+        }
+      }
       await db.update(leadsTable).set({ ultimoContato: agora }).where(eq(leadsTable.id, id));
       await resolveSlaAlertsForLead(id);
       await cederVezAoHumano(id, "contato_manual");
       await avancarPasso(lead, "executou");
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, waUrl: waUrlLigacao });
     }
 
     // ── Cliente respondeu (no WhatsApp pessoal do consultor) → conversa viva ──

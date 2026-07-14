@@ -50,6 +50,8 @@ export type FilaAcao =
       passoTitulo: string;
       energia: string | null;
       atrasoDias: number;
+      /** Ligação com template anexo: "não atendeu" já dispara a mensagem. */
+      temMensagem?: boolean;
     }
   | { tipo: "desfecho_reuniao"; reuniaoId: string; quando: string }
   | { tipo: "revisar_docs"; quantidade: number }
@@ -341,6 +343,7 @@ async function qCadenciaDue(consultorId: string): Promise<FilaItem[]> {
       score: SCORE.cadencia + (atrasoDias > 0 ? 5 : 0),
       acao: {
         tipo: passo.tipo,
+        temMensagem: passo.tipo === "ligacao" && !!passo.templateId,
         passoIdx: r.cadenciaPasso ?? 0,
         totalPassos: cad.passos.length,
         passoTitulo: passo.titulo,

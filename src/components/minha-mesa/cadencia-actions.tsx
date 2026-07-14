@@ -270,10 +270,20 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
             {pending === "atendeu" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
             Liguei — atendeu
           </Button>
-          <Button size="sm" variant="outline" onClick={() => void agir({ acao: "executar_ligacao", resultado: "nao_atendeu" }, "Registrado — próximo passo já agendado.", "nao_atendeu")}
-            disabled={!!pending}>
+          <Button size="sm" variant="outline" disabled={!!pending}
+            onClick={async () => {
+              const temMsg = "temMensagem" in acao && acao.temMensagem;
+              const r = await agir(
+                { acao: "executar_ligacao", resultado: "nao_atendeu", enviarMensagem: temMsg },
+                temMsg ? "Registrado — mensagem de backup pronta no WhatsApp 🚀" : "Registrado — próximo passo já agendado.",
+                "nao_atendeu",
+              );
+              if (r && typeof (r as Record<string, unknown>).waUrl === "string") {
+                window.open((r as { waUrl: string }).waUrl, "_blank", "noopener,noreferrer");
+              }
+            }}>
             {pending === "nao_atendeu" ? <Loader2 className="size-3.5 animate-spin" /> : <PhoneMissed className="size-3.5" />}
-            Não atendeu
+            {"temMensagem" in acao && acao.temMensagem ? "Não atendeu — mandar mensagem" : "Não atendeu"}
           </Button>
           <BotoesSecundarios agir={agir} pending={pending} semRespondeu />
         </div>
