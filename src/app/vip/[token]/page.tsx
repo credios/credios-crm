@@ -1,16 +1,12 @@
 import { desc, eq } from "drizzle-orm";
 
-import {
-  leadDocumentos,
-  leads as leadsTable,
-  users as usersTable,
-} from "../../../../db/schema";
+import { leadDocumentos, leads as leadsTable } from "../../../../db/schema";
 import type { DocsPorTipo } from "@/components/portal/portal-client";
 import { PortalInvalido } from "@/components/portal/portal-invalido";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { VipClient } from "@/components/portal/vip-client";
 import { db } from "@/lib/db";
-import { buildChecklistVipEmpresario } from "@/lib/portal/checklist-vip";
+import { estadoCivilVipFromCrm } from "@/lib/portal/checklist-vip";
 import { resolvePortalToken } from "@/lib/portal/token";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +44,7 @@ export default async function VipPage({ params }: Props) {
   const [lead] = await db
     .select({
       nome: leadsTable.nome,
-      consultorId: leadsTable.consultorId,
+      estadoCivil: leadsTable.estadoCivil,
       valorImovelCentavos: leadsTable.valorImovelCentavos,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       conjugeNome: leadsTable.conjugeNome,
@@ -59,16 +55,6 @@ export default async function VipPage({ params }: Props) {
     .where(eq(leadsTable.id, leadId))
     .limit(1);
   if (!lead) return <PortalInvalido />;
-
-  const consultorNome = lead.consultorId
-    ? await db
-        .select({ nome: usersTable.nome })
-        .from(usersTable)
-        .where(eq(usersTable.id, lead.consultorId))
-        .limit(1)
-        .then((r) => r[0]?.nome.split(/\s+/)[0] ?? "da Credios")
-        .catch(() => "da Credios")
-    : "da Credios";
 
   const docs = await db
     .select({
@@ -95,15 +81,16 @@ export default async function VipPage({ params }: Props) {
       <VipClient
         token={token}
         firstName={lead.nome.trim().split(/\s+/)[0] || lead.nome}
-        consultorNome={consultorNome}
-        sections={buildChecklistVipEmpresario()}
+        initialEstadoCivil={estadoCivilVipFromCrm(lead.estadoCivil)}
         initialDocs={docsPorTipo}
-        complementos={{
+        valores={{
           valorImovel: brl(lead.valorImovelCentavos),
           valorCredito: brl(lead.valorCreditoCentavos),
-          conjugeNome: lead.conjugeNome ?? "",
-          conjugeEmail: lead.conjugeEmail ?? "",
-          conjugeWhatsapp: foneDisplay(lead.conjugeWhatsapp),
+        }}
+        conjuge={{
+          nome: lead.conjugeNome ?? "",
+          email: lead.conjugeEmail ?? "",
+          whatsapp: foneDisplay(lead.conjugeWhatsapp),
         }}
       />
     </PortalShell>

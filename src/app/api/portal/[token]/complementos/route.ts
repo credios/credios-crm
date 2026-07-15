@@ -25,6 +25,10 @@ const bodySchema = z.object({
   conjugeEmail: z.string().email().max(160).optional(),
   conjugeWhatsapp: z.string().min(8).max(32).optional(),
   conjugeNome: z.string().min(2).max(160).optional(),
+  /** Vocabulário do CRM: "Casado(a)", "Solteiro(a)"… (ESTADO_CIVIL_VIP_CRM). */
+  estadoCivil: z
+    .enum(["Solteiro(a)", "Casado(a)", "União Estável", "Divorciado(a)", "Viúvo(a)"])
+    .optional(),
 });
 
 const LABEL: Record<string, string> = {
@@ -33,6 +37,7 @@ const LABEL: Record<string, string> = {
   conjugeEmail: "e-mail do cônjuge",
   conjugeWhatsapp: "WhatsApp do cônjuge",
   conjugeNome: "nome do cônjuge",
+  estadoCivil: "estado civil",
 };
 
 /** E.164 pro padrão do CRM (+55DDDNÚMERO). */
@@ -94,6 +99,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   if (data.conjugeNome != null) {
     set.conjugeNome = data.conjugeNome.trim();
     alterados.push(LABEL.conjugeNome!);
+  }
+  if (data.estadoCivil != null) {
+    set.estadoCivil = data.estadoCivil;
+    alterados.push(LABEL.estadoCivil!);
   }
 
   // Drizzle lança em set({}) vazio — nada mudou, responde ok.

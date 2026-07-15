@@ -6,47 +6,100 @@ import { CheckCircle2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 import { DocRow, type DocsPorTipo } from "./portal-client";
-import { VipComplementos } from "./vip-complementos";
+import { VipEstadoCivil, VipValores } from "./vip-complementos";
 import { PortalIcon } from "./portal-icons";
 import { chavesObrigatorias, type DocItem, type DocSection } from "@/lib/portal/checklist";
+import { buildChecklistVip, type EstadoCivilVip } from "@/lib/portal/checklist-vip";
 
-// Portal VIP — atendimento personalizado de alto valor. Copy MÍNIMA: o cliente
-// já falou com o consultor, a página não precisa vender nada. Só três coisas:
-// (1) dados que faltam pro banco, (2) a lista de documentos, (3) sinal de que
-// alguém está do outro lado. Reusa DocRow do portal padrão (mesmo upload,
-// mesma tabela) — só a moldura e a curadoria mudam.
+// Portal VIP — atendimento personalizado de alto valor. Copy MÍNIMA e
+// IMPESSOAL: o cliente já falou com o consultor; a página não vende nada e
+// não se apresenta. Só recebe. A checklist é recalculada no client conforme o
+// estado civil confirmado (certidão certa pra situação certa). Reusa DocRow do
+// portal padrão (mesmo upload, mesma tabela).
 
 type Props = {
   token: string;
   firstName: string;
-  consultorNome: string;
-  sections: DocSection[];
+  initialEstadoCivil: EstadoCivilVip | null;
   initialDocs: DocsPorTipo;
-  complementos: {
-    valorImovel: string;
-    valorCredito: string;
-    conjugeNome: string;
-    conjugeEmail: string;
-    conjugeWhatsapp: string;
-  };
+  valores: { valorImovel: string; valorCredito: string };
+  conjuge: { nome: string; email: string; whatsapp: string };
 };
+
+
+/** Uma seção de documentos (título + linhas de upload). Module-level: componente
+ *  declarado dentro do render reseta estado a cada re-render. */
+function Secao({
+  section,
+  docs,
+  busy,
+  onUpload,
+  onRemove,
+}: {
+  section: DocSection;
+  docs: DocsPorTipo;
+  busy: Record<string, boolean>;
+  onUpload: (item: DocItem, files: FileList | null) => void;
+  onRemove: (itemKey: string, docId: string) => void;
+}) {
+  return (
+    <section className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_6px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl sm:p-6">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-credios-blue/15 ring-1 ring-credios-blue/25">
+          <PortalIcon name={section.categoria} className="h-5 w-5 text-credios-blue" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="font-display text-base font-semibold text-white">
+            {section.titulo}
+          </h2>
+          {section.descricao && (
+            <p className="mt-0.5 text-[13px] leading-snug text-white/50">
+              {section.descricao}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="space-y-3">
+        {section.items.map((item) => (
+          <DocRow
+            key={item.key}
+            item={item}
+            enviados={docs[item.key] ?? []}
+            busy={Boolean(busy[item.key])}
+            onUpload={(files) => onUpload(item, files)}
+            onRemove={(docId) => onRemove(item.key, docId)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export function VipClient({
   token,
   firstName,
-  consultorNome,
-  sections,
+  initialEstadoCivil,
   initialDocs,
-  complementos,
+  valores,
+  conjuge,
 }: Props) {
   const [docs, setDocs] = useState<DocsPorTipo>(initialDocs);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [estadoCivil, setEstadoCivil] = useState<EstadoCivilVip | null>(
+    initialEstadoCivil,
+  );
 
+  const sections = useMemo(() => buildChecklistVip(estadoCivil), [estadoCivil]);
   const obrigatorias = useMemo(() => chavesObrigatorias(sections), [sections]);
   const enviados = obrigatorias.filter((k) => (docs[k]?.length ?? 0) > 0).length;
   const total = obrigatorias.length;
   const pct = total === 0 ? 0 : Math.round((enviados / total) * 100);
-  const completo = total > 0 && enviados === total;
+  const completo = total > 0 && enviados === total && estadoCivil != null;
+
+  // Identificação abre a página; o bloco de estado civil (pergunta + dados do
+  // cônjuge) entra logo abaixo dela; o resto (certidão, IRPF, imóvel) segue.
+  const secIdentificacao = sections.find((s) => s.categoria === "titular");
+  const secRestantes = sections.filter((s) => s.categoria !== "titular");
 
   async function uploadFiles(item: DocItem, files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -113,18 +166,18 @@ export function VipClient({
         </span>
       </header>
 
-      {/* Hero — copy mínima: nome, consultor, progresso. Nada de venda. */}
+      {/* Hero — impessoal: o que é a página e por quê. Sem apresentação. */}
       <section className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.045] p-7 shadow-[0_8px_50px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-8">
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-credios-gold/25 bg-credios-gold/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-credios-gold">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-credios-gold" aria-hidden />
           Atendimento personalizado
         </div>
         <h1 className="font-display text-[26px] font-bold leading-tight text-white sm:text-3xl">
-          {firstName}, sua operação está comigo
+          {firstName}, sua operação
         </h1>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-white/60">
-          Sou {consultorNome}, da Credios. Preparei esta página só com o que o seu caso
-          precisa. Envie no seu tempo — acompanho cada item por aqui.
+          Documentos necessários para a nossa mesa de crédito começar a trabalhar a sua
+          operação. Envie no seu tempo — salvamos tudo automaticamente.
         </p>
 
         {total > 0 && (
@@ -145,46 +198,40 @@ export function VipClient({
         )}
       </section>
 
-      {/* Complementos primeiro: é o que destrava o cadastro no banco. */}
-      <div className="mt-5">
-        <VipComplementos token={token} initial={complementos} />
-      </div>
-
-      {/* Documentos */}
       <div className="mt-5 space-y-5">
-        {sections.map((section) => (
-          <section
-            key={section.categoria + section.titulo}
-            className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_6px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl sm:p-6"
-          >
-            <div className="mb-4 flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-credios-blue/15 ring-1 ring-credios-blue/25">
-                <PortalIcon name={section.categoria} className="h-5 w-5 text-credios-blue" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="font-display text-base font-semibold text-white">
-                  {section.titulo}
-                </h2>
-                {section.descricao && (
-                  <p className="mt-0.5 text-[13px] leading-snug text-white/50">
-                    {section.descricao}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="space-y-3">
-              {section.items.map((item) => (
-                <DocRow
-                  key={item.key}
-                  item={item}
-                  enviados={docs[item.key] ?? []}
-                  busy={Boolean(busy[item.key])}
-                  onUpload={(files) => uploadFiles(item, files)}
-                  onRemove={(docId) => removeDoc(item.key, docId)}
-                />
-              ))}
-            </div>
-          </section>
+        {/* Valores da operação */}
+        <VipValores token={token} initial={valores} />
+
+        {/* Identificação */}
+        {secIdentificacao && (
+          <Secao
+            section={secIdentificacao}
+            docs={docs}
+            busy={busy}
+            onUpload={uploadFiles}
+            onRemove={removeDoc}
+          />
+        )}
+
+        {/* Estado civil (pergunta) + dados do cônjuge quando aplicável —
+            é o que define a certidão pedida logo abaixo. */}
+        <VipEstadoCivil
+          token={token}
+          valor={estadoCivil}
+          onChange={setEstadoCivil}
+          initialConjuge={conjuge}
+        />
+
+        {/* Certidão do estado civil, IRPF e imóvel */}
+        {secRestantes.map((s) => (
+          <Secao
+            key={s.categoria + s.titulo}
+            section={s}
+            docs={docs}
+            busy={busy}
+            onUpload={uploadFiles}
+            onRemove={removeDoc}
+          />
         ))}
       </div>
 
@@ -192,19 +239,17 @@ export function VipClient({
         <div className="mt-7 rounded-[24px] border border-emerald-400/25 bg-emerald-400/[0.07] p-6 text-center backdrop-blur-xl">
           <CheckCircle2 className="mx-auto mb-3 h-9 w-9 text-emerald-400" aria-hidden />
           <h3 className="font-display text-lg font-semibold text-white">
-            Recebi tudo, {firstName}.
+            Recebemos tudo, {firstName}.
           </h3>
           <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/60">
-            Já começo a estruturar sua operação com os bancos parceiros e te dou retorno
-            pessoalmente.
+            Nossa mesa de crédito já começa a trabalhar a sua operação. Se faltar algum
+            documento, o consultor entra em contato.
           </p>
         </div>
       )}
 
       <p className="mt-8 text-center text-[12px] leading-relaxed text-white/35">
         Seus dados são usados apenas para a análise desta operação (LGPD).
-        <br />
-        Precisa de algo? Fale direto comigo pelo WhatsApp.
       </p>
     </div>
   );
