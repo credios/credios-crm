@@ -16,6 +16,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/agendar", // página pública de agendamento (gate: token HMAC na URL)
   "/api/version", // só retorna o SHA do commit — info já pública no GitHub
   "/portal", // gate: token do portal de documentos (validado no handler)
+  "/vip", // gate: MESMO token do portal (página VIP curada — atendimento premium)
   "/api/portal", // gate: token do portal (upload/validação no handler)
   "/api/whatsapp", // gate: verify token (GET) + assinatura X-Hub-Signature-256 do Meta
   "/privacidade", // página legal pública (Meta/LGPD) — sem dados sensíveis
