@@ -8,6 +8,7 @@ import {
   PieChart,
   Settings,
   ShieldCheck,
+  UserPlus,
   TrendingUp,
   User,
   Users,
@@ -59,6 +60,13 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/negociacoes",
         label: "Em negociação",
         icon: Handshake,
+        hideForMarketing: true,
+      },
+      // Módulo de parceiros: pipeline B2B (candidato → parceria ativa).
+      {
+        href: "/parceiros",
+        label: "Parceiros",
+        icon: UserPlus,
         hideForMarketing: true,
       },
       { href: "/meu-desempenho", label: "Meu desempenho", icon: TrendingUp },
@@ -140,6 +148,10 @@ export const ROUTE_META: Record<string, SimpleNavMeta> = {
   "/admin/leads-novos": {
     title: "Leads novos",
     description: "Triagem do pool sem consultor",
+  },
+  "/parceiros": {
+    title: "Parceiros",
+    description: "Pipeline de parcerias comerciais",
   },
   "/relatorios": { title: "Relatórios", description: "Visão consolidada" },
   "/atividades": {

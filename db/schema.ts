@@ -999,3 +999,102 @@ export const reunioes = pgTable(
     index("idx_reunioes_consultor").on(table.consultorId, table.inicio),
   ],
 );
+
+// ═══════════════════════════════════════════════════════════
+// MÓDULO DE PARCEIROS (2026-07-16)
+// Pipeline de RELACIONAMENTO com parceiros comerciais (corretores,
+// contadores, imobiliárias…) — do candidato que chega pelo site até a
+// parceria assinada no portal (parceiros.credios.com.br) e o farming do
+// parceiro ativo. Deliberadamente SEPARADO de `leads`: parceiro é relação
+// B2B com ciclo próprio; misturar contaminaria funil, SLA, cadências e
+// relatórios de clientes. O contrato/assinatura/comissão vivem no PORTAL —
+// aqui só o relacionamento. Vínculo: portal_partner_id ↔ Partner.id do
+// portal (e Partner.crmPartnerRef guarda o id daqui).
+// ═══════════════════════════════════════════════════════════
+
+export const parceiros = pgTable(
+  "parceiros",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    // Identificação
+    nome: text("nome").notNull(),
+    empresa: text("empresa"),
+    email: text("email"),
+    whatsapp: text("whatsapp"), // E.164
+    /** corretor | contador | advogado | imobiliaria | assessor | correspondente | outro */
+    segmento: text("segmento"),
+    cidade: text("cidade"),
+    estado: text("estado"), // UF
+    /** CPF/CNPJ só dígitos — exigido pelo portal no handoff (Partner.document). */
+    cpfCnpj: text("cpf_cnpj"),
+
+    // Pipeline de relacionamento (sem kanban — lista):
+    // novo → em_contato → reuniao → proposta_enviada → convidado_portal → ativo
+    //                                          ↘ perdido (com motivo)
+    status: text("status").notNull().default("novo"),
+    motivoPerda: text("motivo_perda"),
+
+    // Triagem/atribuição (admin faz triagem antes de atribuir)
+    consultorId: uuid("consultor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    atribuidoEm: timestamp("atribuido_em", { withTimezone: true }),
+
+    // Origem do candidato
+    /** site | indicacao | prospeccao | evento | outro */
+    origem: text("origem").notNull().default("site"),
+    mensagem: text("mensagem"), // mensagem original do form do site
+    rawPayload: jsonb("raw_payload"),
+
+    // Vínculo com o portal (preenchido no handoff)
+    portalPartnerId: text("portal_partner_id"),
+    convidadoPortalEm: timestamp("convidado_portal_em", { withTimezone: true }),
+    ativoEm: timestamp("ativo_em", { withTimezone: true }),
+
+    ultimoContato: timestamp("ultimo_contato", { withTimezone: true }),
+    notas: text("notas"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+  },
+  (table) => [
+    index("idx_parceiros_status").on(table.status, sql`${table.createdAt} DESC`),
+    index("idx_parceiros_consultor").on(table.consultorId),
+    uniqueIndex("uq_parceiros_portal_id")
+      .on(table.portalPartnerId)
+      .where(sql`portal_partner_id IS NOT NULL`),
+  ],
+);
+
+export const parceiroInteracoes = pgTable(
+  "parceiro_interacoes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    parceiroId: uuid("parceiro_id")
+      .notNull()
+      .references(() => parceiros.id, { onDelete: "cascade" }),
+    autorId: uuid("autor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** ligacao | whatsapp | email | reuniao | anotacao | mudanca_status | mudanca_atribuicao | evento_sistema */
+    tipo: text("tipo").notNull(),
+    conteudo: text("conteudo"),
+    metadata: jsonb("metadata"),
+    criadoEm: timestamp("criado_em", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_parceiro_interacoes").on(
+      table.parceiroId,
+      sql`${table.criadoEm} DESC`,
+    ),
+  ],
+);
