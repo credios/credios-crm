@@ -35,6 +35,38 @@ export async function enviarProativoWhatsapp(opts: {
   if (to.length < 10) return { sent: false };
   const primeiroNome = opts.nome ? opts.nome.split(/\s+/)[0] : "";
 
+  // GUARD DE ATENDIMENTO HUMANO (regra do owner, 17/07/2026 — caso Adriano):
+  // qualquer digital humano no lead (interação com autor: contato registrado,
+  // mudança manual de status, reatribuição, anotação, proposta gerada) =
+  // alguém JÁ está atendendo → a Heloísa não abre conversa por cima. Sela o
+  // claim como "concluida" pro cron não reprocessar. Cinto e suspensório com
+  // cederVezAoHumano (que age na hora da ação manual); este guard cobre
+  // qualquer caminho novo/esquecido no último instante antes do envio.
+  const humano = await db
+    .select({ id: interacoes.id })
+    .from(interacoes)
+    .where(and(eq(interacoes.leadId, opts.leadId), isNotNull(interacoes.autorId)))
+    .limit(1);
+  if (humano.length > 0) {
+    const sealed = await db
+      .update(leads)
+      .set({ qualifWhatsappStatus: "concluida", qualifWhatsappEm: new Date() })
+      .where(and(eq(leads.id, opts.leadId), isNull(leads.qualifWhatsappStatus)))
+      .returning({ id: leads.id });
+    if (sealed.length > 0) {
+      await db.insert(interacoes).values({
+        leadId: opts.leadId,
+        autorId: null,
+        tipo: "evento_sistema",
+        conteudo:
+          "Abertura automática da Heloísa suprimida: lead já em atendimento manual.",
+        metadata: { kind: "proativo_suprimido_humano" } as never,
+      });
+      console.log("[proativo] suprimido — atendimento humano no lead " + opts.leadId);
+    }
+    return { sent: false };
+  }
+
   // Não reabre conversa proativa num número que JÁ está em conversa com a Heloísa
   // (outro lead com o mesmo telefone, qualif já setado). WhatsApp é uma thread por
   // número — re-simulação cria lead novo no mesmo número e dispararia a abertura de

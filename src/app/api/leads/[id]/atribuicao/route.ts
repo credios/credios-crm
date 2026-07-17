@@ -15,6 +15,7 @@ import {
   sendReuniaoConsultorEmail,
 } from "@/lib/notifications/email";
 import { transferirReunioesDoLead } from "@/lib/sdr/agendar";
+import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
 import { reassignSchema } from "@/lib/validators/lead";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -96,6 +97,13 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       : `Lead movido para pool não-atribuído`,
     metadata: { de: existing.consultorId, para: consultorId } as never,
   });
+
+  // Reatribuição manual PARA alguém = atendimento humano assumiu → Heloísa
+  // cede a vez (conversa ativa) e o proativo fica selado (regra 17/07/2026).
+  // Mover pro pool não conta: ninguém assumiu.
+  if (consultorId) {
+    await cederVezAoHumano(id, "atribuicao_manual").catch(() => {});
+  }
 
   after(() =>
     logAction(
