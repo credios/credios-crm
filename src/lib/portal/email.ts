@@ -34,7 +34,7 @@ export async function sendPortalEmail(input: {
   const bodyHtml = `
     <p style="margin:0 0 16px;color:#475467;font-size:16px;line-height:1.65;font-family:${FONT}">
       A <strong style="color:#0f1b3d">Credios</strong> é uma consultoria gratuita, 100% focada em
-      crédito com garantia de imóvel: buscamos a melhor proposta entre 15+ bancos parceiros e
+      crédito com garantia de imóvel: buscamos a melhor proposta entre 30+ bancos parceiros e
       cuidamos de tudo com você. Você não paga nada — somos remunerados pelos bancos.
     </p>
     <p style="margin:0 0 18px;color:#475467;font-size:16px;line-height:1.65;font-family:${FONT}">

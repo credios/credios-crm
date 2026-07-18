@@ -551,7 +551,7 @@ export function PropostaFaixaPDF({ data }: { data: PropostaFaixaResult }) {
               ["R$ 100M+", "originados"],
               ["500+", "clientes atendidos"],
               ["90%", "de aprovação"],
-              ["15+", "bancos parceiros"],
+              ["30+", "bancos parceiros"],
             ].map(([n, l]) => (
               <div key={l}>
                 <div style={{ fontSize: "12pt", fontWeight: 600, color: COLOR.primary }}>{n}</div>
