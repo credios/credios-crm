@@ -210,6 +210,16 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
         </div>
       );
     }
+    const abrirWhatsLivre = async () => {
+      const ok = await registrar(
+        "whatsapp_enviado",
+        "Contato por WhatsApp (mensagem livre, fora do padrão).",
+        "Contato registrado — abra e escreva do seu jeito.",
+        "whats_livre",
+        { mesa: true, livre: true },
+      );
+      if (ok && fone) window.open(`https://wa.me/${fone}`, "_blank", "noopener,noreferrer");
+    };
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
         <Button size="sm" onClick={() => void abrirWhats()} disabled={!!pending || !fone}
@@ -217,6 +227,13 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
           {pending === "whats" ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
           Abrir WhatsApp com a mensagem pronta
         </Button>
+        {fone && (
+          <Button size="sm" variant="outline" disabled={!!pending} onClick={() => void abrirWhatsLivre()}
+            title="Abre a conversa sem a mensagem pronta — você escreve do seu jeito">
+            {pending === "whats_livre" ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
+            Abrir sem a mensagem
+          </Button>
+        )}
         <Button size="sm" variant="ghost" disabled={!!pending}
           onClick={() => void registrar("ligacao", null, "Ligação registrada.", "liguei")}>
           {pending === "liguei" ? <Loader2 className="size-3.5 animate-spin" /> : <Phone className="size-3.5" />}
@@ -228,11 +245,14 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
 
   /* ── Passo de MENSAGEM: abre WhatsApp com a mensagem pronta ── */
   if (acao.tipo === "mensagem") {
-    const executar = async () => {
+    const fone = (whatsapp ?? "").replace(/\D/g, "");
+    const executar = async (livre: boolean) => {
       const r = await agir(
-        { acao: "executar_mensagem" },
-        "Mensagem registrada — só apertar enviar no WhatsApp 🚀",
-        "mensagem",
+        { acao: "executar_mensagem", ...(livre ? { livre: true } : {}) },
+        livre
+          ? "Contato registrado — abra e escreva do seu jeito."
+          : "Mensagem registrada — só apertar enviar no WhatsApp 🚀",
+        livre ? "mensagem_livre" : "mensagem",
       );
       if (r && typeof r.waUrl === "string") {
         window.open(r.waUrl, "_blank", "noopener,noreferrer");
@@ -240,11 +260,18 @@ export function CadenciaActions({ leadId, whatsapp, acao, onResolved }: Props) {
     };
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Button size="sm" onClick={() => void executar()} disabled={!!pending}
+        <Button size="sm" onClick={() => void executar(false)} disabled={!!pending}
           className="bg-emerald-600 hover:bg-emerald-600/90 text-white">
           {pending === "mensagem" ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
           Abrir WhatsApp com a mensagem pronta
         </Button>
+        {fone && (
+          <Button size="sm" variant="outline" onClick={() => void executar(true)} disabled={!!pending}
+            title="Abre a conversa sem a mensagem pronta — você escreve do seu jeito">
+            {pending === "mensagem_livre" ? <Loader2 className="size-3.5 animate-spin" /> : <MessageSquare className="size-3.5" />}
+            Abrir sem a mensagem
+          </Button>
+        )}
         <BotoesSecundarios agir={agir} pending={pending} />
       </div>
     );

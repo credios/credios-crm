@@ -30,7 +30,7 @@ type Ctx = { params: Promise<{ id: string }> };
 // da nota do "manter +7d" (decisão consciente de exceção).
 
 type Acao =
-  | { acao: "executar_mensagem" }
+  | { acao: "executar_mensagem"; livre?: boolean }
   | { acao: "executar_ligacao"; resultado: "atendeu" | "nao_atendeu"; enviarMensagem?: boolean }
   | { acao: "respondeu" }
   | { acao: "adiar" }
@@ -73,8 +73,12 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       if (!passo || passo.tipo !== "mensagem") {
         return NextResponse.json({ error: "passo atual não é mensagem" }, { status: 409 });
       }
-      const mensagem = await prepararMensagemPasso(lead, passo, user.nome);
-      if (!mensagem) {
+      // `livre`: o consultor abriu o WhatsApp sem a mensagem pronta (vai
+      // escrever do jeito dele). Conta como a execução do passo do mesmo
+      // jeito — só registra contato genérico e abre a conversa sem texto.
+      const livre = body.livre === true;
+      const mensagem = livre ? null : await prepararMensagemPasso(lead, passo, user.nome);
+      if (!livre && !mensagem) {
         return NextResponse.json({ error: "template do passo indisponível" }, { status: 500 });
       }
       // Registro COMPACTO na timeline (feedback do consultor: a transcrição
@@ -84,12 +88,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         leadId: id,
         autorId: user.id,
         tipo: "whatsapp_enviado",
-        conteudo: `Mensagem da cadência enviada pelo WhatsApp — "${passo.titulo}".`,
+        conteudo: livre
+          ? `Contato por WhatsApp (mensagem livre, fora do padrão) — "${passo.titulo}".`
+          : `Mensagem da cadência enviada pelo WhatsApp — "${passo.titulo}".`,
         metadata: {
           cadencia: true,
           cadencia_passo: lead.cadenciaPasso,
           passo_titulo: passo.titulo,
-          mensagem,
+          ...(livre ? { livre: true } : { mensagem }),
         } as never,
       });
       await db.update(leadsTable).set({ ultimoContato: agora }).where(eq(leadsTable.id, id));
@@ -98,7 +104,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       await avancarPasso(lead, "executou");
       const digits = (lead.whatsapp ?? "").replace(/\D/g, "");
       const waUrl = digits
-        ? `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`
+        ? mensagem
+          ? `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`
+          : `https://wa.me/${digits}`
         : null;
       return NextResponse.json({ ok: true, waUrl, mensagem });
     }
