@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { parceiros, users as usersTable } from "../../../../db/schema";
+import { BlocoParceiros } from "@/components/parceiros/bloco-parceiros";
 import { ParceiroStatusBadge } from "@/components/parceiros/parceiro-status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import {
   type ParceiroSegmento,
   type ParceiroStatus,
 } from "@/lib/parceiros/constants";
+import { getParceirosAtencao, getParceirosTriagem } from "@/lib/parceiros/mesa";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +88,13 @@ export default async function ParceirosPage({ searchParams }: Props) {
     .orderBy(desc(parceiros.createdAt))
     .limit(200);
 
+  // Oportunidades de canal (antes viviam na Minha Mesa): candidatos sem dono
+  // aguardando triagem e parceiros esfriando/sem indicar.
+  const [parceirosTriagem, parceirosAtencao] = await Promise.all([
+    admin ? getParceirosTriagem() : Promise.resolve([]),
+    getParceirosAtencao(user.id),
+  ]);
+
   const kpiCards = [
     { label: "Aguardando triagem", valor: kpis?.triagem ?? 0, href: "/parceiros?status=novo" },
     { label: "Em andamento", valor: kpis?.andamento ?? 0, href: "/parceiros" },
@@ -125,6 +134,11 @@ export default async function ParceirosPage({ searchParams }: Props) {
           </Link>
         ))}
       </div>
+
+      {/* Oportunidades de canal — vieram da Minha Mesa, que agora é só cliente.
+          Somem sozinhos quando não há nada a fazer. */}
+      {admin && <BlocoParceiros items={parceirosTriagem} variant="triagem" />}
+      <BlocoParceiros items={parceirosAtencao} variant="atencao" />
 
       {/* Filtro por status */}
       <div className="flex flex-wrap gap-1.5">

@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { BlocoCarteiraEmRisco } from "@/components/minha-mesa/bloco-carteira-em-risco";
 import { BlocoFaxina } from "@/components/minha-mesa/bloco-faxina";
 import { BlocoNovosParaMim } from "@/components/minha-mesa/bloco-novos-para-mim";
-import { BlocoParceiros } from "@/components/minha-mesa/bloco-parceiros";
 import { BlocoProximasReunioes } from "@/components/minha-mesa/bloco-proximas-reunioes";
 import { BlocoSolicitacoesScore } from "@/components/minha-mesa/bloco-solicitacoes-score";
 import { FilaFazerAgora } from "@/components/minha-mesa/fila-fazer-agora";
@@ -13,7 +12,6 @@ import { MiniPlacar } from "@/components/minha-mesa/mini-placar";
 import { ConsultorPicker } from "@/components/relatorios/consultor-picker";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdminOrGerente } from "@/lib/auth/permissions";
-import { getParceirosAtencao, getParceirosTriagem } from "@/lib/parceiros/mesa";
 import { fetchConsultoresAtivos } from "@/lib/reports/queries";
 import {
   getCarteiraEmRisco,
@@ -57,7 +55,11 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       nome: user.nome,
     };
 
-  const [placar, fila, novos, risco, faxina, reunioes, solicitacoesScore, duplicidades, parceirosTriagem, parceirosAtencao] =
+  // Parceiros NÃO entram aqui: a Minha Mesa é exclusivamente a higiene do
+  // relacionamento com CLIENTES. O pipeline de parceria (candidatos, triagem,
+  // farming) vive só em /parceiros — misturar os dois tirava o foco do que
+  // é urgente no funil de cliente.
+  const [placar, fila, novos, risco, faxina, reunioes, solicitacoesScore, duplicidades] =
     await Promise.all([
       getMiniPlacar(consultorVisualizadoId),
       getFilaFazerAgora(consultorVisualizadoId),
@@ -68,9 +70,6 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       // Fila de aprovação do admin — global, independe da mesa visualizada.
       user.perfil === "admin" ? getSolicitacoesScorePendentes() : Promise.resolve([]),
       user.perfil === "admin" ? getDuplicidadesPendentesCount() : Promise.resolve(0),
-      // Parceiros: triagem é global do admin; atenção segue a mesa visualizada.
-      user.perfil === "admin" ? getParceirosTriagem() : Promise.resolve([]),
-      getParceirosAtencao(consultorVisualizadoId),
     ]);
 
   const primeiroNome = user.nome.split(" ")[0] || user.nome;
@@ -125,11 +124,6 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
       )}
 
       {user.perfil === "admin" && <BlocoSolicitacoesScore items={solicitacoesScore} />}
-
-      {user.perfil === "admin" && (
-        <BlocoParceiros items={parceirosTriagem} variant="triagem" />
-      )}
-      <BlocoParceiros items={parceirosAtencao} variant="atencao" readOnly={somenteLeitura} />
 
       <BlocoProximasReunioes items={reunioes} />
 

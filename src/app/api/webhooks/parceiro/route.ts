@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
@@ -162,8 +162,26 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    const [match] = await db
-      .select({ id: parceiros.id, status: parceiros.status })
+    // Colunas usadas no enriquecimento — lidas aqui pra resolver o fill-empty
+    // em JS (ver comentário no bloco de update).
+    const matchCols = {
+      id: parceiros.id,
+      status: parceiros.status,
+      portalPartnerId: parceiros.portalPartnerId,
+      ativoEm: parceiros.ativoEm,
+      convidadoPortalEm: parceiros.convidadoPortalEm,
+      email: parceiros.email,
+      whatsapp: parceiros.whatsapp,
+      cpfCnpj: parceiros.cpfCnpj,
+      segmento: parceiros.segmento,
+      cidade: parceiros.cidade,
+      estado: parceiros.estado,
+      empresa: parceiros.empresa,
+      rawPayload: parceiros.rawPayload,
+    };
+
+    let [match] = await db
+      .select(matchCols)
       .from(parceiros)
       .where(
         ev.crm_parceiro_ref
@@ -171,6 +189,22 @@ export async function POST(request: NextRequest) {
           : eq(parceiros.portalPartnerId, ev.portal_partner_id),
       )
       .limit(1);
+
+    // Sem vínculo ainda: tenta casar um CANDIDATO do site (sem portal_partner_id)
+    // pelo mesmo CPF/CNPJ ou e-mail. Sem este passo, o candidato que vira
+    // parceiro no portal vira uma SEGUNDA linha — o mesmo nome duas vezes na
+    // lista, e o ativo continuando a aparecer como "aguardando triagem".
+    if (!match && (documento || email)) {
+      const ident = [
+        ...(documento ? [eq(parceiros.cpfCnpj, documento)] : []),
+        ...(email ? [eq(parceiros.email, email)] : []),
+      ];
+      [match] = await db
+        .select(matchCols)
+        .from(parceiros)
+        .where(and(isNull(parceiros.portalPartnerId), or(...ident)))
+        .limit(1);
+    }
 
     if (!match) {
       // Parceiro sem registro no CRM (criado direto no portal). Cria já no
@@ -209,19 +243,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, created: true });
     }
 
-    // Enriquecimento: preenche só os campos vazios (COALESCE) — nunca sobrescreve
+    // Enriquecimento fill-empty: preenche só o que está vazio — nunca sobrescreve
     // o que o consultor já curou num parceiro de origem CRM.
+    //
+    // Resolvido em JS, não em template SQL: interpolar um Date num sql`` do
+    // Drizzle gera um parâmetro que o driver não serializa e a query inteira
+    // falha (HTTP 500). Foi o que travou as ativações de 24/07 e 27/07 —
+    // o parceiro assinava no portal e ficava "convidado" no CRM.
     const set: Record<string, unknown> = {
       updatedAt: new Date(),
-      portalPartnerId: sql`coalesce(${parceiros.portalPartnerId}, ${ev.portal_partner_id})`,
-      email: sql`coalesce(${parceiros.email}, ${email})`,
-      whatsapp: sql`coalesce(${parceiros.whatsapp}, ${whatsapp})`,
-      cpfCnpj: sql`coalesce(${parceiros.cpfCnpj}, ${documento})`,
-      segmento: sql`coalesce(${parceiros.segmento}, ${segmento})`,
-      cidade: sql`coalesce(${parceiros.cidade}, ${cidade})`,
-      estado: sql`coalesce(${parceiros.estado}, ${estado})`,
-      empresa: sql`coalesce(${parceiros.empresa}, ${empresa})`,
-      rawPayload: sql`coalesce(${parceiros.rawPayload}, '{}'::jsonb) || ${JSON.stringify(extras)}::jsonb`,
+      portalPartnerId: match.portalPartnerId ?? ev.portal_partner_id,
+      email: match.email ?? email,
+      whatsapp: match.whatsapp ?? whatsapp,
+      cpfCnpj: match.cpfCnpj ?? documento,
+      segmento: match.segmento ?? segmento,
+      cidade: match.cidade ?? cidade,
+      estado: match.estado ?? estado,
+      empresa: match.empresa ?? empresa,
+      rawPayload: { ...((match.rawPayload as Record<string, unknown>) ?? {}), ...extras },
     };
 
     // Estágio: só avança (rank maior); ativo sempre vence, inclusive de perdido.
@@ -235,8 +274,8 @@ export async function POST(request: NextRequest) {
     if (advancing) {
       set.status = stage;
       if (stage === "convidado_portal")
-        set.convidadoPortalEm = sql`coalesce(${parceiros.convidadoPortalEm}, now())`;
-      if (stage === "ativo") set.ativoEm = sql`coalesce(${parceiros.ativoEm}, ${assinadoEm})`;
+        set.convidadoPortalEm = match.convidadoPortalEm ?? new Date();
+      if (stage === "ativo") set.ativoEm = match.ativoEm ?? assinadoEm;
     }
 
     await db.update(parceiros).set(set).where(eq(parceiros.id, match.id));
