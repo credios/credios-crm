@@ -149,6 +149,8 @@ export default async function LeadDetailPage({ params }: Props) {
     tipoCorrespondencia: masked.tipoCorrespondencia,
     referrer: masked.referrer,
     paginaEntrada: masked.paginaEntrada,
+    // Jornada multi-touch (sem PII — landing pages e referrers) direto do row.
+    touches: (row.touches as LeadDetailData["touches"]) ?? null,
   };
 
   const canEdit = checkPermission(user, "lead.update", {

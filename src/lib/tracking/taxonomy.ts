@@ -28,6 +28,7 @@ export const CHANNELS = [
   "Indicação",          // referral interno (cliente indica)
   "Email",              // newsletters, transacional
   "Manual",             // criado por consultor no CRM
+  "Interno",            // equipe Credios (testes de fluxo, navegadores marcados)
 ] as const;
 
 export type Channel = (typeof CHANNELS)[number];
@@ -115,6 +116,9 @@ export const CANONICAL_SOURCES: CanonicalSource[] = [
   { source: "Email",            channel: "Email",          paid: false, color: "06B6D4", icon: "Mail",          ordem: 93 },
   { source: "Condomínio",       channel: "Referral",       paid: false, color: "059669", icon: "Building",      ordem: 94 },
   { source: "Portal de Parceiros", channel: "Referral",    paid: false, color: "0A4D8C", icon: "Handshake",     ordem: 95 },
+  // Navegadores da equipe marcados via credios.com.br/interno — isola testes
+  // de fluxo dos relatórios de aquisição (nem canal nem fonte reais são poluídos).
+  { source: "Teste Interno",    channel: "Interno",        paid: false, color: "94A3B8", icon: "FlaskConical",  ordem: 96 },
   { source: "Unknown",          channel: "Direct",         paid: false, color: "9CA3AF", icon: "HelpCircle",    ordem: 999 },
 ];
 
@@ -137,6 +141,18 @@ export function isCanonicalSource(s: string): boolean {
 
 export function isChannel(s: string): s is Channel {
   return (CHANNELS as readonly string[]).includes(s);
+}
+
+/**
+ * `utm_source` bruto que resolve pra um source do canal "AI Assistant"
+ * (ex: "chatgpt.com", "perplexity"). Usado pro flag `is_ai_assistant` dos
+ * touches — o referrer sozinho não basta porque ChatGPT e similares abrem
+ * links sem referrer HTTP, só com a tag na URL.
+ */
+export function isAiUtmSource(utm: string | null | undefined): boolean {
+  if (!utm) return false;
+  const canonical = UTM_SOURCE_ALIASES[utm.trim().toLowerCase()];
+  return canonical ? SOURCE_TO_CHANNEL[canonical] === "AI Assistant" : false;
 }
 
 /**

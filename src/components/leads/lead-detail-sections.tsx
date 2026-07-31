@@ -34,6 +34,20 @@ import {
   temSaldoDevedor,
 } from "@/lib/leads/credito-total";
 import { formatCpf, formatPhoneBr } from "@/lib/formatters/phone";
+import { UTM_SOURCE_ALIASES } from "@/lib/tracking/taxonomy";
+
+/** Toque do histórico multi-touch capturado pelo site (coluna leads.touches). */
+export type LeadTouch = {
+  timestamp?: string;
+  referrer?: string;
+  referrer_parsed?: string;
+  landing_page?: string;
+  /** Cookie de utm_source NO MOMENTO do toque — pode ser herdado de visita
+   *  anterior (janela de 30 dias), então NÃO prova a origem desta sessão. */
+  utm_source?: string;
+  utm_campaign?: string;
+  is_ai_assistant?: boolean;
+};
 
 export type LeadDetailData = {
   id: string;
@@ -105,6 +119,8 @@ export type LeadDetailData = {
   tipoCorrespondencia: string | null;
   referrer: string | null;
   paginaEntrada: string | null;
+  /** Histórico multi-touch (jsonb) — null em leads antigos ou de webhook externo. */
+  touches: LeadTouch[] | null;
 };
 
 function FormGrid({ children }: { children: React.ReactNode }) {
@@ -759,6 +775,52 @@ export function LeadQualificacaoCard({ lead }: { lead: LeadDetailData }) {
   );
 }
 
+// ── Sessão da conversão × fonte atribuída ────────────────────────────────────
+// A fonte atribuída do lead segue o modelo "last non-direct" (cookie de 30
+// dias): quem clicou num link do ChatGPT semana passada e voltou digitando a
+// URL ainda conta como ChatGPT. Correto pra atribuição, mas a ficha precisa
+// mostrar TAMBÉM o que a sessão do cadastro realmente foi — senão a equipe lê
+// "ChatGPT" e assume que o clique aconteceu naquela hora.
+
+/**
+ * Origem REAL de uma visita, derivada só de evidências da própria sessão:
+ * tag na URL de entrada (utm/click ID) ou referrer. Ignora `t.utm_source`
+ * de propósito — aquele campo é o cookie no momento do toque, que pode ter
+ * sido herdado de visita anterior.
+ */
+function origemDaSessao(t: LeadTouch): { label: string; tagged: boolean } {
+  const lp = t.landing_page ?? "";
+  const q = lp.indexOf("?");
+  if (q >= 0) {
+    const params = new URLSearchParams(lp.slice(q + 1));
+    const utm = params.get("utm_source")?.trim().toLowerCase();
+    if (utm) return { label: UTM_SOURCE_ALIASES[utm] ?? utm, tagged: true };
+    if (params.get("gclid") || params.get("wbraid") || params.get("gbraid"))
+      return { label: "Google Ads", tagged: true };
+    if (params.get("fbclid")) return { label: "Meta", tagged: true };
+    if (params.get("msclkid")) return { label: "Microsoft Ads", tagged: true };
+  }
+  const rp = (t.referrer_parsed ?? "").trim();
+  if (rp && !["direto", "direct", "interno"].includes(rp.toLowerCase())) {
+    return { label: rp, tagged: false };
+  }
+  return { label: "Direta", tagged: false };
+}
+
+const fmtTouchData = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function touchDataLabel(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : fmtTouchData.format(d);
+}
+
 export function LeadOrigemCard({
   lead,
   detalhado = true,
@@ -773,6 +835,17 @@ export function LeadOrigemCard({
   const sourceLabel = lead.source ?? lead.origem;
   const channelLabel = lead.channel;
 
+  const touches = lead.touches ?? [];
+  const ultimoTouch = touches.length > 0 ? touches[touches.length - 1]! : null;
+  const sessaoConversao = ultimoTouch ? origemDaSessao(ultimoTouch) : null;
+  // Alerta só no caso inequívoco: cadastro veio de sessão DIRETA mas a fonte
+  // atribuída é outra — i.e., a atribuição veio de visita anterior (cookie).
+  const atribuicaoPorVisitaAnterior =
+    sessaoConversao !== null &&
+    sessaoConversao.label === "Direta" &&
+    sourceLabel != null &&
+    sourceLabel !== "Direct";
+
   const basicos = [
     { label: "Canal", value: channelLabel },
     { label: "Fonte", value: sourceLabel },
@@ -785,10 +858,20 @@ export function LeadOrigemCard({
             ? "Pago"
             : "Orgânico",
     },
+    {
+      label: "Sessão da conversão",
+      value: sessaoConversao
+        ? sessaoConversao.tagged
+          ? `${sessaoConversao.label} · link marcado`
+          : sessaoConversao.label
+        : null,
+    },
   ];
 
   if (!detalhado) {
-    const visiveis = basicos.filter((i) => i.value);
+    // Versão enxuta: só canal/fonte/tipo — sessão da conversão e jornada são
+    // ferramenta de admin/marketing.
+    const visiveis = basicos.slice(0, 3).filter((i) => i.value);
     if (visiveis.length === 0) return null;
     return (
       <Card>
@@ -834,6 +917,19 @@ export function LeadOrigemCard({
         <CardTitle className="text-base">Origem (somente leitura)</CardTitle>
       </CardHeader>
       <CardContent>
+        {atribuicaoPorVisitaAnterior && (
+          <div className="mb-4 rounded-xl border border-gold-200/80 bg-gold-50/70 px-4 py-3 dark:border-gold-900/40 dark:bg-gold-950/30">
+            <p className="text-sm font-medium text-gold-900 dark:text-gold-100">
+              Fonte atribuída por visita anterior
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-gold-900/80 dark:text-gold-100/70">
+              A visita que gerou este cadastro foi direta (sem link marcado nem
+              referrer). A fonte <strong>{sourceLabel}</strong> vem de uma visita
+              anterior deste navegador, dentro da janela de 30 dias — veja a
+              jornada abaixo.
+            </p>
+          </div>
+        )}
         {visible.length === 0 ? (
           <p className="text-sm text-muted-foreground italic">Sem dados de tracking.</p>
         ) : (
@@ -845,6 +941,48 @@ export function LeadOrigemCard({
               </div>
             ))}
           </dl>
+        )}
+
+        {touches.length > 0 && (
+          <div className="mt-5 border-t pt-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Jornada até a conversão ·{" "}
+              {touches.length === 1 ? "1 visita" : `${touches.length} visitas`}
+              {touches.length >= 10 && " (máx. registrado)"}
+            </p>
+            <ol className="space-y-2">
+              {touches.map((t, i) => {
+                const o = origemDaSessao(t);
+                const conversao = i === touches.length - 1;
+                const path = (t.landing_page ?? "").split("?")[0] || "/";
+                return (
+                  <li key={i} className="flex min-w-0 items-center gap-2.5 text-sm">
+                    <span
+                      className={`size-1.5 shrink-0 rounded-full ${
+                        conversao ? "bg-credios-blue" : "bg-muted-foreground/30"
+                      }`}
+                      aria-hidden
+                    />
+                    <span className="w-24 shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {touchDataLabel(t.timestamp)}
+                    </span>
+                    <span className="shrink-0 font-medium">{o.label}</span>
+                    {o.tagged && (
+                      <span className="shrink-0 rounded-full bg-credios-blue/10 px-2 py-0.5 text-[10px] font-medium text-credios-blue">
+                        link marcado
+                      </span>
+                    )}
+                    <span className="truncate text-xs text-muted-foreground">{path}</span>
+                    {conversao && (
+                      <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        conversão
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
         )}
       </CardContent>
     </Card>
