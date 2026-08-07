@@ -44,6 +44,7 @@ import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { resolveSource } from "@/lib/tracking/resolver";
+import { extractTrackingFromUrl } from "@/lib/tracking/url-fallback";
 import {
   emptyToNull,
   normalizarCpf,
@@ -516,6 +517,48 @@ export async function POST(request: NextRequest) {
   const emailClean = emptyToNull(payload.email ?? null);
   const estadoClean = emptyToNull(payload.estado ?? null)?.toUpperCase() ?? null;
 
+  // 5.0. Fallback de sinais pela URL de entrada: navegadores sem cookies
+  // (in-app browsers de ChatGPT/YouTube/Instagram, privacidade agressiva)
+  // mandam utm/click IDs vazios e classificação "Direct" — mas a
+  // pagina_entrada ainda carrega a tag original (?utm_source=...).
+  // Auditoria 07/08/2026: 4 leads em 14 dias nesse estado. Sinais explícitos
+  // do payload SEMPRE vencem; a URL só preenche o que veio vazio.
+  const urlSignals = extractTrackingFromUrl(payload.pagina_entrada ?? null);
+  const sig = {
+    gclid: emptyToNull(payload.gclid ?? null) ?? urlSignals.gclid ?? null,
+    wbraid: emptyToNull(payload.wbraid ?? null) ?? urlSignals.wbraid ?? null,
+    gbraid: emptyToNull(payload.gbraid ?? null) ?? urlSignals.gbraid ?? null,
+    msclkid: emptyToNull(payload.msclkid ?? null) ?? urlSignals.msclkid ?? null,
+    fbclid: emptyToNull(payload.fbclid ?? null) ?? urlSignals.fbclid ?? null,
+    ttclid: emptyToNull(payload.ttclid ?? null) ?? urlSignals.ttclid ?? null,
+    li_fat_id: emptyToNull(payload.li_fat_id ?? null) ?? urlSignals.li_fat_id ?? null,
+    twclid: emptyToNull(payload.twclid ?? null) ?? urlSignals.twclid ?? null,
+    rdt_cid: emptyToNull(payload.rdt_cid ?? null) ?? urlSignals.rdt_cid ?? null,
+    sccid: emptyToNull(payload.sccid ?? null) ?? urlSignals.sccid ?? null,
+    pin_aid: emptyToNull(payload.pin_aid ?? null) ?? urlSignals.pin_aid ?? null,
+    epik: emptyToNull(payload.epik ?? null) ?? urlSignals.epik ?? null,
+    irclickid: emptyToNull(payload.irclickid ?? null) ?? urlSignals.irclickid ?? null,
+    cjevent: emptyToNull(payload.cjevent ?? null) ?? urlSignals.cjevent ?? null,
+    utm_source: emptyToNull(payload.utm_source ?? null) ?? urlSignals.utm_source ?? null,
+    utm_medium: emptyToNull(payload.utm_medium ?? null) ?? urlSignals.utm_medium ?? null,
+    utm_campaign:
+      emptyToNull(payload.utm_campaign ?? null) ?? urlSignals.utm_campaign ?? null,
+    utm_term: emptyToNull(payload.utm_term ?? null) ?? urlSignals.utm_term ?? null,
+    utm_content:
+      emptyToNull(payload.utm_content ?? null) ?? urlSignals.utm_content ?? null,
+    network: emptyToNull(payload.network ?? null) ?? urlSignals.network ?? null,
+  };
+
+  // "Direct" alegado pelo client com a URL de entrada mostrando sinal de
+  // tracking é sintoma de cookies bloqueados no navegador do lead — descarta
+  // a alegação pra reclassificar do zero com os sinais recuperados. Qualquer
+  // outra alegação canônica (ChatGPT, Google Ads...) segue valendo.
+  const clientSourceRaw = emptyToNull(payload.source ?? null);
+  const clientSource =
+    clientSourceRaw === "Direct" && Object.keys(urlSignals).length > 0
+      ? null
+      : clientSourceRaw;
+
   // 5.1. Resolver classificação de origem (channel/source/paid).
   // O resolver:
   //   1. Confia em channel/source vindos do client (se canônicos)
@@ -523,27 +566,27 @@ export async function POST(request: NextRequest) {
   //   3. Valida contra tabela tracking_sources ativos
   //   4. Marca como "Unknown" o que admin precisar revisar (quarantine)
   const classification = await resolveSource({
-    clientSource: emptyToNull(payload.source ?? null),
-    clientChannel: emptyToNull(payload.channel ?? null),
-    clientPaid: payload.paid ?? null,
-    gclid: emptyToNull(payload.gclid ?? null),
-    wbraid: emptyToNull(payload.wbraid ?? null),
-    gbraid: emptyToNull(payload.gbraid ?? null),
-    msclkid: emptyToNull(payload.msclkid ?? null),
-    fbclid: emptyToNull(payload.fbclid ?? null),
-    ttclid: emptyToNull(payload.ttclid ?? null),
-    li_fat_id: emptyToNull(payload.li_fat_id ?? null),
-    twclid: emptyToNull(payload.twclid ?? null),
-    rdt_cid: emptyToNull(payload.rdt_cid ?? null),
-    sccid: emptyToNull(payload.sccid ?? null),
-    pin_aid: emptyToNull(payload.pin_aid ?? null),
-    epik: emptyToNull(payload.epik ?? null),
-    irclickid: emptyToNull(payload.irclickid ?? null),
-    cjevent: emptyToNull(payload.cjevent ?? null),
-    utm_source: emptyToNull(payload.utm_source ?? null),
-    utm_medium: emptyToNull(payload.utm_medium ?? null),
-    utm_campaign: emptyToNull(payload.utm_campaign ?? null),
-    network: emptyToNull(payload.network ?? null),
+    clientSource,
+    clientChannel: clientSource ? emptyToNull(payload.channel ?? null) : null,
+    clientPaid: clientSource ? (payload.paid ?? null) : null,
+    gclid: sig.gclid,
+    wbraid: sig.wbraid,
+    gbraid: sig.gbraid,
+    msclkid: sig.msclkid,
+    fbclid: sig.fbclid,
+    ttclid: sig.ttclid,
+    li_fat_id: sig.li_fat_id,
+    twclid: sig.twclid,
+    rdt_cid: sig.rdt_cid,
+    sccid: sig.sccid,
+    pin_aid: sig.pin_aid,
+    epik: sig.epik,
+    irclickid: sig.irclickid,
+    cjevent: sig.cjevent,
+    utm_source: sig.utm_source,
+    utm_medium: sig.utm_medium,
+    utm_campaign: sig.utm_campaign,
+    network: sig.network,
     referrer: emptyToNull(payload.referrer ?? null),
     referrer_parsed: emptyToNull(payload.referrer_parsed ?? null),
   });
@@ -632,25 +675,27 @@ export async function POST(request: NextRequest) {
       // depois que toda UI migrar.
       origem: classification.source,
       touches: (payload.touches ?? null) as never,
-      utmSource: emptyToNull(payload.utm_source ?? null),
-      utmMedium: emptyToNull(payload.utm_medium ?? null),
-      utmCampaign: emptyToNull(payload.utm_campaign ?? null),
-      utmTerm: emptyToNull(payload.utm_term ?? null),
-      utmContent: emptyToNull(payload.utm_content ?? null),
-      gclid: emptyToNull(payload.gclid ?? null),
-      fbclid: emptyToNull(payload.fbclid ?? null),
-      msclkid: emptyToNull(payload.msclkid ?? null),
-      ttclid: emptyToNull(payload.ttclid ?? null),
-      wbraid: emptyToNull(payload.wbraid ?? null),
-      gbraid: emptyToNull(payload.gbraid ?? null),
-      liFatId: emptyToNull(payload.li_fat_id ?? null),
-      twclid: emptyToNull(payload.twclid ?? null),
-      rdtCid: emptyToNull(payload.rdt_cid ?? null),
-      sccid: emptyToNull(payload.sccid ?? null),
-      pinAid: emptyToNull(payload.pin_aid ?? null),
-      epik: emptyToNull(payload.epik ?? null),
-      irclickid: emptyToNull(payload.irclickid ?? null),
-      cjevent: emptyToNull(payload.cjevent ?? null),
+      // Colunas de tracking usam `sig` (payload com fallback da URL de
+      // entrada) — persiste o sinal recuperado, não o vazio original.
+      utmSource: sig.utm_source,
+      utmMedium: sig.utm_medium,
+      utmCampaign: sig.utm_campaign,
+      utmTerm: sig.utm_term,
+      utmContent: sig.utm_content,
+      gclid: sig.gclid,
+      fbclid: sig.fbclid,
+      msclkid: sig.msclkid,
+      ttclid: sig.ttclid,
+      wbraid: sig.wbraid,
+      gbraid: sig.gbraid,
+      liFatId: sig.li_fat_id,
+      twclid: sig.twclid,
+      rdtCid: sig.rdt_cid,
+      sccid: sig.sccid,
+      pinAid: sig.pin_aid,
+      epik: sig.epik,
+      irclickid: sig.irclickid,
+      cjevent: sig.cjevent,
       rede: emptyToNull(payload.rede ?? null),
       dispositivo: emptyToNull(payload.dispositivo ?? null),
       palavraChave: emptyToNull(payload.palavra_chave ?? null),
