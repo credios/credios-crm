@@ -116,6 +116,11 @@ export type CapiLeadFields = {
  *    justamente o sinal de topo. O fallback `<id>:lead_created` é estável por
  *    lead, então também é idempotente contra reenvio — só não casa com o
  *    browser (caso do lead que chegou sem o pixel ter rodado).
+ *
+ * 3. **Obedece ao gate de score.** `conversaoLiberada: false` cancela o envio.
+ *    Sem isso o gate seria decorativo: o browser suprimiria o evento e o
+ *    servidor mandaria assim mesmo — e a CAPI existe justamente pra disparar
+ *    independente do browser. `undefined` (gate não pedido) = envia.
  */
 export async function capiOnLeadCreated(
   lead: CapiLeadFields & {
@@ -125,9 +130,11 @@ export async function capiOnLeadCreated(
     paginaEntrada?: string | null;
   },
   metaEventId?: string | null,
+  conversaoLiberada?: boolean,
 ): Promise<void> {
   if (!lead.objetivoCredito) return; // parcial — ainda não é conversão
   if (lead.status === "desqualificado") return; // recusado pela pré-qualificação
+  if (conversaoLiberada === false) return; // reprovado no gate de score
 
   await dispatchCapi({
     event: "lead_created",

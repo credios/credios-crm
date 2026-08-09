@@ -434,20 +434,6 @@ export async function POST(request: NextRequest) {
         .limit(1);
       const enrichedLead = updated ?? existing;
 
-      // CAPI `Lead` do fluxo em 2 etapas. É AQUI que a conversão acontece de
-      // verdade — o lead parcial criado lá atrás ainda não tinha renda nem
-      // saldo devedor, e é neste ponto que ele passou na pré-qualificação (a
-      // recusa retornou antes, lá em cima).
-      //
-      // `notify !== false` isola a chamada FINAL: as intermediárias (etapa
-      // parcial e recusa) mandam notify:false e são as únicas sem
-      // `meta_event_id`. Sem esse filtro o evento sairia duas vezes com ids
-      // diferentes — a intermediária com o fallback, a final com o id do
-      // browser — e o Meta contaria duas conversões.
-      if (payload.notify !== false) {
-        after(() => capiOnLeadCreated(enrichedLead, metaEventId));
-      }
-
       const enrichMeta = extractRequestMeta(request);
       after(() =>
         logAction(
@@ -506,6 +492,26 @@ export async function POST(request: NextRequest) {
         scoreEnriched,
         gateConversaoPedido,
       );
+
+      // CAPI `Lead` do fluxo em 2 etapas. É AQUI que a conversão acontece de
+      // verdade — o lead parcial criado lá atrás ainda não tinha renda nem
+      // saldo devedor, e é neste ponto que ele passou na pré-qualificação (a
+      // recusa retornou antes, lá em cima).
+      //
+      // DEPOIS do gate de score, de propósito: a CAPI dispara independente do
+      // browser, então mandá-la antes faria o servidor furar a supressão que
+      // o browser acabou de respeitar — o gate viraria decoração.
+      //
+      // `notify !== false` isola a chamada FINAL: as intermediárias (etapa
+      // parcial e recusa) mandam notify:false e são as únicas sem
+      // `meta_event_id`. Sem esse filtro o evento sairia duas vezes com ids
+      // diferentes — a intermediária com o fallback, a final com o id do
+      // browser — e o Meta contaria duas conversões.
+      if (payload.notify !== false) {
+        after(() =>
+          capiOnLeadCreated(enrichedLead, metaEventId, conversaoLiberadaEnriched),
+        );
+      }
       if (agendaTokenEnriched) {
         // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
         after(() =>
@@ -926,8 +932,8 @@ export async function POST(request: NextRequest) {
   // Este caminho é o do lead criado JÁ COMPLETO numa tacada (fluxo único do
   // /simulador). O fluxo em 2 etapas cria um parcial aqui e só vira conversão
   // no enriquecimento — o gate de `objetivoCredito` dentro de
-  // capiOnLeadCreated cuida dos dois casos.
-  after(() => capiOnLeadCreated(newLead, metaEventId));
+  // capiOnLeadCreated cuida dos dois casos. O disparo em si fica mais abaixo,
+  // depois do gate de score.
 
   // Lead novo já com e-mail (ex.: simulador Google Ads, fluxo único): convida
   // pro portal e devolve a URL pra página de sucesso do site.
@@ -950,6 +956,12 @@ export async function POST(request: NextRequest) {
     scoreCriacao,
     gateConversaoCriacao,
   );
+
+  // CAPI `Lead` — depois do gate de score pelo mesmo motivo do caminho de
+  // enriquecimento: a CAPI dispara independente do browser, então antes do
+  // gate ela furaria a supressão.
+  after(() => capiOnLeadCreated(newLead, metaEventId, conversaoLiberadaCriacao));
+
   if (agendaTokenCreated) {
     // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
     after(() =>

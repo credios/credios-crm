@@ -203,3 +203,34 @@ describe("guardas de configuração", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("capiOnLeadCreated — gate de score", () => {
+  const leadCompleto = {
+    id: "22222222-2222-2222-2222-222222222222",
+    email: "cliente@exemplo.com",
+    whatsapp: "+5511999999999",
+    nome: "Beltrano de Tal",
+    objetivoCredito: "Investir",
+    status: "novo",
+    createdAt: new Date("2026-08-09T12:00:00.000Z"),
+  };
+
+  it("NÃO dispara quando o gate de score reprovou", async () => {
+    // Regressão real (09/08/2026): o disparo da CAPI acontecia ANTES de o
+    // gate ser resolvido no webhook. Como a CAPI sai do servidor,
+    // independente do browser, o Meta receberia o Lead que o browser tinha
+    // acabado de suprimir — o gate viraria decoração.
+    await capiOnLeadCreated(leadCompleto, null, false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("dispara quando o gate aprovou", async () => {
+    await capiOnLeadCreated(leadCompleto, null, true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispara quando o gate não foi pedido (undefined = resto do site)", async () => {
+    await capiOnLeadCreated(leadCompleto, null, undefined);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
