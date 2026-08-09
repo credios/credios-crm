@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 import {
   FUNIL_MIN_CREDITO_CENTAVOS,
   FUNIL_MIN_IMOVEL_CENTAVOS,
+  SCORE_MINIMO_CONVERSAO,
   SCORE_MINIMO_REUNIAO,
+  scoreLiberaConversao,
 } from "@/lib/politica-credito";
 import { consultarScoreLead, ultimaConsultaScore } from "@/lib/score/directd";
 
@@ -21,7 +23,25 @@ import { consultarScoreLead, ultimaConsultaScore } from "@/lib/score/directd";
 //     pré-qualificação determinística decide sozinha, como antes.
 
 // Re-export pra compatibilidade (webhook e Heloísa importam daqui).
-export { SCORE_MINIMO_REUNIAO };
+export { SCORE_MINIMO_REUNIAO, SCORE_MINIMO_CONVERSAO, scoreLiberaConversao };
+
+/** Registra na timeline que a conversão de mídia foi suprimida pelo score. */
+export async function registrarSupressaoDeConversao(
+  leadId: string,
+  score: number,
+): Promise<void> {
+  await db.insert(interacoes).values({
+    leadId,
+    autorId: null,
+    tipo: "evento_sistema",
+    conteudo: `Conversão de mídia NÃO disparada — score ${score} abaixo do corte (${SCORE_MINIMO_CONVERSAO}). O lead segue no funil normalmente; só o sinal para Google Ads/Meta foi suprimido.`,
+    metadata: {
+      kind: "conversao_gate",
+      score,
+      corte: SCORE_MINIMO_CONVERSAO,
+    } as never,
+  });
+}
 
 export function dentroCriteriosConsultaScore(lead: {
   cpf: string | null;

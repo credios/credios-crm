@@ -32,6 +32,41 @@ export const LTV_MAX = 0.6; // crédito ≤ 60% do valor do imóvel
 /** Score QUOD abaixo disto → reunião suprimida (lead segue pra análise manual). */
 export const SCORE_MINIMO_REUNIAO = 650;
 
+// ── Nível SINAL DE MÍDIA (conversão enviada a Google Ads / Meta) ─────────
+/**
+ * Score QUOD abaixo disto → a CONVERSÃO não é disparada para as plataformas
+ * de anúncio. O lead entra no CRM normalmente e é atendido como qualquer
+ * outro; o que muda é só o sinal que ensina o algoritmo.
+ *
+ * Corte mais baixo que o de reunião (650) de propósito: são decisões
+ * diferentes. Suprimir reunião é sobre onde gastar a hora do consultor —
+ * pode ser conservador. Suprimir conversão é sobre o que a plataforma
+ * aprende: errar para o lado restritivo aqui apaga sinal bom e cega a
+ * otimização, então o corte fica onde o lead é claramente ruim.
+ *
+ * Pedido do owner em 09/08/2026, depois da auditoria da 1ª campanha de Meta:
+ * o Advantage+ estava sendo treinado com formulário preenchido por classe
+ * D/E sem patrimônio, e perseguia mais gente igual.
+ */
+export const SCORE_MINIMO_CONVERSAO = 600;
+
+/**
+ * O lead pode virar CONVERSÃO nas plataformas de anúncio?
+ *
+ * FAIL-OPEN por decisão explícita: sem score (sem CPF, fora dos critérios de
+ * consulta, ou API da Direct Data fora do ar) o sinal é disparado. O modo de
+ * falha importa muito aqui — fechar por padrão transformaria uma indisponi-
+ * bilidade do fornecedor em "as campanhas pararam de converter", estrago bem
+ * maior e muito mais difícil de diagnosticar do que deixar passar alguns
+ * leads ruins.
+ *
+ * Vive aqui (e não no score/gate) porque é política pura, sem I/O: o gate
+ * importa `server-only` e não é testável fora do runtime do servidor.
+ */
+export function scoreLiberaConversao(score: number | null): boolean {
+  return score == null || score >= SCORE_MINIMO_CONVERSAO;
+}
+
 // ── Regras compartilhadas ────────────────────────────────────────────────
 
 /**

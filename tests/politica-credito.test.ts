@@ -8,7 +8,9 @@ import {
   LTV_MAX,
   REUNIAO_MIN_CREDITO_CENTAVOS,
   SALDO_MAX_RATIO,
+  SCORE_MINIMO_CONVERSAO,
   SCORE_MINIMO_REUNIAO,
+  scoreLiberaConversao,
   rendaQualificaCentavos,
   saldoForaDaPolitica,
 } from "@/lib/politica-credito";
@@ -51,5 +53,39 @@ describe("saldoForaDaPolitica", () => {
     expect(saldoForaDaPolitica(50_000_000, 100_000_000)).toBe(true);
     expect(saldoForaDaPolitica(49_900_000, 100_000_000)).toBe(false);
     expect(saldoForaDaPolitica(10_000_000, 0)).toBe(false);
+  });
+});
+
+// ============================================================================
+// Gate de score da CONVERSÃO de mídia (09/08/2026)
+// ============================================================================
+// Corte SEPARADO do de reunião de propósito: suprimir reunião é sobre onde
+// gastar a hora do consultor (pode ser conservador); suprimir conversão é
+// sobre o que a plataforma de anúncio aprende, e errar para o lado restritivo
+// apaga sinal bom e cega a otimização.
+
+describe("scoreLiberaConversao", () => {
+  it("libera no corte e acima dele", () => {
+    expect(scoreLiberaConversao(SCORE_MINIMO_CONVERSAO)).toBe(true);
+    expect(scoreLiberaConversao(SCORE_MINIMO_CONVERSAO + 1)).toBe(true);
+    expect(scoreLiberaConversao(950)).toBe(true);
+  });
+
+  it("bloqueia abaixo do corte", () => {
+    expect(scoreLiberaConversao(SCORE_MINIMO_CONVERSAO - 1)).toBe(false);
+    expect(scoreLiberaConversao(0)).toBe(false);
+  });
+
+  it("FAIL-OPEN sem score (sem CPF, fora dos critérios, ou API fora do ar)", () => {
+    // Fechar por padrão transformaria uma queda da Direct Data em "as
+    // campanhas pararam de converter" — estrago maior que o do lead ruim.
+    expect(scoreLiberaConversao(null)).toBe(true);
+  });
+
+  it("é mais permissivo que o corte de reunião — decisões diferentes", () => {
+    expect(SCORE_MINIMO_CONVERSAO).toBeLessThan(SCORE_MINIMO_REUNIAO);
+    // Faixa em que o lead não ganha reunião automática mas ainda conta como
+    // conversão: é lead real, só não prioritário.
+    expect(scoreLiberaConversao(SCORE_MINIMO_REUNIAO - 1)).toBe(true);
   });
 });

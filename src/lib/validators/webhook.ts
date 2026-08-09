@@ -150,6 +150,15 @@ export const webhookLeadPayloadSchema = z
     fbc: z.string().trim().optional().or(z.literal("")),
     meta_event_id: z.string().trim().optional().or(z.literal("")),
 
+    /**
+     * Landings de mídia paga (/lp, /lp-simulador) pedem o GATE DE SCORE da
+     * conversão: o CRM consulta o score de forma síncrona e responde
+     * `conversaoLiberada`, que o site usa pra decidir se dispara os eventos de
+     * Google Ads e Meta. Ausente/false = comportamento de sempre (dispara), e
+     * a consulta de score segue em background como antes.
+     */
+    gate_conversao_score: z.boolean().optional(),
+
     rede: z.string().trim().optional().or(z.literal("")),
     dispositivo: z.string().trim().optional().or(z.literal("")),
     palavra_chave: z.string().trim().optional().or(z.literal("")),

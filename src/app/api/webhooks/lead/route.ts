@@ -20,7 +20,9 @@ import { consultarCadastroPfLead } from "@/lib/score/cadastro-pf";
 import {
   consultarScoreParaGate,
   dentroCriteriosConsultaScore,
+  registrarSupressaoDeConversao,
   registrarSupressaoPorScore,
+  scoreLiberaConversao,
   SCORE_MINIMO_REUNIAO,
 } from "@/lib/score/gate";
 import { formatProperName } from "@/lib/formatters/proper-name";
@@ -125,25 +127,57 @@ async function invitePortal(opts: {
  * score (dedup 30d) e SUPRIME a grade quando score < corte. Sem token mas
  * dentro dos critérios de consulta, consulta em after() (não bloqueia a
  * resposta) — o score fica no CRM pro time analisar. Fail-open em falha.
+ *
+ * `aguardarScore` força a consulta a ser SÍNCRONA mesmo sem token candidato.
+ * Serve ao gate de conversão de mídia (`gate_conversao_score`): ali o site
+ * espera a resposta pra decidir se dispara o evento, então o score precisa
+ * estar resolvido antes do JSON sair. Fica atrás de flag justamente pra não
+ * somar latência aos leads que não precisam dessa decisão — o resto do site
+ * segue com a consulta em background, como antes.
+ *
+ * Devolve o score junto do token porque as duas decisões (agenda e conversão)
+ * saem da MESMA consulta — o dedup de 30 dias da Direct Data já garantiria
+ * que não pagamos duas vezes, mas devolver evita até a segunda ida ao banco.
  */
 async function aplicarGateDeScore(
   lead: { id: string; cpf: string | null; valorImovelCentavos: number | null; valorCreditoCentavos: number | null },
   token: string | null,
-): Promise<string | null> {
+  opts: { aguardarScore?: boolean } = {},
+): Promise<{ token: string | null; score: number | null }> {
   // Cadastro PF Plus: TODO form completo com CPF (sem critério de valor —
   // consulta barata, decisão do owner). Dedup e falha silenciosa na lib.
   after(() => consultarCadastroPfLead(lead.id));
-  if (!dentroCriteriosConsultaScore(lead)) return token;
-  if (!token) {
+  if (!dentroCriteriosConsultaScore(lead)) return { token, score: null };
+  if (!token && !opts.aguardarScore) {
     after(() => consultarScoreParaGate(lead.id));
-    return token;
+    return { token, score: null };
   }
   const score = await consultarScoreParaGate(lead.id);
-  if (score != null && score < SCORE_MINIMO_REUNIAO) {
+  if (token && score != null && score < SCORE_MINIMO_REUNIAO) {
     await registrarSupressaoPorScore(lead.id, score, "agenda_publica").catch(() => {});
-    return null;
+    return { token: null, score };
   }
-  return token;
+  return { token, score };
+}
+
+/**
+ * Resolve o gate de conversão de mídia a partir do score já consultado.
+ *
+ * Retorna `undefined` quando o site não pediu o gate — assim o campo some da
+ * resposta e o cliente antigo (ou qualquer outra página) segue disparando a
+ * conversão como sempre, sem depender desta feature.
+ */
+async function resolverGateDeConversao(
+  leadId: string,
+  score: number | null,
+  pedido: boolean,
+): Promise<boolean | undefined> {
+  if (!pedido) return undefined;
+  const liberada = scoreLiberaConversao(score);
+  if (!liberada && score != null) {
+    after(() => registrarSupressaoDeConversao(leadId, score).catch(() => {}));
+  }
+  return liberada;
 }
 
 function agendarProativoSeCompleto(opts: {
@@ -456,13 +490,21 @@ export async function POST(request: NextRequest) {
         notify: payload.notify,
       });
 
-      const agendaTokenEnriched = await aplicarGateDeScore(
-        enrichedLead,
-        tokenAgendaSeElegivel(
+      const gateConversaoPedido = payload.gate_conversao_score === true;
+      const { token: agendaTokenEnriched, score: scoreEnriched } =
+        await aplicarGateDeScore(
           enrichedLead,
-          payload.notify,
-          !!enrichedLead.objetivoCredito,
-        ),
+          tokenAgendaSeElegivel(
+            enrichedLead,
+            payload.notify,
+            !!enrichedLead.objetivoCredito,
+          ),
+          { aguardarScore: gateConversaoPedido },
+        );
+      const conversaoLiberadaEnriched = await resolverGateDeConversao(
+        existing.id,
+        scoreEnriched,
+        gateConversaoPedido,
       );
       if (agendaTokenEnriched) {
         // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
@@ -490,6 +532,11 @@ export async function POST(request: NextRequest) {
           enriched: true,
           portalUrl: portalUrlEnriched,
           agendaToken: agendaTokenEnriched,
+          // Só presente quando o site pediu o gate (landings de mídia paga).
+          // Ausente = dispare a conversão normalmente.
+          ...(conversaoLiberadaEnriched !== undefined
+            ? { conversaoLiberada: conversaoLiberadaEnriched }
+            : {}),
         },
         { status: 200 },
       );
@@ -891,11 +938,18 @@ export async function POST(request: NextRequest) {
     notify: payload.notify,
   });
 
-  const agendaTokenCreated = await aplicarGateDeScore(newLead, tokenAgendaSeElegivel(
-    newLead,
-    payload.notify,
-    !!newLead.objetivoCredito,
-  ));
+  const gateConversaoCriacao = payload.gate_conversao_score === true;
+  const { token: agendaTokenCreated, score: scoreCriacao } =
+    await aplicarGateDeScore(
+      newLead,
+      tokenAgendaSeElegivel(newLead, payload.notify, !!newLead.objetivoCredito),
+      { aguardarScore: gateConversaoCriacao },
+    );
+  const conversaoLiberadaCriacao = await resolverGateDeConversao(
+    newLead.id,
+    scoreCriacao,
+    gateConversaoCriacao,
+  );
   if (agendaTokenCreated) {
     // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
     after(() =>
@@ -923,6 +977,10 @@ export async function POST(request: NextRequest) {
       possivelDuplicidadeCpf: leadExistenteId,
       portalUrl: portalUrlCreated,
       agendaToken: agendaTokenCreated,
+      // Ver a nota na resposta do enriquecimento.
+      ...(conversaoLiberadaCriacao !== undefined
+        ? { conversaoLiberada: conversaoLiberadaCriacao }
+        : {}),
     },
     { status: 201 },
   );
