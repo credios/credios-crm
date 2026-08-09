@@ -168,6 +168,8 @@ async function buildSamples(adminNome: string): Promise<
     epik: null,
     irclickid: null,
     cjevent: null,
+    fbp: null,
+    fbc: null,
     rede: "Google Search",
     dispositivo: "Mobile",
     palavraChave: "credito com garantia",

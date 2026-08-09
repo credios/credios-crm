@@ -13,7 +13,7 @@ import {
   webhookIdempotency,
 } from "../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
-import { dispatchCapi } from "@/lib/capi/dispatch";
+import { capiOnLeadCreated } from "@/lib/capi/dispatch";
 import { db } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { consultarCadastroPfLead } from "@/lib/score/cadastro-pf";
@@ -240,6 +240,11 @@ export async function POST(request: NextRequest) {
   }
   const payload = parsed.data;
 
+  // eventID do `Lead` que o pixel disparou no browser. Precisa viajar idêntico
+  // pra CAPI, senão o Meta conta a conversão duas vezes (ver capiOnLeadCreated).
+  // Só chega no envio final do cadastro — ausente no parcial e na recusa.
+  const metaEventId = emptyToNull(payload.meta_event_id ?? null);
+
   // 3b. Enriquecimento de lead parcial (fluxo simulador 2-etapas do site).
   //
   // O site captura nome+telefone+valores numa 1ª etapa (mini-form inline da
@@ -309,6 +314,10 @@ export async function POST(request: NextRequest) {
           conjugeCompoeRenda: setIf(payload.conjuge_compoe_renda ?? null, existing.conjugeCompoeRenda),
           conjugeRendaCentavos: setIf(reaisParaCentavos(payload.conjuge_renda), existing.conjugeRendaCentavos),
           conjugeOcupacao: setIf(emptyToNull(payload.conjuge_ocupacao ?? null), existing.conjugeOcupacao),
+          // Cookies do pixel: a 1ª etapa pode ter rodado antes de o fbevents
+          // escrever o `_fbc`, então a etapa final ainda pode trazer o valor.
+          fbp: setIf(emptyToNull(payload.fbp ?? null), existing.fbp),
+          fbc: setIf(emptyToNull(payload.fbc ?? null), existing.fbc),
           valoresSuspeitos: valoresSuspeitos as never,
           // Preserva o payload original da 1ª etapa e anexa o da 2ª, sem perder
           // histórico de atribuição.
@@ -390,6 +399,21 @@ export async function POST(request: NextRequest) {
         .where(eq(leads.id, existing.id))
         .limit(1);
       const enrichedLead = updated ?? existing;
+
+      // CAPI `Lead` do fluxo em 2 etapas. É AQUI que a conversão acontece de
+      // verdade — o lead parcial criado lá atrás ainda não tinha renda nem
+      // saldo devedor, e é neste ponto que ele passou na pré-qualificação (a
+      // recusa retornou antes, lá em cima).
+      //
+      // `notify !== false` isola a chamada FINAL: as intermediárias (etapa
+      // parcial e recusa) mandam notify:false e são as únicas sem
+      // `meta_event_id`. Sem esse filtro o evento sairia duas vezes com ids
+      // diferentes — a intermediária com o fallback, a final com o id do
+      // browser — e o Meta contaria duas conversões.
+      if (payload.notify !== false) {
+        after(() => capiOnLeadCreated(enrichedLead, metaEventId));
+      }
+
       const enrichMeta = extractRequestMeta(request);
       after(() =>
         logAction(
@@ -696,6 +720,10 @@ export async function POST(request: NextRequest) {
       epik: sig.epik,
       irclickid: sig.irclickid,
       cjevent: sig.cjevent,
+      // Cookies do pixel (migration 0047) — fora do `sig` porque não existem
+      // na URL: ou o fbevents os escreveu no browser, ou não temos.
+      fbp: emptyToNull(payload.fbp ?? null),
+      fbc: emptyToNull(payload.fbc ?? null),
       rede: emptyToNull(payload.rede ?? null),
       dispositivo: emptyToNull(payload.dispositivo ?? null),
       palavraChave: emptyToNull(payload.palavra_chave ?? null),
@@ -843,31 +871,16 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 15. CAPI dispatch — Meta, TikTok, LinkedIn em paralelo. Envio "lead_created"
-  // pra cada plataforma configurada com env vars. Plataformas não configuradas
-  // retornam skipped graciosamente. Eventos de qualificação/fechamento saem de
-  // capiOnStageChange (via onLeadStageChange, chamado em toda transição).
-  after(() =>
-    dispatchCapi({
-      event: "lead_created",
-      eventTime: newLead.createdAt,
-      eventId: `${newLead.id}:lead_created`,
-      email: newLead.email,
-      phone: newLead.whatsapp,
-      valueCents: null,
-      currency: "BRL",
-      clickIds: {
-        fbclid: newLead.fbclid,
-        ttclid: newLead.ttclid,
-        li_fat_id: newLead.liFatId,
-        gclid: newLead.gclid,
-        msclkid: newLead.msclkid,
-      },
-      firstName: newLead.nome?.split(" ")[0] ?? null,
-      city: newLead.cidade,
-      state: newLead.estado,
-    }),
-  );
+  // 15. CAPI dispatch — Meta, TikTok, LinkedIn em paralelo. Plataformas não
+  // configuradas retornam skipped graciosamente. Eventos de
+  // qualificação/fechamento saem de capiOnStageChange (via onLeadStageChange,
+  // chamado em toda transição).
+  //
+  // Este caminho é o do lead criado JÁ COMPLETO numa tacada (fluxo único do
+  // /simulador). O fluxo em 2 etapas cria um parcial aqui e só vira conversão
+  // no enriquecimento — o gate de `objetivoCredito` dentro de
+  // capiOnLeadCreated cuida dos dois casos.
+  after(() => capiOnLeadCreated(newLead, metaEventId));
 
   // Lead novo já com e-mail (ex.: simulador Google Ads, fluxo único): convida
   // pro portal e devolve a URL pra página de sucesso do site.

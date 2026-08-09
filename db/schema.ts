@@ -257,6 +257,17 @@ export const leads = pgTable(
     epik: text("epik"),           // Pinterest Ads (alt cookie)
     irclickid: text("irclickid"), // Impact affiliate
     cjevent: text("cjevent"),     // CJ affiliate
+    /**
+     * Cookies do Meta Pixel (migration 0047) — parâmetros de correspondência
+     * da Conversions API, enviados crus (NÃO hasheados, ao contrário do PII).
+     *
+     * `fbc` tem formato próprio: `fb.1.<timestamp_ms>.<fbclid>`. A CAPI
+     * descarta o fbclid cru, então guardamos o cookie como o pixel o escreveu.
+     * Quando ele não existe (in-app browser do Instagram/Facebook descarta
+     * cookies), o adapter reconstrói a partir do `fbclid` + `created_at`.
+     */
+    fbp: text("fbp"),
+    fbc: text("fbc"),
     rede: text("rede"),
     dispositivo: text("dispositivo"),
     palavraChave: text("palavra_chave"),

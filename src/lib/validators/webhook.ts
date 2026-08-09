@@ -142,6 +142,14 @@ export const webhookLeadPayloadSchema = z
     irclickid: z.string().trim().optional().or(z.literal("")),
     cjevent: z.string().trim().optional().or(z.literal("")),
 
+    // ── Meta: correspondência e deduplicação da Conversions API ──────────
+    // Cookies do pixel (crus — o Meta não aceita hasheados) e o eventID do
+    // `Lead` disparado no browser. O event_id PRECISA ser o mesmo nos dois
+    // lados, senão o Meta conta a mesma conversão duas vezes.
+    fbp: z.string().trim().optional().or(z.literal("")),
+    fbc: z.string().trim().optional().or(z.literal("")),
+    meta_event_id: z.string().trim().optional().or(z.literal("")),
+
     rede: z.string().trim().optional().or(z.literal("")),
     dispositivo: z.string().trim().optional().or(z.literal("")),
     palavra_chave: z.string().trim().optional().or(z.literal("")),

@@ -30,6 +30,50 @@ function metaEventName(event: LeadConversionInput["event"]): string {
   }
 }
 
+/**
+ * `action_source` diz ao Meta ONDE a conversão aconteceu, e ele usa isso pra
+ * atribuição e pra checar consistência com o evento do browser.
+ *
+ *   lead_created → o usuário preencheu um formulário no site  → "website"
+ *                  (exige `event_source_url`, e é o evento que deduplica com
+ *                  o `Lead` do pixel)
+ *   demais       → mudança de estágio dentro do CRM, sem usuário na frente da
+ *                  tela → "system_generated"
+ */
+function metaActionSource(event: LeadConversionInput["event"]): string {
+  return event === "lead_created" ? "website" : "system_generated";
+}
+
+/**
+ * Monta o `fbc` no ÚNICO formato que a Conversions API aceita:
+ * `fb.<subdomainIndex>.<creationTime_ms>.<fbclid>`.
+ *
+ * O fbclid cru é silenciosamente descartado pelo Meta — mandar ele direto
+ * (como estava antes) equivale a não mandar correspondência nenhuma, logo na
+ * origem em que ela mais importa: tráfego pago de Meta.
+ *
+ * O ideal é o cookie `_fbc` que o fbevents escreveu, porque carrega o
+ * timestamp real do clique. Quando ele não chega — in-app browser do
+ * Instagram/Facebook descarta cookies, que é justamente o navegador desse
+ * tráfego — reconstruímos com o horário do evento. O timestamp aproximado
+ * degrada um pouco a janela de atribuição, mas é muito melhor que perder o
+ * identificador inteiro.
+ *
+ * `subdomainIndex` = 1 para `www.credios.com.br` (regra do Meta: conta os
+ * pontos do domínio a partir do topo, sem o TLD).
+ */
+function buildFbc(
+  cookieFbc: string | null | undefined,
+  fbclid: string | null | undefined,
+  eventTime: Date,
+): string | null {
+  const fromCookie = cookieFbc?.trim();
+  if (fromCookie) return fromCookie;
+  const id = fbclid?.trim();
+  if (!id) return null;
+  return `fb.1.${eventTime.getTime()}.${id}`;
+}
+
 export const metaCapiAdapter: CapiAdapter = {
   platform: "meta",
 
@@ -57,7 +101,12 @@ export const metaCapiAdapter: CapiAdapter = {
     if (firstNameHash) userData.fn = firstNameHash;
     if (cityHash) userData.ct = cityHash;
     if (stateHash) userData.st = stateHash;
-    if (input.clickIds.fbclid) userData.fbc = input.clickIds.fbclid;
+    // fbc/fbp vão CRUS — o Meta rejeita esses dois hasheados (são
+    // identificadores dele, não PII nossa).
+    const fbc = buildFbc(input.fbc, input.clickIds.fbclid, input.eventTime);
+    if (fbc) userData.fbc = fbc;
+    const fbp = input.fbp?.trim();
+    if (fbp) userData.fbp = fbp;
 
     // Sem nenhum sinal de identificação → Meta rejeita.
     if (Object.keys(userData).length === 0) {
@@ -75,7 +124,10 @@ export const metaCapiAdapter: CapiAdapter = {
           event_name: metaEventName(input.event),
           event_time: Math.floor(input.eventTime.getTime() / 1000),
           event_id: input.eventId,
-          action_source: "system_generated",
+          action_source: metaActionSource(input.event),
+          ...(input.eventSourceUrl
+            ? { event_source_url: input.eventSourceUrl }
+            : {}),
           user_data: userData,
           custom_data:
             input.valueCents != null

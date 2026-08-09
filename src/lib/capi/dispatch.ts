@@ -77,7 +77,7 @@ const CAPI_QUALIFIED_STAGES = new Set([
   "em_negociacao",
 ]);
 
-type CapiLeadFields = {
+export type CapiLeadFields = {
   id: string;
   email?: string | null;
   whatsapp?: string | null;
@@ -86,11 +86,72 @@ type CapiLeadFields = {
   estado?: string | null;
   comissaoCentavos?: number | null;
   fbclid?: string | null;
+  fbp?: string | null;
+  fbc?: string | null;
   ttclid?: string | null;
   liFatId?: string | null;
   gclid?: string | null;
   msclkid?: string | null;
 };
+
+// ── Evento de topo (lead_created) ───────────────────────────────────────────
+
+/**
+ * Dispara o `Lead` server-side — o par do `fbq('track','Lead')` do site.
+ *
+ * Duas regras que parecem detalhe e definem se a campanha aprende ou desaprende:
+ *
+ * 1. **Só para cadastro COMPLETO e não recusado.** O simulador cria um lead
+ *    PARCIAL (nome + telefone) antes de conhecer renda e saldo devedor; boa
+ *    parte deles é recusada depois pela pré-qualificação em
+ *    /continuar-simulacao. Mandar `Lead` no parcial ensinaria a Meta a comprar
+ *    exatamente o público que o nosso próprio filtro rejeita — e é o oposto do
+ *    motivo de ligar a CAPI. O browser já usa esse mesmo critério (o pixel só
+ *    dispara `Lead` no cadastro completo qualificado), então os dois lados
+ *    ficam falando do mesmo evento.
+ *
+ * 2. **`eventId` = o `meta_event_id` gerado no browser**, quando existir. Pixel
+ *    e CAPI só deduplicam quando mandam event_name + event_id IDÊNTICOS. Com
+ *    ids diferentes o Meta conta duas conversões para o mesmo lead e infla
+ *    justamente o sinal de topo. O fallback `<id>:lead_created` é estável por
+ *    lead, então também é idempotente contra reenvio — só não casa com o
+ *    browser (caso do lead que chegou sem o pixel ter rodado).
+ */
+export async function capiOnLeadCreated(
+  lead: CapiLeadFields & {
+    objetivoCredito?: string | null;
+    status?: string | null;
+    createdAt?: Date | null;
+    paginaEntrada?: string | null;
+  },
+  metaEventId?: string | null,
+): Promise<void> {
+  if (!lead.objetivoCredito) return; // parcial — ainda não é conversão
+  if (lead.status === "desqualificado") return; // recusado pela pré-qualificação
+
+  await dispatchCapi({
+    event: "lead_created",
+    eventTime: lead.createdAt ?? new Date(),
+    eventId: metaEventId?.trim() || `${lead.id}:lead_created`,
+    email: lead.email ?? null,
+    phone: lead.whatsapp ?? null,
+    valueCents: null,
+    currency: "BRL",
+    clickIds: {
+      fbclid: lead.fbclid ?? null,
+      ttclid: lead.ttclid ?? null,
+      li_fat_id: lead.liFatId ?? null,
+      gclid: lead.gclid ?? null,
+      msclkid: lead.msclkid ?? null,
+    },
+    fbp: lead.fbp ?? null,
+    fbc: lead.fbc ?? null,
+    eventSourceUrl: lead.paginaEntrada ?? null,
+    firstName: lead.nome?.split(" ")[0] ?? null,
+    city: lead.cidade ?? null,
+    state: lead.estado ?? null,
+  });
+}
 
 export async function capiOnStageChange(
   lead: CapiLeadFields,
@@ -117,6 +178,8 @@ export async function capiOnStageChange(
       gclid: lead.gclid ?? null,
       msclkid: lead.msclkid ?? null,
     },
+    fbp: lead.fbp ?? null,
+    fbc: lead.fbc ?? null,
     firstName: lead.nome?.split(" ")[0] ?? null,
     city: lead.cidade ?? null,
     state: lead.estado ?? null,

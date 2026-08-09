@@ -2,7 +2,7 @@ import "server-only";
 
 import { and, eq, inArray, lt } from "drizzle-orm";
 
-import { capiOnStageChange } from "@/lib/capi/dispatch";
+import { capiOnStageChange, type CapiLeadFields } from "@/lib/capi/dispatch";
 import { googleAdsConversions } from "../../../db/schema";
 import { db } from "@/lib/db";
 
@@ -45,9 +45,18 @@ const QUALIFIED_STAGES = new Set(["em_negociacao", "fechado"]);
 /** Tentativas máximas antes de desistir (ex.: rejeição definitiva por janela). */
 const MAX_ATTEMPTS = 8;
 
-/** Subconjunto de campos do lead que o dispatcher precisa. */
-export type LeadForConversion = {
-  id: string;
+/**
+ * Subconjunto de campos do lead que o dispatcher precisa.
+ *
+ * Inclui `CapiLeadFields` porque este é o hub compartilhado: além do Google
+ * Ads, ele repassa o evento pras CAPIs de Meta/TikTok/LinkedIn, que precisam
+ * de e-mail/telefone/cookies pra correspondência. Antes o repasse era um
+ * `as never`, que aceitava qualquer objeto e teria deixado passar em silêncio
+ * um call site com row parcial — a CAPI receberia `user_data` vazio e o Meta
+ * rejeitaria o evento. Todos os call sites passam a row completa do
+ * `.returning()`, então declarar a exigência não custa nada e trava a regressão.
+ */
+export type LeadForConversion = CapiLeadFields & {
   gclid: string | null;
   wbraid: string | null;
   gbraid: string | null;
@@ -69,7 +78,7 @@ export async function onLeadStageChange(
   // CAPI (Meta/TikTok/LinkedIn) roda ANTES dos early-returns do Google Ads —
   // são gates independentes (lead orgânico do Insta não tem gclid, mas tem
   // fbclid). Best-effort; adapters não configurados retornam skipped.
-  await capiOnStageChange(lead as never, newStatus).catch((e) =>
+  await capiOnStageChange(lead, newStatus).catch((e) =>
     console.error("[capi] stage change falhou:", e),
   );
 

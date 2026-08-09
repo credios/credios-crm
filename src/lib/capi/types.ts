@@ -39,6 +39,19 @@ export type LeadConversionInput = {
     gclid?: string | null;
     msclkid?: string | null;
   };
+  /**
+   * Cookies do Meta Pixel, crus (o Meta NÃO aceita hasheado nestes dois).
+   * `fbc` precisa estar no formato `fb.1.<timestamp_ms>.<fbclid>`; o adapter
+   * reconstrói a partir do fbclid quando vier vazio.
+   */
+  fbp?: string | null;
+  fbc?: string | null;
+  /**
+   * URL onde a conversão aconteceu. Obrigatória junto de
+   * `action_source: "website"` — só faz sentido nos eventos que nasceram de
+   * uma ação do usuário no site (lead_created), não nos que nascem no CRM.
+   */
+  eventSourceUrl?: string | null;
   /** Metadata extra (alguma plataforma pode usar — ex: lead nome em hash). */
   firstName?: string | null;
   city?: string | null;
