@@ -12,11 +12,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 // PAGA e restrita a admin — sempre com confirmação explícita (anti-misclick),
 // mostrando a idade da última consulta. Demais perfis veem o score, mas o
 // botão fica travado. Consulta automática acontece ao agendar reunião.
+//
+// Marketing vê o score (qualidade de lead por campanha) mas não pede consulta:
+// recebe o card em leitura pura, sem o botão de solicitar.
 
 type Props = {
   leadId: string;
   temCpf: boolean;
   isAdmin: boolean;
+  /** Pode pedir consulta ao admin (consultor/gerente sim, marketing não). */
+  podeSolicitar: boolean;
   consulta: {
     score: number | null;
     faixa: string | null;
@@ -92,7 +97,14 @@ function idadeConsulta(iso: string): string {
   return `há ${dias}d`;
 }
 
-export function LeadScoreCard({ leadId, temCpf, isAdmin, consulta, solicitacao }: Props) {
+export function LeadScoreCard({
+  leadId,
+  temCpf,
+  isAdmin,
+  podeSolicitar,
+  consulta,
+  solicitacao,
+}: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState(false);
@@ -213,7 +225,12 @@ export function LeadScoreCard({ leadId, temCpf, isAdmin, consulta, solicitacao }
             Lead sem CPF — preencha o CPF para poder consultar.
           </p>
         ) : !isAdmin ? (
-          solicitacao ? (
+          !podeSolicitar ? (
+            <p className="text-xs text-muted-foreground">
+              <Lock className="size-3 inline mr-1" />
+              A consulta é paga e só o admin executa.
+            </p>
+          ) : solicitacao ? (
             <p className="text-xs text-muted-foreground">
               <Lock className="size-3 inline mr-1" />
               Solicitação enviada {idadeConsulta(solicitacao.criadoEm)} — aguardando

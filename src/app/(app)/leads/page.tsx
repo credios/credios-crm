@@ -45,9 +45,7 @@ export default async function LeadsPage({ searchParams }: Props) {
         <p className="mt-1 text-sm text-muted-foreground">
           {user.perfil === "consultor"
             ? "Você vê apenas leads atribuídos a você."
-            : user.perfil === "marketing"
-              ? "Dados pessoais mascarados conforme política LGPD."
-              : "Acesso completo aos leads."}
+            : "Acesso completo aos leads."}
         </p>
       </div>
       <LeadList

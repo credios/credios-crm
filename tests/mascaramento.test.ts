@@ -6,32 +6,32 @@ import {
   isValidCpfOrCnpj,
 } from "@/lib/formatters/cpf-cnpj";
 import {
-  maskCpf,
-  maskEmail,
+  canSeeComissao,
+  canSeeFechamento,
   maskLeadForPerfil,
-  shouldMaskFinancial,
-  shouldMaskFor,
 } from "@/lib/auth/mascaramento";
 
 describe("mascaramento — perfil-aware", () => {
-  describe("shouldMaskFor: PII", () => {
-    it("marketing → true", () => {
-      expect(shouldMaskFor("marketing")).toBe(true);
+  describe("canSeeComissao: receita da empresa", () => {
+    it("admin → true", () => {
+      expect(canSeeComissao("admin")).toBe(true);
     });
-    for (const p of ["admin", "gerente", "consultor"] as const) {
+    for (const p of ["gerente", "consultor", "marketing"] as const) {
       it(`${p} → false`, () => {
-        expect(shouldMaskFor(p)).toBe(false);
+        expect(canSeeComissao(p)).toBe(false);
       });
     }
   });
 
-  describe("shouldMaskFinancial: receita/comissão", () => {
-    it("admin → false (vê tudo)", () => {
-      expect(shouldMaskFinancial("admin")).toBe(false);
-    });
-    for (const p of ["gerente", "consultor", "marketing"] as const) {
+  describe("canSeeFechamento: banco aprovador + valor liberado", () => {
+    for (const p of ["admin", "marketing"] as const) {
       it(`${p} → true`, () => {
-        expect(shouldMaskFinancial(p)).toBe(true);
+        expect(canSeeFechamento(p)).toBe(true);
+      });
+    }
+    for (const p of ["gerente", "consultor"] as const) {
+      it(`${p} → false`, () => {
+        expect(canSeeFechamento(p)).toBe(false);
       });
     }
   });
@@ -57,7 +57,7 @@ describe("mascaramento — perfil-aware", () => {
       expect(m.comissaoCentavos).toBe(100000);
     });
 
-    it("gerente: só esconde financeiro (banco/liberado/comissão)", () => {
+    it("gerente: só esconde o bloco de fechamento", () => {
       const m = maskLeadForPerfil(lead, "gerente");
       expect(m.cpf).toBe("12345678901"); // PII OK pra gerente
       expect(m.email).toBe("ana@example.com");
@@ -66,37 +66,30 @@ describe("mascaramento — perfil-aware", () => {
       expect(m.comissaoCentavos).toBeNull();
     });
 
-    it("consultor: só esconde financeiro", () => {
+    it("consultor: só esconde o bloco de fechamento", () => {
       const m = maskLeadForPerfil(lead, "consultor");
       expect(m.cpf).toBe("12345678901");
       expect(m.bancoAprovador).toBeNull();
       expect(m.comissaoCentavos).toBeNull();
     });
 
-    it("marketing: PII E financeiro mascarados", () => {
+    it("marketing: PII em claro, banco/liberado visíveis, comissão não", () => {
       const m = maskLeadForPerfil(lead, "marketing");
-      expect(m.cpf).toMatch(/^\*{3}\.\*{3}\.\*{3}-\d{2}$/);
-      expect(m.email).toBe("***@example.com");
-      expect(m.whatsapp).toBeNull();
-      expect(m.bancoAprovador).toBeNull();
-      expect(m.valorLiberadoCentavos).toBeNull();
+      expect(m.cpf).toBe("12345678901");
+      expect(m.email).toBe("ana@example.com");
+      expect(m.whatsapp).toBe("+5511999999999");
+      expect(m.rendaMensalCentavos).toBe(800_000);
+      expect(m.bancoAprovador).toBe("Itaú");
+      expect(m.valorLiberadoCentavos).toBe(5000000);
       expect(m.comissaoCentavos).toBeNull();
     });
-  });
 
-  describe("maskCpf format", () => {
-    it("últimos 2 dígitos visíveis", () => {
-      expect(maskCpf("12345678901")).toBe("***.***.***-01");
-    });
-    it("null/undefined → null", () => {
-      expect(maskCpf(null)).toBeNull();
-      expect(maskCpf(undefined)).toBeNull();
-    });
-  });
-
-  describe("maskEmail format", () => {
-    it("preserva domínio", () => {
-      expect(maskEmail("ana.silva@gmail.com")).toBe("***@gmail.com");
+    it("rawPayload (debug do webhook) só sai pra admin", () => {
+      const comPayload = { ...lead, rawPayload: { cpf: "12345678901" } };
+      expect(maskLeadForPerfil(comPayload, "admin").rawPayload).not.toBeNull();
+      for (const p of ["gerente", "consultor", "marketing"] as const) {
+        expect(maskLeadForPerfil(comPayload, p).rawPayload).toBeNull();
+      }
     });
   });
 });

@@ -95,9 +95,11 @@ export default async function RelatoriosPage({ searchParams }: Props) {
   const compPeriod = comparisonPeriod(period, "anterior_equivalente");
 
   const isMarketing = user.perfil === "marketing";
-  const canSeeFinancial = user.perfil === "admin";
-  // gerente vê pipeline + R$ buscado mas NÃO vê R$ liberado/comissão.
-  const hideFinancial = !canSeeFinancial;
+  // R$ liberado: admin e marketing (marketing atribui ticket fechado à campanha
+  // de origem). gerente/consultor veem pipeline + R$ buscado, mas não o fechado.
+  // Comissão continua exclusiva de admin (não aparece nesta tela).
+  const canSeeLiberado = user.perfil === "admin" || isMarketing;
+  const hideFinancial = !canSeeLiberado;
   const isAdminGerente = isAdminOrGerente(user);
 
   // Tier 1 vazio: só auth + parse de filtros (rápidos). Todo dado de banco
@@ -127,13 +129,13 @@ export default async function RelatoriosPage({ searchParams }: Props) {
             </span>
           </p>
         </div>
-        <Badge variant={canSeeFinancial ? "soft-gold" : "soft"}>
+        <Badge variant={canSeeLiberado ? "soft-gold" : "soft"}>
           {isMarketing ? "Visão de marketing" : "Acesso completo"}
         </Badge>
       </div>
 
       <Suspense fallback={<FiltersSkeleton />}>
-        <FiltersSection isMarketing={isMarketing} />
+        <FiltersSection />
       </Suspense>
 
       {isAdminGerente && (
@@ -147,7 +149,7 @@ export default async function RelatoriosPage({ searchParams }: Props) {
           filters={filters}
           period={period}
           compPeriod={compPeriod}
-          canSeeFinancial={canSeeFinancial}
+          canSeeLiberado={canSeeLiberado}
         />
       </Suspense>
 
@@ -281,7 +283,7 @@ function FiltersSkeleton() {
   );
 }
 
-async function FiltersSection({ isMarketing }: { isMarketing: boolean }) {
+async function FiltersSection() {
   return renderSection("Filtros", async () => {
     // 3 listas pequenas em paralelo (cacheadas via unstable_cache nas queries).
     const [consultores, origens, ufs] = await Promise.all([
@@ -290,12 +292,7 @@ async function FiltersSection({ isMarketing }: { isMarketing: boolean }) {
       fetchUfsDistintas(),
     ]);
     return (
-      <ReportFilters
-        consultores={consultores}
-        origens={origens}
-        ufs={ufs}
-        hideFaixaValor={isMarketing}
-      />
+      <ReportFilters consultores={consultores} origens={origens} ufs={ufs} />
     );
   });
 }
@@ -318,12 +315,12 @@ async function KpisSection({
   filters,
   period,
   compPeriod,
-  canSeeFinancial,
+  canSeeLiberado,
 }: {
   filters: RFilters;
   period: PeriodRange;
   compPeriod: PeriodRange | null;
-  canSeeFinancial: boolean;
+  canSeeLiberado: boolean;
 }) {
   return renderSection("KPIs principais", async () => {
     const [kpisCurr, kpisPrev] = await Promise.all([
@@ -356,11 +353,11 @@ async function KpisSection({
         />
         <KpiCard
           icon={CheckCircle2}
-          tone={canSeeFinancial ? "premium" : "default"}
+          tone={canSeeLiberado ? "premium" : "default"}
           label="Fechamentos"
           value={String(kpisCurr.fechadosCount)}
           hint={
-            canSeeFinancial
+            canSeeLiberado
               ? `${formatBrlShort(kpisCurr.fechadosValorLiberadoCentavos)} liberado`
               : "no período"
           }

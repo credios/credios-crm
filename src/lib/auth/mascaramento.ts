@@ -1,117 +1,67 @@
 import type { Perfil } from "./types";
 
-const FAIXAS_RENDA = [
-  { max: 500_000, label: "Até R$ 5k" },
-  { max: 1_000_000, label: "R$ 5k–10k" },
-  { max: 2_000_000, label: "R$ 10k–20k" },
-  { max: 5_000_000, label: "R$ 20k–50k" },
-] as const;
+// ============================================================================
+// Política de visibilidade por perfil
+// ============================================================================
+//
+// PII do lead (CPF, WhatsApp, e-mail, renda declarada, score QUOD, cadastro PF
+// do bureau): visível pra TODOS os perfis, marketing incluído. O perfil
+// 'marketing' nasceu com esses campos mascarados (CLAUDE.md §5), mas na prática
+// marketing precisa de score e renda pra medir QUALIDADE de lead por campanha —
+// sem isso não dá pra saber se a campanha traz gente que passa na política de
+// crédito. Decisão do owner (2026-08-11) que sobrepõe o §5 original.
+//
+// O que continua restrito é receita da empresa, e em dois níveis:
+//  - comissão recebida: admin only (spread por banco é confidencial);
+//  - banco aprovador + valor liberado: admin e marketing (marketing precisa do
+//    ticket fechado por campanha pra calcular retorno); gerente e consultor
+//    seguem sem ver.
 
-export function maskCpf(cpf: string | null | undefined): string | null {
-  if (!cpf) return null;
-  const digits = cpf.replace(/\D/g, "");
-  const last2 = digits.slice(-2).padStart(2, "•");
-  return `***.***.***-${last2}`;
-}
-
-export function rendaParaFaixa(centavos: number | null | undefined): string | null {
-  if (centavos == null) return null;
-  for (const f of FAIXAS_RENDA) {
-    if (centavos < f.max) return f.label;
-  }
-  return "Acima R$ 50k";
-}
-
-export function maskEmail(email: string | null | undefined): string | null {
-  if (!email) return null;
-  const at = email.indexOf("@");
-  if (at < 0) return "***";
-  return `***@${email.slice(at + 1)}`;
-}
-
-export function shouldMaskFor(perfil: Perfil): boolean {
-  return perfil === "marketing";
+/** Comissão recebida = receita da empresa. Admin only. */
+export function canSeeComissao(perfil: Perfil): boolean {
+  return perfil === "admin";
 }
 
 /**
- * Dados financeiros do fechamento (banco, valor liberado, comissão recebida)
- * são receita da empresa — visíveis apenas pra admin. Gerentes/consultores
- * gerenciam pipeline mas não têm acesso ao spread de comissão por banco.
+ * Banco aprovador e valor liberado da operação fechada. Admin e marketing
+ * (marketing atribui ticket fechado à campanha de origem).
  */
-export function shouldMaskFinancial(perfil: Perfil): boolean {
-  return perfil !== "admin";
+export function canSeeFechamento(perfil: Perfil): boolean {
+  return perfil === "admin" || perfil === "marketing";
 }
 
 export type LeadLikeForMasking = {
-  cpf: string | null;
-  rendaMensalCentavos: number | null;
-  whatsapp: string | null;
-  email: string | null;
   bancoAprovador?: string | null;
   valorLiberadoCentavos?: number | null;
   comissaoCentavos?: number | null;
-  // Cônjuge — mesmas regras de PII do titular.
-  conjugeCpf?: string | null;
-  conjugeEmail?: string | null;
-  conjugeWhatsapp?: string | null;
-};
-
-export type MaskedLeadFields = {
-  rendaFaixa: string | null;
 };
 
 /**
- * Aplica mascaramento PII para perfil 'marketing' (CLAUDE.md §5) E mascaramento
- * de receita da empresa (banco/valor liberado/comissão) para qualquer perfil
- * que não seja admin.
+ * Aplica a política acima sobre uma linha de lead vinda do banco.
  *
- * Mascarado pra marketing:
- *  - cpf: '***.***.***-XX'
- *  - email: '***@dominio.com'
- *  - whatsapp: null (oculto)
- *  - rendaMensalCentavos: null + adiciona rendaFaixa
- *  - dados financeiros (banco, valor liberado, comissão): null
- *
- * Mascarado pra gerente/consultor (não-admin):
- *  - dados financeiros (banco, valor liberado, comissão): null
+ * Nenhum campo de PII é mascarado — o que sai daqui diferente do que entrou é
+ * só o bloco de fechamento:
+ *  - comissaoCentavos: null pra todo perfil que não é admin;
+ *  - bancoAprovador / valorLiberadoCentavos: null pra gerente e consultor;
+ *  - rawPayload: null pra quem não é admin (campo de debug do webhook, sem UI).
  */
 export function maskLeadForPerfil<T extends LeadLikeForMasking>(
   lead: T,
   perfil: Perfil,
-): T & Partial<MaskedLeadFields> {
-  let out: T & Partial<MaskedLeadFields> = lead;
+): T {
+  let out: T = lead;
 
-  if (shouldMaskFor(perfil)) {
-    out = {
-      ...out,
-      cpf: maskCpf(out.cpf),
-      email: maskEmail(out.email),
-      whatsapp: null,
-      rendaMensalCentavos: null,
-      rendaFaixa: rendaParaFaixa(out.rendaMensalCentavos),
-      // Cônjuge — mesmo tratamento de PII do titular (renda vira null, sem faixa).
-      conjugeCpf: maskCpf(out.conjugeCpf),
-      conjugeEmail: maskEmail(out.conjugeEmail),
-      conjugeWhatsapp: null,
-      conjugeRendaCentavos: null,
-      conjugeOcupacao: null,
-      conjugeNascimento: null,
-    };
-  }
-
-  // raw_payload é o JSON bruto do webhook — carrega CPF/telefone/renda EM
-  // CLARO e furava todo o mascaramento acima. Só admin vê (é campo de debug).
+  // raw_payload é o JSON bruto do webhook — campo de debug, sem tela. Só admin.
   if (perfil !== "admin" && "rawPayload" in out) {
     out = { ...out, rawPayload: null };
   }
 
-  if (shouldMaskFinancial(perfil)) {
-    out = {
-      ...out,
-      bancoAprovador: null,
-      valorLiberadoCentavos: null,
-      comissaoCentavos: null,
-    };
+  if (!canSeeFechamento(perfil)) {
+    out = { ...out, bancoAprovador: null, valorLiberadoCentavos: null };
+  }
+
+  if (!canSeeComissao(perfil)) {
+    out = { ...out, comissaoCentavos: null };
   }
 
   return out;

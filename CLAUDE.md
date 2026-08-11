@@ -272,13 +272,24 @@ Todas as tabelas com dados sensíveis devem ter RLS habilitada. Políticas míni
 | **admin** | Todos | Todos | Sim | Sim | Sim | Sim | Sim | Sim |
 | **gerente** | Todos | Todos | Sim | Sim | Sim | Não | Não | Não |
 | **consultor** | Só atribuídos | Só atribuídos (campos limitados) | Não | Sim (dos seus) | Sim (dos seus) | Não | Não | Não |
-| **marketing** | Todos | Não | Não | Não (mascarado) | Não (mascarado) | Não | Não | Não |
+| **marketing** | Todos | Não | Não | Sim | Sim | Não | Não | Não |
 
-**Mascaramento para perfil Marketing:**
-- CPF: `***.***.***-XX` (mostra apenas últimos 2 dígitos)
-- Renda: substituir valor por faixa: "Até R$ 5k", "R$ 5k–10k", "R$ 10k–20k", "R$ 20k–50k", "Acima R$ 50k"
-- Telefone/WhatsApp: ocultar completamente
-- Email: domínio apenas (`***@gmail.com`)
+**Mascaramento para perfil Marketing:** revogado em 2026-08-11 por decisão do
+owner. Marketing precisa de score QUOD, renda declarada e cadastro PF do bureau
+pra medir qualidade de lead por campanha — sem isso não dá pra saber se a
+campanha traz gente que passa na política de crédito. CPF, WhatsApp, e-mail e
+renda saem em claro, como para os demais perfis. Marketing **vê** o score mas
+não dispara consulta (é paga; só admin executa). Continuam fora do alcance dele
+as telas operacionais: timeline de interações, conversa do WhatsApp, documentos,
+negociação bancária e geração de proposta.
+
+**Visibilidade de receita (vale pra todos os perfis):**
+- `comissao_centavos`: **admin only** — spread por banco é receita confidencial.
+- `banco_aprovador` e `valor_liberado_centavos`: admin e marketing (marketing
+  atribui ticket fechado à campanha de origem). Gerente e consultor não veem.
+- `raw_payload` (JSON bruto do webhook, campo de debug): admin only.
+
+Implementação em `src/lib/auth/mascaramento.ts`.
 
 ---
 
@@ -746,7 +757,7 @@ O MVP é considerado pronto quando todos abaixo são verdadeiros:
 12. ✅ Gabriel consegue criar uma regra de roteamento via UI sem mexer em código.
 13. ✅ Gabriel consegue editar templates de mensagem via UI.
 14. ✅ RLS testada e funcional (consultor não vê leads de outros).
-15. ✅ Mascaramento de PII para perfil Marketing testado.
+15. ✅ Visibilidade por perfil testada (comissão admin-only; banco/valor liberado só admin e marketing) — ver §5.
 16. ✅ Deploy em `crm.credios.com.br` com HTTPS funcionando.
 
 ---

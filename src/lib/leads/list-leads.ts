@@ -27,7 +27,6 @@ import { db } from "@/lib/db";
 import type { ListLeadsQuery, StatusLead } from "@/lib/validators/lead";
 
 export type LeadRow = Awaited<ReturnType<typeof rawQuery>>[number] & {
-  rendaFaixa?: string | null;
   /** True se há SLA `primeiro_contato_atrasado` ativo (resolvido_em IS NULL). */
   slaAtrasado?: boolean;
 };

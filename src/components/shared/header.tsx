@@ -17,7 +17,10 @@ export function Header({ user }: Props) {
   const isAdmin = user.perfil === "admin";
   const isConsultor = user.perfil === "consultor";
   const isMarketing = user.perfil === "marketing";
-  const showPalette = !isMarketing;
+  // Marketing busca lead por nome/CPF/telefone como os demais perfis. O sino de
+  // notificações continua fora: alertas de SLA e leads novos são operacionais
+  // (as APIs por trás dele bloqueiam marketing).
+  const showNotificacoes = !isMarketing;
   return (
     <header className="surface-frosted sticky top-0 z-30 rounded-none border-x-0 border-t-0 border-b">
       <div className="flex h-14 items-center gap-2 px-4 lg:px-6">
@@ -33,10 +36,10 @@ export function Header({ user }: Props) {
           </span>
         </div>
         <div className="hidden md:flex flex-1 justify-center">
-          {showPalette && <CommandPaletteTrigger />}
+          <CommandPaletteTrigger />
         </div>
         <div className="md:hidden flex-1" />
-        {showPalette && <NotificationsBellLazy />}
+        {showNotificacoes && <NotificationsBellLazy />}
         <UserMenu user={user} />
       </div>
     </header>

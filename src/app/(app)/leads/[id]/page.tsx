@@ -273,20 +273,21 @@ export default async function LeadDetailPage({ params }: Props) {
           <LeadEnderecoImovelCard lead={lead} canEdit={canEdit} />
           <LeadQualificacaoCard lead={lead} />
 
-          {/* Score de crédito (Direct Data/QUOD) — PII de crédito, oculto pra
-              marketing como CPF/renda. */}
-          {!isMarketing && (
-            <Suspense fallback={<SkeletonLeadBancos />}>
-              <ScoreBlock
-                leadId={lead.id}
-                temCpf={Boolean(row.cpf)}
-                isAdmin={user.perfil === "admin"}
-              />
-            </Suspense>
-          )}
+          {/* Score de crédito (Direct Data/QUOD) — visível a todos os perfis,
+              marketing incluído (qualidade de lead por campanha). Disparar a
+              consulta, que é paga, segue admin-only dentro do card. */}
+          <Suspense fallback={<SkeletonLeadBancos />}>
+            <ScoreBlock
+              leadId={lead.id}
+              temCpf={Boolean(row.cpf)}
+              isAdmin={user.perfil === "admin"}
+              podeSolicitar={!isMarketing}
+            />
+          </Suspense>
 
-          {/* Cadastro PF (Direct Data) — PII pesada, oculto pra marketing. */}
-          {!isMarketing && row.cadastroPf != null && row.cadastroPfEm && (
+          {/* Cadastro PF (Direct Data) — renda estimada, classe social e demais
+              dados do bureau. Visível a todos os perfis. */}
+          {row.cadastroPf != null && row.cadastroPfEm && (
             <LeadCadastroCard
               cadastro={row.cadastroPf as CadastroPf}
               consultadoLabel={labelIdadeConsulta(row.cadastroPfEm)}
@@ -770,6 +771,7 @@ async function ScoreBlock(props: {
   leadId: string;
   temCpf: boolean;
   isAdmin: boolean;
+  podeSolicitar: boolean;
 }) {
   // Consulta + solicitação pendente em paralelo (eram 3 awaits em série).
   const [consulta, [solRow]] = await Promise.all([
@@ -805,6 +807,7 @@ async function ScoreBlock(props: {
       leadId={props.leadId}
       temCpf={props.temCpf}
       isAdmin={props.isAdmin}
+      podeSolicitar={props.podeSolicitar}
       consulta={
         consulta
           ? {

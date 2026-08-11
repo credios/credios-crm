@@ -49,20 +49,14 @@ export async function GET(request: NextRequest) {
   }
   if (q.q) {
     const like = `%${q.q}%`;
-    // Marketing: busca apenas em `nome` pra evitar oracle de PII
-    // (não confirmar se um CPF/email/whatsapp existe).
-    if (user.perfil === "marketing") {
-      conds.push(ilike(leadsTable.nome, like));
-    } else {
-      conds.push(
-        or(
-          ilike(leadsTable.nome, like),
-          ilike(leadsTable.email, like),
-          ilike(leadsTable.cpf, like),
-          ilike(leadsTable.whatsapp, like),
-        ),
-      );
-    }
+    conds.push(
+      or(
+        ilike(leadsTable.nome, like),
+        ilike(leadsTable.email, like),
+        ilike(leadsTable.cpf, like),
+        ilike(leadsTable.whatsapp, like),
+      ),
+    );
   }
   const where = conds.length > 0 ? and(...conds) : undefined;
   const offset = (q.page - 1) * q.pageSize;

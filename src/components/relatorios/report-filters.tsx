@@ -34,8 +34,6 @@ type Props = {
   ufs?: string[];
   /** Esconde filtro de consultor (página /meu-desempenho onde escopo é fixo). */
   hideConsultor?: boolean;
-  /** Esconde faixa de valor (página marketing). */
-  hideFaixaValor?: boolean;
 };
 
 export function ReportFilters({
@@ -43,7 +41,6 @@ export function ReportFilters({
   origens,
   ufs = [],
   hideConsultor,
-  hideFaixaValor,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -225,9 +222,8 @@ export function ReportFilters({
         </FilterField>
       )}
 
-      {!hideFaixaValor && (
-        <FilterField label="Valor R$ (mín / máx)">
-          <div className="flex items-center gap-1.5">
+      <FilterField label="Valor R$ (mín / máx)">
+        <div className="flex items-center gap-1.5">
             <Input
               type="text"
               inputMode="numeric"
@@ -261,9 +257,8 @@ export function ReportFilters({
               }
               className="min-w-[100px] font-mono"
             />
-          </div>
-        </FilterField>
-      )}
+        </div>
+      </FilterField>
 
       {hasAnyFilter && (
         <Button variant="ghost" size="sm" onClick={clearAll} className="self-end">
