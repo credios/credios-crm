@@ -68,6 +68,11 @@ async function evento(contratoId: string, nome: string, meta: Meta = {}, metadat
   });
 }
 
+function ehViolacaoDeUnicidade(e: unknown): boolean {
+  const err = e as { code?: string; cause?: { code?: string } } | null;
+  return err?.code === "23505" || err?.cause?.code === "23505";
+}
+
 /** Contrato assinado mais recente do parceiro (pelo parceiro ou concluído). */
 export async function contratoVigente(parceiroId: string) {
   const [c] = await db
@@ -178,7 +183,9 @@ export async function garantirContratoPendente(
       .returning({ id: parceiroContratos.id });
     criadoId = novo!.id;
   } catch (e) {
-    if ((e as { code?: string }).code !== "23505") throw e;
+    // O Drizzle embrulha o erro do Postgres: o código (23505 = violação de
+    // unicidade) vem em `cause`, não no erro de fora.
+    if (!ehViolacaoDeUnicidade(e)) throw e;
   }
 
   const pendentes = await db
