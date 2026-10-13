@@ -18,6 +18,11 @@ const PUBLIC_PATH_PREFIXES = [
   "/portal", // gate: token do portal de documentos (validado no handler)
   "/vip", // gate: MESMO token do portal (página VIP curada — atendimento premium)
   "/api/portal", // gate: token do portal (upload/validação no handler)
+  // Portal do PARCEIRO: login próprio (cookie cp_sessao), sem Supabase Auth.
+  // Já casavam pelos prefixos /portal e /api/portal acima — explícitos aqui
+  // pra ninguém "arrumar" o prefixo e trancar o portal sem perceber.
+  "/portal-parceiro", // gate: exigirParceiro() em cada página da área logada
+  "/api/portal-parceiro", // gate: getParceiroSessao() em cada handler
   "/api/whatsapp", // gate: verify token (GET) + assinatura X-Hub-Signature-256 do Meta
   "/privacidade", // página legal pública (Meta/LGPD) — sem dados sensíveis
   "/termos", // página legal pública

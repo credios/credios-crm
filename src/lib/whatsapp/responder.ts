@@ -7,7 +7,7 @@ import {
   type HeloisaTurn,
   type Mensagem,
 } from "@/lib/whatsapp/heloisa";
-import { ehCgi } from "@/lib/produtos";
+import { aceitaContatoAutomatizado } from "@/lib/produtos";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
 import { aoMudarStatusCadencia, reagendarPorInteracao } from "@/lib/cadencia/engine";
@@ -615,16 +615,16 @@ export async function responderMensagem(
       : "(não encontrado)",
   );
 
-  const sdrOn = !!lead && ehCgi(lead) && sdrAtivo(phone);
+  const sdrOn = !!lead && aceitaContatoAutomatizado(lead) && sdrAtivo(phone);
 
   let resposta: string | null;
   let respostaTag: Record<string, unknown> | null = null; // metadata extra do enviado
   if (!lead) {
     resposta = msgNaoIdentificado();
-  } else if (!ehCgi(lead)) {
-    // Outro produto (ex.: condomínio): a Heloísa só sabe qualificar CGI. A
-    // mensagem entra na timeline pro consultor ver; o cliente recebe UM aviso
-    // e depois silêncio — nada de roteiro de garantia de imóvel pra síndico.
+  } else if (!aceitaContatoAutomatizado(lead)) {
+    // Outro produto (ex.: condomínio) ou cliente indicado por parceiro: sem
+    // Heloísa. A mensagem entra na timeline pro consultor ver; o cliente
+    // recebe UM aviso e depois silêncio.
     if (await jaAvisouOutroProduto(lead.id)) {
       resposta = null;
     } else {
@@ -632,7 +632,7 @@ export async function responderMensagem(
         "Oi! Aqui é a Credios 👋 Recebemos a sua mensagem — o consultor responsável pelo seu atendimento já vai falar com você.";
       respostaTag = { outro_produto_aviso: true };
     }
-    console.log("[whatsapp] lead de outro produto → sem Heloísa");
+    console.log("[whatsapp] outro produto ou cliente de parceiro → sem Heloísa");
   } else if (lead.status === "desqualificado") {
     // Desqualificado: avisa UMA vez (educado) e depois SILENCIA — sem repetir a
     // recusa a cada mensagem nem gerar custo à toa. (É estática, não usa a IA.)

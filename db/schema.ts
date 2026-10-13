@@ -1088,6 +1088,9 @@ export const parceiros = pgTable(
     /** Pontos-base (300 = 3%). NULL = sem regra padrão: comissão caso a caso. */
     comissaoPadraoBps: integer("comissao_padrao_bps"),
 
+    /** Acesso ao portal do parceiro (0052): sem_acesso | convidado | ativo | suspenso */
+    portalAcesso: text("portal_acesso").notNull().default("sem_acesso"),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1214,4 +1217,47 @@ export const parceiroComissoes = pgTable(
       sql`${table.createdAt} DESC`,
     ),
   ],
+);
+
+// ═══════════════════════════════════════════════════════════
+// Portal do parceiro (0052) — identidade e sessão PRÓPRIAS. Parceiro nunca é
+// linha em `users` nem em auth.users: uma credencial de parceiro não tem como
+// virar sessão do CRM interno. Lógica em src/lib/portal-parceiro/.
+// ═══════════════════════════════════════════════════════════
+
+export const parceiroUsuarios = pgTable("parceiro_usuarios", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  parceiroId: uuid("parceiro_id")
+    .notNull()
+    .unique()
+    .references(() => parceiros.id, { onDelete: "cascade" }),
+  email: text("email").notNull().unique(),
+  nome: text("nome").notNull(),
+  senhaHash: text("senha_hash"),
+  conviteTokenHash: text("convite_token_hash").unique(),
+  conviteExpiraEm: timestamp("convite_expira_em", { withTimezone: true }),
+  resetTokenHash: text("reset_token_hash").unique(),
+  resetExpiraEm: timestamp("reset_expira_em", { withTimezone: true }),
+  falhasLogin: integer("falhas_login").notNull().default(0),
+  bloqueadoAte: timestamp("bloqueado_ate", { withTimezone: true }),
+  termosAceitosEm: timestamp("termos_aceitos_em", { withTimezone: true }),
+  ultimoLoginEm: timestamp("ultimo_login_em", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const parceiroSessoes = pgTable(
+  "parceiro_sessoes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    usuarioId: uuid("usuario_id")
+      .notNull()
+      .references(() => parceiroUsuarios.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("idx_parceiro_sessoes_usuario").on(table.usuarioId)],
 );

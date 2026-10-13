@@ -2,7 +2,7 @@ import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
 import { interacoes, leads } from "../../../db/schema";
 import { db } from "@/lib/db";
-import { ehCgi } from "@/lib/produtos";
+import { aceitaContatoAutomatizado } from "@/lib/produtos";
 import { enviarTemplateWhatsApp } from "@/lib/whatsapp/meta";
 
 // Template aprovado (WABA) que abre a conversa proativa da Heloísa.
@@ -38,12 +38,19 @@ export async function enviarProativoWhatsapp(opts: {
 
   // O template aprovado fala de "simulação de crédito com garantia de imóvel"
   // e abre a qualificação de CGI — nunca sai pra lead de outro produto.
+  // Também não sai pra cliente indicado por parceiro: só o consultor fala
+  // com ele.
   const [alvo] = await db
-    .select({ produto: leads.produto })
+    .select({
+      produto: leads.produto,
+      parceiroId: leads.parceiroId,
+      parceiroPortalId: leads.parceiroPortalId,
+      source: leads.source,
+    })
     .from(leads)
     .where(eq(leads.id, opts.leadId))
     .limit(1);
-  if (!alvo || !ehCgi(alvo)) return { sent: false };
+  if (!alvo || !aceitaContatoAutomatizado(alvo)) return { sent: false };
 
   // GUARD DE ATENDIMENTO HUMANO (regra do owner, 17/07/2026 — caso Adriano):
   // qualquer digital humano no lead (interação com autor: contato registrado,
