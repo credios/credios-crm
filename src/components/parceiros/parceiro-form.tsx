@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,10 +23,11 @@ import {
   PARCEIRO_SEGMENTO_LABEL,
   PARCEIRO_SEGMENTOS,
 } from "@/lib/parceiros/constants";
+import { PRODUTO_LABEL, PRODUTOS_ATIVOS } from "@/lib/produtos";
 
 // Cadastro manual de parceiro (indicação, prospecção ativa, evento).
-// Admin escolhe atribuição (ou deixa na triagem); consultor cria pra si —
-// essa decisão é do servidor, o form só coleta os dados.
+// Só admin cadastra (a API barra os demais); ele escolhe o responsável ou
+// deixa na triagem.
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
@@ -53,6 +55,8 @@ export function ParceiroForm({
     consultorId: "",
   });
 
+  const [produtos, setProdutos] = useState<string[]>(["CGI"]);
+
   function set<K extends keyof typeof f>(k: K, v: string) {
     setF((prev) => ({ ...prev, [k]: v }));
   }
@@ -61,6 +65,10 @@ export function ParceiroForm({
     e.preventDefault();
     if (f.nome.trim().length < 2) {
       toast.error("Informe o nome do parceiro.");
+      return;
+    }
+    if (produtos.length === 0) {
+      toast.error("Habilite pelo menos um produto.");
       return;
     }
     setBusy(true);
@@ -79,6 +87,7 @@ export function ParceiroForm({
           origem: f.origem,
           notas: f.notas || null,
           consultorId: isAdmin ? f.consultorId || null : undefined,
+          produtosHabilitados: produtos,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as {
@@ -182,6 +191,24 @@ export function ParceiroForm({
               </Select>
             </div>
           )}
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Produtos que o parceiro pode indicar</Label>
+            {PRODUTOS_ATIVOS.map((p) => (
+              <label key={p} className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={produtos.includes(p)}
+                  onCheckedChange={(v) =>
+                    setProdutos((prev) =>
+                      v === true
+                        ? Array.from(new Set([...prev, p]))
+                        : prev.filter((x) => x !== p),
+                    )
+                  }
+                />
+                {PRODUTO_LABEL[p]}
+              </label>
+            ))}
+          </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Notas</Label>
             <Textarea

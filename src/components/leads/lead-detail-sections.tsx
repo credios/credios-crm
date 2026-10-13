@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Handshake, MessageCircle } from "lucide-react";
 
@@ -100,6 +101,7 @@ export type LeadDetailData = {
   // Parceria (Portal de Parceiros)
   parceiroNome: string | null;
   parceiroPortalId: string | null;
+  parceiroId: string | null;
   observacoesParceiro: string | null;
   // Taxonomia hierárquica (migration 0017)
   channel: string | null;
@@ -642,8 +644,8 @@ export function LeadConjugeCard({ lead, canEdit }: { lead: LeadDetailData; canEd
 // ============================================================================
 
 /**
- * Card "Parceria" — exibido apenas quando o lead veio do Portal de Parceiros.
- * Somente leitura: a fonte da verdade é o portal (parceiros.credios.com.br).
+ * Card "Parceria" — exibido quando o lead tem parceiro indicador (portal ou
+ * cadastro manual). Somente leitura; a gestão fica em /parceiros.
  */
 export function LeadParceriaCard({ lead }: { lead: LeadDetailData }) {
   if (!lead.parceiroNome && !lead.parceiroPortalId && !lead.observacoesParceiro) {
@@ -663,7 +665,18 @@ export function LeadParceriaCard({ lead }: { lead: LeadDetailData }) {
             <dt className="text-xs text-muted-foreground sm:text-sm">
               Indicado por
             </dt>
-            <dd className="min-w-0 font-medium">{lead.parceiroNome ?? "—"}</dd>
+            <dd className="min-w-0 font-medium">
+              {lead.parceiroId ? (
+                <Link
+                  href={`/parceiros/${lead.parceiroId}`}
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  {lead.parceiroNome ?? "Ver parceiro"}
+                </Link>
+              ) : (
+                (lead.parceiroNome ?? "—")
+              )}
+            </dd>
           </div>
           {lead.parceiroPortalId && (
             <div className="flex flex-col gap-0.5 sm:contents">

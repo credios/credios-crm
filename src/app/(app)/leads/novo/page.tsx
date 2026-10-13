@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -52,7 +52,12 @@ export default async function NovoLeadPage({ searchParams }: Props) {
               empresa: parceirosTable.empresa,
             })
             .from(parceirosTable)
-            .where(ne(parceirosTable.status, "perdido"))
+            .where(
+              and(
+                ne(parceirosTable.status, "perdido"),
+                sql`${parceirosTable.produtosHabilitados} @> ARRAY[${produto}]::text[]`,
+              ),
+            )
             .orderBy(parceirosTable.nome)
         ).map((p) => ({
           id: p.id,

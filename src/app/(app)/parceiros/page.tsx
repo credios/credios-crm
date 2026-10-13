@@ -9,7 +9,7 @@ import { ParceiroStatusBadge } from "@/components/parceiros/parceiro-status-badg
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAppUser } from "@/lib/auth/get-app-user";
-import { isAdminOrGerente } from "@/lib/auth/permissions";
+import { isAdmin, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   PARCEIRO_SEGMENTO_LABEL,
@@ -111,15 +111,17 @@ export default async function ParceirosPage({ searchParams }: Props) {
             Parceiros
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Do candidato à parceria ativa — contratos e comissões vivem no portal.
+            Do candidato à parceria ativa — produtos habilitados, indicações e comissões.
           </p>
         </div>
-        <Link
-          href="/parceiros/novo"
-          className={buttonVariants({ size: "sm", className: "gap-1.5" })}
-        >
-          <Plus className="size-4" /> Novo parceiro
-        </Link>
+        {isAdmin(user) && (
+          <Link
+            href="/parceiros/novo"
+            className={buttonVariants({ size: "sm", className: "gap-1.5" })}
+          >
+            <Plus className="size-4" /> Novo parceiro
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

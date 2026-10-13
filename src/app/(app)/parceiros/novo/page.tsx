@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { users as usersTable } from "../../../../../db/schema";
 import { ParceiroForm } from "@/components/parceiros/parceiro-form";
 import { getAppUser } from "@/lib/auth/get-app-user";
-import { isAdminOrGerente } from "@/lib/auth/permissions";
+import { isAdmin } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +12,9 @@ export const dynamic = "force-dynamic";
 export default async function NovoParceiroPage() {
   const user = await getAppUser();
   if (!user) redirect("/login");
-  if (user.perfil === "marketing") redirect("/sem-permissao");
+  if (!isAdmin(user)) redirect("/sem-permissao");
 
-  const admin = isAdminOrGerente(user);
+  const admin = true;
   const consultores = admin
     ? await db
         .select({ id: usersTable.id, nome: usersTable.nome })

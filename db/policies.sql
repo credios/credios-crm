@@ -701,3 +701,6 @@ USING (
 -- lead_condominio (0049) — RLS sem policy = deny total. Acesso só server-side
 -- (Drizzle como owner); as permissões por perfil são as do lead, na app.
 ALTER TABLE public.lead_condominio ENABLE ROW LEVEL SECURITY;
+
+-- parceiro_comissoes (0051) — RLS sem policy = deny total (admin, server-side).
+ALTER TABLE public.parceiro_comissoes ENABLE ROW LEVEL SECURITY;

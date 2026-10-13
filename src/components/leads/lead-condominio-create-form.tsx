@@ -405,7 +405,7 @@ export function LeadCondominioCreateForm({
             </Select>
             {parceiros.length === 0 && (
               <p className="text-[11px] text-fg-subtle">
-                Nenhum parceiro cadastrado ainda.
+                Nenhum parceiro habilitado para condomínio ainda.
               </p>
             )}
           </div>
