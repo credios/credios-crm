@@ -17,10 +17,23 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { STATUS_LEAD_LABEL } from "@/lib/constants";
-import { renderTemplate, SAMPLE_LEAD } from "@/lib/templates";
+import {
+  PRODUTO_LABEL,
+  PRODUTO_PADRAO,
+  PRODUTOS_ATIVOS,
+  type Produto,
+} from "@/lib/produtos";
+import { renderTemplate, SAMPLE_CONDOMINIO, SAMPLE_LEAD } from "@/lib/templates";
 
 const STATUS_VALUES = Object.keys(STATUS_LEAD_LABEL);
 
@@ -30,6 +43,7 @@ export type TemplateRow = {
   ordem: number;
   conteudo: string;
   statusAplicavel: string[] | null;
+  produto: string;
   ativa: boolean;
 };
 
@@ -75,6 +89,7 @@ function TemplateForm({
     template?.statusAplicavel ?? ["novo"],
   );
   const [ativa, setAtiva] = useState(template?.ativa ?? true);
+  const [produto, setProduto] = useState<string>(template?.produto ?? PRODUTO_PADRAO);
   const [showPreview, setShowPreview] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +121,7 @@ function TemplateForm({
       nome: nome.trim(),
       conteudo: conteudo.trim(),
       statusAplicavel,
+      produto,
       ativa,
     };
     const url = template
@@ -130,7 +146,10 @@ function TemplateForm({
     onSaved();
   }
 
-  const preview = renderTemplate(conteudo, SAMPLE_LEAD);
+  const preview = renderTemplate(
+    conteudo,
+    produto === "CONDOMINIO" ? SAMPLE_CONDOMINIO : SAMPLE_LEAD,
+  );
 
   return (
     <>
@@ -144,7 +163,9 @@ function TemplateForm({
           <code className="text-xs">{"{{valor_credito}}"}</code>,{" "}
           <code className="text-xs">{"{{valor_imovel}}"}</code>,{" "}
           <code className="text-xs">{"{{cidade}}"}</code>,{" "}
-          <code className="text-xs">{"{{estado}}"}</code>.
+          <code className="text-xs">{"{{estado}}"}</code>. Em condomínio,{" "}
+          <code className="text-xs">{"{{nome}}"}</code> é o nome do condomínio e{" "}
+          <code className="text-xs">{"{{sindico}}"}</code> o primeiro nome do síndico.
         </DialogDescription>
       </DialogHeader>
 
@@ -170,6 +191,24 @@ function TemplateForm({
             <Switch checked={ativa} onCheckedChange={setAtiva} disabled={pending} />
             <Label className="cursor-pointer">{ativa ? "Ativa" : "Desativada"}</Label>
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Produto</Label>
+          <Select value={produto} onValueChange={(v) => setProduto(v ?? PRODUTO_PADRAO)} disabled={pending}>
+            <SelectTrigger className="sm:w-80">
+              <SelectValue>
+                {(v: unknown) => PRODUTO_LABEL[v as Produto] ?? String(v ?? "")}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {PRODUTOS_ATIVOS.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PRODUTO_LABEL[p]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-1.5">

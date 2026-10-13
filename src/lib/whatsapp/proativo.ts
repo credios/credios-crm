@@ -2,6 +2,7 @@ import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
 import { interacoes, leads } from "../../../db/schema";
 import { db } from "@/lib/db";
+import { ehCgi } from "@/lib/produtos";
 import { enviarTemplateWhatsApp } from "@/lib/whatsapp/meta";
 
 // Template aprovado (WABA) que abre a conversa proativa da Heloísa.
@@ -34,6 +35,15 @@ export async function enviarProativoWhatsapp(opts: {
   const to = opts.whatsapp.replace(/\D/g, "");
   if (to.length < 10) return { sent: false };
   const primeiroNome = opts.nome ? opts.nome.split(/\s+/)[0] : "";
+
+  // O template aprovado fala de "simulação de crédito com garantia de imóvel"
+  // e abre a qualificação de CGI — nunca sai pra lead de outro produto.
+  const [alvo] = await db
+    .select({ produto: leads.produto })
+    .from(leads)
+    .where(eq(leads.id, opts.leadId))
+    .limit(1);
+  if (!alvo || !ehCgi(alvo)) return { sent: false };
 
   // GUARD DE ATENDIMENTO HUMANO (regra do owner, 17/07/2026 — caso Adriano):
   // qualquer digital humano no lead (interação com autor: contato registrado,

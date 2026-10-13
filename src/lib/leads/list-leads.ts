@@ -153,6 +153,7 @@ async function rawQuery(
   if (filters.channel) conds.push(eq(leadsTable.channel, filters.channel));
   if (filters.estado) conds.push(eq(leadsTable.estado, filters.estado));
   if (filters.dispositivo) conds.push(eq(leadsTable.dispositivo, filters.dispositivo));
+  if (filters.produto) conds.push(eq(leadsTable.produto, filters.produto));
   if (filters.valorMin != null)
     conds.push(gte(leadsTable.valorCreditoCentavos, filters.valorMin));
   if (filters.valorMax != null)
@@ -194,6 +195,7 @@ async function rawQuery(
       status: leadsTable.status,
       origem: leadsTable.origem,
       dispositivo: leadsTable.dispositivo,
+      produto: leadsTable.produto,
       consultorId: leadsTable.consultorId,
       consultorNome: usersTable.nome,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
@@ -307,6 +309,7 @@ function buildCountWhere(filters: ListLeadsQuery, user: AppUser) {
   if (filters.channel) conds.push(eq(leadsTable.channel, filters.channel));
   if (filters.estado) conds.push(eq(leadsTable.estado, filters.estado));
   if (filters.dispositivo) conds.push(eq(leadsTable.dispositivo, filters.dispositivo));
+  if (filters.produto) conds.push(eq(leadsTable.produto, filters.produto));
   if (filters.valorMin != null)
     conds.push(gte(leadsTable.valorCreditoCentavos, filters.valorMin));
   if (filters.valorMax != null)

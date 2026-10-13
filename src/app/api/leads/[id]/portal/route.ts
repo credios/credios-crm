@@ -8,6 +8,7 @@ import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { sendPortalEmail } from "@/lib/portal/email";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
+import { ehCgi } from "@/lib/produtos";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -34,6 +35,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     })
   ) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // O checklist do portal é o de pessoa física do CGI.
+  if (!ehCgi(lead)) {
+    return NextResponse.json(
+      { error: "Portal de documentos disponível apenas para CGI." },
+      { status: 422 },
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as {

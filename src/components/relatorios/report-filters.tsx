@@ -23,6 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  PRODUTO_LABEL_CURTO,
+  PRODUTOS_ATIVOS,
+  type Produto,
+} from "@/lib/produtos";
+import {
   PERIODO_LABEL,
   PERIODO_PRESETS,
   type PeriodoPreset,
@@ -54,6 +59,7 @@ export function ReportFilters({
   const consultorIds = parseList(params.get("consultorIds"));
   const origensSel = parseList(params.get("origens"));
   const ufsSel = parseList(params.get("ufs"));
+  const produto = params.get("produto");
   const valorMin = params.get("valorMinCentavos") ?? "";
   const valorMax = params.get("valorMaxCentavos") ?? "";
 
@@ -83,6 +89,7 @@ export function ReportFilters({
     consultorIds.length > 0 ||
     origensSel.length > 0 ||
     ufsSel.length > 0 ||
+    !!produto ||
     !!valorMin ||
     !!valorMax;
 
@@ -110,6 +117,31 @@ export function ReportFilters({
             {PERIODO_PRESETS.map((p) => (
               <SelectItem key={p} value={p}>
                 {PERIODO_LABEL[p]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FilterField>
+
+      <FilterField label="Produto">
+        <Select
+          value={produto ?? "__all__"}
+          onValueChange={(v) => setParam("produto", !v || v === "__all__" ? null : v)}
+        >
+          <SelectTrigger className="min-w-[140px]">
+            <SelectValue>
+              {(v: unknown) =>
+                typeof v === "string" && v !== "__all__"
+                  ? PRODUTO_LABEL_CURTO[v as Produto] ?? v
+                  : "Todos"
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todos</SelectItem>
+            {PRODUTOS_ATIVOS.map((p) => (
+              <SelectItem key={p} value={p}>
+                {PRODUTO_LABEL_CURTO[p]}
               </SelectItem>
             ))}
           </SelectContent>

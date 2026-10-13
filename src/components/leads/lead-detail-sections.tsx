@@ -34,6 +34,7 @@ import {
   temSaldoDevedor,
 } from "@/lib/leads/credito-total";
 import { formatCpf, formatPhoneBr } from "@/lib/formatters/phone";
+import { PRODUTO_LABEL, type Produto } from "@/lib/produtos";
 import { UTM_SOURCE_ALIASES } from "@/lib/tracking/taxonomy";
 
 /** Toque do histórico multi-touch capturado pelo site (coluna leads.touches). */
@@ -331,7 +332,7 @@ export function LeadOperacaoCard({ lead, canEdit }: { lead: LeadDetailData; canE
   const showImovelDetalhes = tipoImovel === "Terreno" || tipoImovel === "Outro";
 
   const view = [
-    { label: "Produto", value: lead.produto },
+    { label: "Produto", value: PRODUTO_LABEL[lead.produto as Produto] ?? lead.produto },
     { label: "Objetivo", value: lead.objetivoCredito },
     { label: "Tipo de imóvel", value: lead.tipoImovel },
     // View: linha aparece só quando há esclarecimento (não polui o card pra

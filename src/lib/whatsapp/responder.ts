@@ -7,6 +7,7 @@ import {
   type HeloisaTurn,
   type Mensagem,
 } from "@/lib/whatsapp/heloisa";
+import { ehCgi } from "@/lib/produtos";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
 import { aoMudarStatusCadencia, reagendarPorInteracao } from "@/lib/cadencia/engine";
@@ -578,6 +579,22 @@ async function jaAvisouDesqualificado(leadId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/** true = o aviso de "um consultor te responde" já saiu pra esse lead. */
+async function jaAvisouOutroProduto(leadId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: interacoes.id })
+    .from(interacoes)
+    .where(
+      and(
+        eq(interacoes.leadId, leadId),
+        eq(interacoes.tipo, "whatsapp_enviado"),
+        sql`${interacoes.metadata} ->> 'outro_produto_aviso' = 'true'`,
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
 /**
  * Decide a resposta pra uma mensagem do cliente e registra na timeline do lead.
  * Canal-agnóstico: hoje usado pelo webhook do WhatsApp (Meta Cloud API). Roteia:
@@ -598,12 +615,24 @@ export async function responderMensagem(
       : "(não encontrado)",
   );
 
-  const sdrOn = !!lead && sdrAtivo(phone);
+  const sdrOn = !!lead && ehCgi(lead) && sdrAtivo(phone);
 
   let resposta: string | null;
   let respostaTag: Record<string, unknown> | null = null; // metadata extra do enviado
   if (!lead) {
     resposta = msgNaoIdentificado();
+  } else if (!ehCgi(lead)) {
+    // Outro produto (ex.: condomínio): a Heloísa só sabe qualificar CGI. A
+    // mensagem entra na timeline pro consultor ver; o cliente recebe UM aviso
+    // e depois silêncio — nada de roteiro de garantia de imóvel pra síndico.
+    if (await jaAvisouOutroProduto(lead.id)) {
+      resposta = null;
+    } else {
+      resposta =
+        "Oi! Aqui é a Credios 👋 Recebemos a sua mensagem — o consultor responsável pelo seu atendimento já vai falar com você.";
+      respostaTag = { outro_produto_aviso: true };
+    }
+    console.log("[whatsapp] lead de outro produto → sem Heloísa");
   } else if (lead.status === "desqualificado") {
     // Desqualificado: avisa UMA vez (educado) e depois SILENCIA — sem repetir a
     // recusa a cada mensagem nem gerar custo à toa. (É estática, não usa a IA.)

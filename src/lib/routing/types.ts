@@ -19,6 +19,8 @@ export type RuleCondicoes = {
   estado_in?: string[];
   origem_in?: string[];
   tipo_imovel_in?: string[];
+  /** Produtos (src/lib/produtos.ts). Ausente = vale pra qualquer produto. */
+  produto_in?: string[];
   /** true = só vale dentro do horário comercial; false = só fora; ausente = não importa. */
   horario_comercial?: boolean;
 };
@@ -60,6 +62,8 @@ export type RoutingContext = {
   estado: string | null;
   origem: string | null;
   tipoImovel: string | null;
+  /** Ausente = CGI (todo lead anterior ao multiproduto). */
+  produto?: string | null;
   /**
    * Override opcional para horário comercial. Se omitido, engine usa
    * `dentroHorarioComercial(new Date())`. Útil em tests pra fixar o tempo.

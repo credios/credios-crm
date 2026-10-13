@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PRODUTOS, produtoSchema } from "@/lib/produtos";
+import { condominioSchema } from "@/lib/validators/condominio";
 import { SORT_LEAD_KEYS, type SortLeadKey } from "@/lib/leads/sort-options";
 
 
@@ -58,7 +60,7 @@ export const createLeadSchema = z.object({
   cidade: optionalString,
   estado: z.string().trim().length(2).nullable().optional().or(z.literal("").transform(() => null)),
 
-  produto: z.string().default("CGI"),
+  produto: produtoSchema,
   objetivoCredito: optionalString,
   tipoImovel: optionalString,
   tipoImovelDetalhes: optionalString,
@@ -81,6 +83,11 @@ export const createLeadSchema = z.object({
   conjugeWhatsapp: optionalString,
 
   consultorId: z.uuid().nullable().optional(),
+
+  // Parceiro indicador (FK pra `parceiros`) — vale pra qualquer produto.
+  parceiroId: z.uuid().nullable().optional(),
+  // Só é gravado quando produto = CONDOMINIO (tabela `lead_condominio`).
+  condominio: condominioSchema.optional(),
 
   origem: optionalString.default("Manual"),
 });
@@ -203,6 +210,7 @@ export const listLeadsQuerySchema = z.object({
   channel: z.string().optional(),
   estado: z.string().optional(),
   dispositivo: z.string().optional(),
+  produto: z.enum(PRODUTOS).optional(),
   q: z.string().optional(),
   valorMin: z.coerce.number().int().nonnegative().optional(),
   valorMax: z.coerce.number().int().nonnegative().optional(),

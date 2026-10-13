@@ -18,8 +18,15 @@ import type { PeriodRange } from "./period";
 // Quando esse filtro está ativo, voltamos pra leitura direta da tabela
 // leads (com cache normal). Casos comuns (sem filter de valor) servem
 // das MVs em ms.
+//
+// Produto segue a mesma lógica: as MVs não têm a coluna, então filtrar por
+// produto também cai na leitura direta.
 function canUseMV(filters: ReportFilters): boolean {
-  return filters.valorMinCentavos == null && filters.valorMaxCentavos == null;
+  return (
+    filters.valorMinCentavos == null &&
+    filters.valorMaxCentavos == null &&
+    filters.produto == null
+  );
 }
 
 // Conditions pra mvLeadsDiarios — converte filtros pros campos da MV
@@ -92,6 +99,7 @@ function cacheKeyFor(
     f.ufs.slice().sort().join(","),
     String(f.valorMinCentavos ?? ""),
     String(f.valorMaxCentavos ?? ""),
+    f.produto ?? "",
   ];
   if (period) {
     parts.push(bucketHour(period.from), bucketHour(period.to));
@@ -130,6 +138,7 @@ function baseConds(rawFilters: ReportFilters) {
   if (filters.valorMaxCentavos != null) {
     c.push(lte(leads.valorCreditoCentavos, filters.valorMaxCentavos));
   }
+  if (filters.produto) c.push(eq(leads.produto, filters.produto));
   return c;
 }
 

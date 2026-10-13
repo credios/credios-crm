@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       nome: data.nome,
       ordem: novaOrdem,
       statusAplicavel: data.statusAplicavel,
+      produto: data.produto ?? "CGI",
       conteudo: data.conteudo,
       ativa: data.ativa,
     })

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PRODUTOS } from "@/lib/produtos";
+
 export const PERIODO_PRESETS = [
   "hoje",
   "7d",
@@ -42,6 +44,9 @@ export const reportFiltersSchema = z.object({
   consultorIds: csvOrArray.default([]),
   origens: csvOrArray.default([]),
   ufs: csvOrArray.default([]),
+
+  // Produto (src/lib/produtos.ts). Ausente = todos.
+  produto: z.enum(PRODUTOS).optional().catch(undefined),
 
   // Faixa de valor de crédito buscado (centavos).
   valorMinCentavos: z.coerce.number().int().nonnegative().optional(),

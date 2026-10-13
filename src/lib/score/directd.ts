@@ -4,6 +4,7 @@ import { and, desc, eq, gte } from "drizzle-orm";
 
 import { consultasScore, interacoes, leads as leadsTable } from "../../../db/schema";
 import { db } from "@/lib/db";
+import { ehCgi } from "@/lib/produtos";
 
 // Score de crédito por CPF via Direct Data (produto "Score de Crédito - QUOD").
 // Cada hit é PAGO — daí as regras: manual só admin (com confirmação na UI),
@@ -59,11 +60,20 @@ export async function consultarScoreLead(
   if (!token) return { ok: false, erro: "DIRECTD_TOKEN não configurado" };
 
   const [lead] = await db
-    .select({ id: leadsTable.id, cpf: leadsTable.cpf, nome: leadsTable.nome })
+    .select({
+      id: leadsTable.id,
+      cpf: leadsTable.cpf,
+      nome: leadsTable.nome,
+      produto: leadsTable.produto,
+    })
     .from(leadsTable)
     .where(eq(leadsTable.id, leadId))
     .limit(1);
   if (!lead) return { ok: false, erro: "lead não encontrado" };
+  // Score QUOD é de pessoa física e a política de corte é a do CGI.
+  if (!ehCgi(lead)) {
+    return { ok: false, erro: "Consulta de score disponível apenas para CGI" };
+  }
 
   const cpf = (lead.cpf ?? "").replace(/\D/g, "");
   if (cpf.length !== 11) return { ok: false, erro: "lead sem CPF válido" };

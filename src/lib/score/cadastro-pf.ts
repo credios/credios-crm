@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { interacoes, leads as leadsTable } from "../../../db/schema";
 import { db } from "@/lib/db";
+import { ehCgi } from "@/lib/produtos";
 
 // Cadastro PF Plus (Direct Data) — consulta AUTOMÁTICA em todo formulário
 // completo com CPF (barata; decisão do owner 2026-07-08). Traz nome oficial,
@@ -64,11 +65,12 @@ export async function consultarCadastroPfLead(leadId: string): Promise<void> {
         id: leadsTable.id,
         cpf: leadsTable.cpf,
         cadastroPfEm: leadsTable.cadastroPfEm,
+        produto: leadsTable.produto,
       })
       .from(leadsTable)
       .where(eq(leadsTable.id, leadId))
       .limit(1);
-    if (!lead) return;
+    if (!lead || !ehCgi(lead)) return;
     const cpf = (lead.cpf ?? "").replace(/\D/g, "");
     if (cpf.length !== 11 || lead.cadastroPfEm) return;
 

@@ -184,6 +184,7 @@ async function buildSamples(adminNome: string): Promise<
     dataFechamento: null,
     parceiroNome: null,
     parceiroPortalId: null,
+    parceiroId: null,
     observacoesParceiro: null,
     valoresSuspeitos: null,
     valoresRevisadoEm: null,

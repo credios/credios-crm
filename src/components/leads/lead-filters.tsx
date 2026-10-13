@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { STATUS_LEAD_LABEL, UFS } from "@/lib/constants";
+import { PRODUTO_LABEL_CURTO, PRODUTOS_ATIVOS } from "@/lib/produtos";
 import { CHANNELS } from "@/lib/tracking/taxonomy";
 
 const STATUS_VALUES = Object.keys(STATUS_LEAD_LABEL);
@@ -209,6 +210,15 @@ export function LeadFilters({ consultores, sources = [] }: Props) {
           options={sourcesForChannel.map((s) => ({
             value: s.source,
             label: s.displayName,
+          }))}
+        />
+        <FilterSelect
+          label="Produto"
+          value={params.get("produto")}
+          onChange={(v) => setParam("produto", v)}
+          options={PRODUTOS_ATIVOS.map((p) => ({
+            value: p,
+            label: PRODUTO_LABEL_CURTO[p],
           }))}
         />
         <FilterSelect

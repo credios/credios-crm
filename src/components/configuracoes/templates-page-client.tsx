@@ -60,6 +60,7 @@ export function TemplatesPageClient({ initial }: Props) {
         nome: t.nome,
         conteudo: t.conteudo,
         statusAplicavel: t.statusAplicavel ?? [],
+        produto: t.produto,
         ativa,
       }),
     });

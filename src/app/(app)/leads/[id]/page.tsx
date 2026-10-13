@@ -31,6 +31,13 @@ import {
   LeadQualificacaoCard,
 } from "@/components/leads/lead-detail-sections";
 import { LeadCadastroCard } from "@/components/leads/lead-cadastro-card";
+import {
+  type CondominioDetailData,
+  LeadCondominioCard,
+  LeadCondominioFinanceiroCard,
+  LeadCondominioOperacaoCard,
+  LeadSindicoCard,
+} from "@/components/leads/lead-condominio-cards";
 import { LeadScoreCard } from "@/components/leads/lead-score-card";
 import { LeadPropostaCard } from "@/components/leads/lead-proposta-card";
 import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
@@ -46,6 +53,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { checkPermission, isAdminOrGerente } from "@/lib/auth/permissions";
+import { ehCgi } from "@/lib/produtos";
+import { buscarCondominio } from "@/lib/condominio/persist";
 import { db } from "@/lib/db";
 import { listConsultoresAtivos } from "@/lib/leads/list-leads";
 import type { ValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
@@ -81,6 +90,38 @@ export default async function LeadDetailPage({ params }: Props) {
 
   const masked = maskLeadForPerfil(row, user.perfil);
   const isMarketing = user.perfil === "marketing";
+  // Cônjuge, imóvel em garantia, qualificação da Heloísa, score, portal de
+  // documentos e proposta em faixa só existem no CGI.
+  const cgi = ehCgi(row);
+
+  // Condomínio: os dados próprios vêm da tabela-irmã. Lead antigo sem linha
+  // ainda (ex.: indicação do portal antes da 0049) abre com tudo vazio.
+  let condominio: CondominioDetailData | null = null;
+  if (row.produto === "CONDOMINIO") {
+    const c = await buscarCondominio(row.id);
+    condominio = {
+      cnpj: c?.cnpj ?? null,
+      cep: c?.cep ?? null,
+      logradouro: c?.logradouro ?? null,
+      numero: c?.numero ?? null,
+      complemento: c?.complemento ?? null,
+      bairro: c?.bairro ?? null,
+      sindicoNome: c?.sindicoNome ?? null,
+      sindicoCpf: c?.sindicoCpf ?? null,
+      sindicoProfissional: c?.sindicoProfissional ?? null,
+      sindicoMandatoFim: c?.sindicoMandatoFim ?? null,
+      administradora: c?.administradora ?? null,
+      numUnidades: c?.numUnidades ?? null,
+      arrecadacaoMensalCentavos: c?.arrecadacaoMensalCentavos ?? null,
+      inadimplenciaBps: c?.inadimplenciaBps ?? null,
+      fundoReservaCentavos: c?.fundoReservaCentavos ?? null,
+      finalidadeDetalhes: c?.finalidadeDetalhes ?? null,
+      prazoDesejadoMeses: c?.prazoDesejadoMeses ?? null,
+      obraOrcada: c?.obraOrcada ?? null,
+      assembleiaStatus: c?.assembleiaStatus ?? null,
+      assembleiaData: c?.assembleiaData ?? null,
+    };
+  }
 
   const lead: LeadDetailData = {
     id: row.id,
@@ -265,29 +306,45 @@ export default async function LeadDetailPage({ params }: Props) {
             min-w-0 nos filhos do grid evita que conteúdo largo (GCLID, URL) empurre
             a coluna além da largura do viewport no mobile. */}
         <div className="min-w-0 space-y-6">
-          <LeadPessoaisCard lead={lead} canEdit={canEdit} />
+          {condominio ? (
+            <>
+              <LeadCondominioCard lead={lead} condominio={condominio} canEdit={canEdit} />
+              <LeadSindicoCard lead={lead} condominio={condominio} canEdit={canEdit} />
+            </>
+          ) : (
+            <LeadPessoaisCard lead={lead} canEdit={canEdit} />
+          )}
           <LeadContatoCard lead={lead} canEdit={canEdit} />
-          <LeadConjugeCard lead={lead} canEdit={canEdit} />
+          {cgi && <LeadConjugeCard lead={lead} canEdit={canEdit} />}
           <LeadParceriaCard lead={lead} />
-          <LeadOperacaoCard lead={lead} canEdit={canEdit} />
-          <LeadEnderecoImovelCard lead={lead} canEdit={canEdit} />
-          <LeadQualificacaoCard lead={lead} />
+          {condominio ? (
+            <>
+              <LeadCondominioOperacaoCard lead={lead} condominio={condominio} canEdit={canEdit} />
+              <LeadCondominioFinanceiroCard lead={lead} condominio={condominio} canEdit={canEdit} />
+            </>
+          ) : (
+            <LeadOperacaoCard lead={lead} canEdit={canEdit} />
+          )}
+          {cgi && <LeadEnderecoImovelCard lead={lead} canEdit={canEdit} />}
+          {cgi && <LeadQualificacaoCard lead={lead} />}
 
           {/* Score de crédito (Direct Data/QUOD) — visível a todos os perfis,
               marketing incluído (qualidade de lead por campanha). Disparar a
               consulta, que é paga, segue admin-only dentro do card. */}
-          <Suspense fallback={<SkeletonLeadBancos />}>
-            <ScoreBlock
-              leadId={lead.id}
-              temCpf={Boolean(row.cpf)}
-              isAdmin={user.perfil === "admin"}
-              podeSolicitar={!isMarketing}
-            />
-          </Suspense>
+          {cgi && (
+            <Suspense fallback={<SkeletonLeadBancos />}>
+              <ScoreBlock
+                leadId={lead.id}
+                temCpf={Boolean(row.cpf)}
+                isAdmin={user.perfil === "admin"}
+                podeSolicitar={!isMarketing}
+              />
+            </Suspense>
+          )}
 
           {/* Cadastro PF (Direct Data) — renda estimada, classe social e demais
               dados do bureau. Visível a todos os perfis. */}
-          {row.cadastroPf != null && row.cadastroPfEm && (
+          {cgi && row.cadastroPf != null && row.cadastroPfEm && (
             <LeadCadastroCard
               cadastro={row.cadastroPf as CadastroPf}
               consultadoLabel={labelIdadeConsulta(row.cadastroPfEm)}
@@ -312,7 +369,7 @@ export default async function LeadDetailPage({ params }: Props) {
             </Suspense>
           )}
 
-          {!isMarketing && (
+          {cgi && !isMarketing && (
             <Suspense fallback={<SkeletonLeadBancos />}>
               <DocumentosBlock
                 leadId={lead.id}
@@ -331,7 +388,7 @@ export default async function LeadDetailPage({ params }: Props) {
               Marketing vê CPF/valores mascarados, então a simulação seria
               inválida. Demais perfis (admin, gerente, consultor c/ acesso)
               podem gerar PDF a qualquer momento. */}
-          {!isMarketing && (
+          {cgi && !isMarketing && (
             <Suspense fallback={<SkeletonLeadBancos />}>
               <PropostaBlock
                 leadId={lead.id}
@@ -344,6 +401,8 @@ export default async function LeadDetailPage({ params }: Props) {
           <Suspense fallback={<MensagensSkeleton />}>
             <MensagensBlock
               leadStatus={row.status}
+              leadProduto={row.produto}
+              leadSindico={condominio?.sindicoNome ?? null}
               leadNome={lead.nome}
               leadCidade={lead.cidade}
               leadEstado={lead.estado}
@@ -551,6 +610,8 @@ async function DocumentosBlock({
 
 async function MensagensBlock(props: {
   leadStatus: string;
+  leadProduto: string;
+  leadSindico: string | null;
   leadNome: string;
   leadCidade: string | null;
   leadEstado: string | null;
@@ -568,6 +629,7 @@ async function MensagensBlock(props: {
       .where(
         and(
           eq(mensagensTemplate.ativa, true),
+          eq(mensagensTemplate.produto, props.leadProduto),
           sql`${mensagensTemplate.statusAplicavel} @> ARRAY[${props.leadStatus}]::text[]`,
         ),
       )
@@ -608,6 +670,7 @@ async function MensagensBlock(props: {
         valorCreditoCentavos: props.leadValorCredito,
         valorImovelCentavos: props.leadValorImovel,
         consultor: consultorRow?.nome ?? props.fallbackConsultor,
+        sindico: props.leadSindico,
       }}
       expandirPlaybook={
         props.leadStatus === "novo" ||

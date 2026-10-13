@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import { produtoSchema } from "@/lib/produtos";
+import { condominioWebhookSchema } from "@/lib/validators/condominio";
+
 const estadoCivilEnum = z.enum([
   "Solteiro(a)",
   "Casado(a)",
@@ -35,7 +38,8 @@ export const webhookLeadPayloadSchema = z
     estado: z.string().trim().length(2, "UF de 2 letras").optional().or(z.literal("")),
 
     // Operação
-    produto: z.string().default("CGI"),
+    // Ausente = CGI; grafia canonizada; produto desconhecido = 400.
+    produto: produtoSchema,
     objetivo_credito: z.string().trim().optional().or(z.literal("")),
     tipo_imovel: z.string().trim().optional().or(z.literal("")),
     tipo_imovel_detalhes: z.string().trim().max(2000).optional().or(z.literal("")),
@@ -46,6 +50,11 @@ export const webhookLeadPayloadSchema = z
     // Para imóveis quitados o site envia 0 ou omite; em ambos os casos vira NULL.
     saldo_devedor: z.coerce.number().nonnegative().optional(),
     valor_credito: z.coerce.number().nonnegative().optional(),
+
+    // ── Condomínio (produto = CONDOMINIO) ────────────────────────────────
+    // `nome` = nome do condomínio; `whatsapp`/`email` = contato do síndico;
+    // `valor_credito`/`objetivo_credito` = valor e finalidade. O resto vem aqui.
+    condominio: condominioWebhookSchema.optional(),
 
     // ── Endereço do imóvel (garantia) ────────────────────────────────────
     // Complemento opcional capturado após a qualificação no simulador.

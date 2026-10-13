@@ -44,6 +44,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     .set({
       nome: data.nome,
       statusAplicavel: data.statusAplicavel,
+      ...(data.produto ? { produto: data.produto } : {}),
       conteudo: data.conteudo,
       ativa: data.ativa,
     })
