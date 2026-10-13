@@ -704,3 +704,7 @@ ALTER TABLE public.lead_condominio ENABLE ROW LEVEL SECURITY;
 
 -- parceiro_comissoes (0051) — RLS sem policy = deny total (admin, server-side).
 ALTER TABLE public.parceiro_comissoes ENABLE ROW LEVEL SECURITY;
+
+-- Portal do parceiro (0052) — credenciais e sessões: RLS sem policy = deny total.
+ALTER TABLE public.parceiro_usuarios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parceiro_sessoes ENABLE ROW LEVEL SECURITY;

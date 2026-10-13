@@ -13,6 +13,7 @@ import {
   leads as leadsTable,
   parceiroComissoes,
   parceiroInteracoes,
+  parceiroUsuarios,
   parceiros,
   users as usersTable,
 } from "../../../../../db/schema";
@@ -21,6 +22,7 @@ import {
   ParceiroRegistrarContato,
   ParceiroStatusSelect,
 } from "@/components/parceiros/parceiro-acoes";
+import { ParceiroAcessoPortal } from "@/components/parceiros/parceiro-acesso-portal";
 import { ParceiroConvidarPortal } from "@/components/parceiros/parceiro-convidar-portal";
 import { ParceiroEditar } from "@/components/parceiros/parceiro-editar";
 import {
@@ -163,6 +165,15 @@ export default async function ParceiroDetalhePage({ params }: Props) {
         .orderBy(desc(parceiroComissoes.createdAt))
     : [];
 
+  const ultimoLoginPortal = superAdmin
+    ? await db
+        .select({ em: parceiroUsuarios.ultimoLoginEm })
+        .from(parceiroUsuarios)
+        .where(eq(parceiroUsuarios.parceiroId, p.id))
+        .limit(1)
+        .then((r) => r[0]?.em ?? null)
+    : null;
+
   const producao = indicacoes.length > 0 || p.portalPartnerId
     ? await db
         .select({
@@ -275,6 +286,15 @@ export default async function ParceiroDetalhePage({ params }: Props) {
             }}
             canEdit={superAdmin}
           />
+
+          {superAdmin && (
+            <ParceiroAcessoPortal
+              parceiroId={p.id}
+              acesso={p.portalAcesso}
+              temEmail={Boolean(p.email)}
+              ultimoLogin={ultimoLoginPortal ? fmtDataHora.format(ultimoLoginPortal) : null}
+            />
+          )}
 
           {admin && (
             <ParceiroConvidarPortal
