@@ -71,3 +71,31 @@ export const produtoSchema = z
 export function ehCgi(lead: { produto: string | null | undefined }): boolean {
   return (lead.produto ?? PRODUTO_PADRAO) === "CGI";
 }
+
+/** Lead indicado por parceiro (portal novo, portal antigo ou vínculo manual). */
+export function ehDeParceiro(lead: {
+  parceiroId?: string | null;
+  parceiroPortalId?: string | null;
+  source?: string | null;
+}): boolean {
+  return (
+    !!lead.parceiroId || !!lead.parceiroPortalId || lead.source === "Portal de Parceiros"
+  );
+}
+
+/**
+ * O lead pode receber CONTATO automatizado (Heloísa no WhatsApp, convite por
+ * e-mail ao portal de documentos, agenda pública)? Só CGI que NÃO veio de
+ * parceiro: cliente de parceiro é atendido apenas pelo consultor (decisão do
+ * owner, 2026-10-13) — o parceiro já fez a ponte, robô por cima atrapalha a
+ * relação dele. Consultas internas (score, cadastro PF) não são contato e
+ * seguem a régua de `ehCgi`.
+ */
+export function aceitaContatoAutomatizado(lead: {
+  produto: string | null | undefined;
+  parceiroId?: string | null;
+  parceiroPortalId?: string | null;
+  source?: string | null;
+}): boolean {
+  return ehCgi(lead) && !ehDeParceiro(lead);
+}

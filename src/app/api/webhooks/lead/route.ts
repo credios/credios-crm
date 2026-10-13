@@ -27,7 +27,7 @@ import {
   SCORE_MINIMO_REUNIAO,
 } from "@/lib/score/gate";
 import { formatProperName } from "@/lib/formatters/proper-name";
-import { ehCgi } from "@/lib/produtos";
+import { aceitaContatoAutomatizado, ehCgi } from "@/lib/produtos";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { sendPortalEmail } from "@/lib/portal/email";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
@@ -477,8 +477,11 @@ export async function POST(request: NextRequest) {
       // Heloísa são o funil de pessoa física do CGI — outros produtos ficam
       // no atendimento manual (src/lib/produtos.ts).
       const cgiEnriched = ehCgi(enrichedLead);
+      // Cliente de parceiro: só o consultor fala com ele (sem e-mail do portal
+      // de documentos, sem agenda pública, sem Heloísa).
+      const contatoEnriched = aceitaContatoAutomatizado(enrichedLead);
 
-      const portalUrlEnriched = cgiEnriched
+      const portalUrlEnriched = contatoEnriched
         ? await invitePortal({
             leadId: existing.id,
             nome: enrichedLead.nome,
@@ -491,11 +494,13 @@ export async function POST(request: NextRequest) {
       const { token: agendaTokenEnriched, score: scoreEnriched } = cgiEnriched
         ? await aplicarGateDeScore(
             enrichedLead,
-            tokenAgendaSeElegivel(
-              enrichedLead,
-              payload.notify,
-              !!enrichedLead.objetivoCredito,
-            ),
+            contatoEnriched
+              ? tokenAgendaSeElegivel(
+                  enrichedLead,
+                  payload.notify,
+                  !!enrichedLead.objetivoCredito,
+                )
+              : null,
             { aguardarScore: gateConversaoPedido },
           )
         : { token: null, score: null };
@@ -539,7 +544,7 @@ export async function POST(request: NextRequest) {
         nome: enrichedLead.nome,
         whatsapp: enrichedLead.whatsapp,
         notify: payload.notify,
-        completo: cgiEnriched && !!enrichedLead.objetivoCredito,
+        completo: contatoEnriched && !!enrichedLead.objetivoCredito,
         qualifStatusAtual: existing.qualifWhatsappStatus,
         deferirParaCron: !!agendaTokenEnriched,
       });
@@ -976,8 +981,9 @@ export async function POST(request: NextRequest) {
   // pro portal e devolve a URL pra página de sucesso do site.
   // Só CGI — ver a nota no caminho de enriquecimento.
   const cgi = ehCgi(newLead);
+  const contato = aceitaContatoAutomatizado(newLead);
 
-  const portalUrlCreated = cgi
+  const portalUrlCreated = contato
     ? await invitePortal({
         leadId: newLead.id,
         nome: newLead.nome,
@@ -990,7 +996,9 @@ export async function POST(request: NextRequest) {
   const { token: agendaTokenCreated, score: scoreCriacao } = cgi
     ? await aplicarGateDeScore(
         newLead,
-        tokenAgendaSeElegivel(newLead, payload.notify, !!newLead.objetivoCredito),
+        contato
+          ? tokenAgendaSeElegivel(newLead, payload.notify, !!newLead.objetivoCredito)
+          : null,
         { aguardarScore: gateConversaoCriacao },
       )
     : { token: null, score: null };
@@ -1022,7 +1030,7 @@ export async function POST(request: NextRequest) {
     nome: newLead.nome,
     whatsapp: newLead.whatsapp,
     notify: payload.notify,
-    completo: cgi && !!newLead.objetivoCredito,
+    completo: contato && !!newLead.objetivoCredito,
     qualifStatusAtual: newLead.qualifWhatsappStatus,
     deferirParaCron: !!agendaTokenCreated,
   });

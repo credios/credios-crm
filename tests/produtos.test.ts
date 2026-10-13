@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ehCgi, normalizarProduto } from "@/lib/produtos";
+import { aceitaContatoAutomatizado, ehCgi, normalizarProduto } from "@/lib/produtos";
 import { matchesConditions } from "@/lib/routing/conditions";
 import type { RoutingContext } from "@/lib/routing/types";
 import { createLeadSchema } from "@/lib/validators/lead";
@@ -94,5 +94,23 @@ describe("roteamento por produto", () => {
   it("schema da regra aceita produto_in e recusa produto inexistente", () => {
     expect(ruleCondicoesSchema.safeParse({ produto_in: ["CONDOMINIO"] }).success).toBe(true);
     expect(ruleCondicoesSchema.safeParse({ produto_in: ["XPTO"] }).success).toBe(false);
+  });
+});
+
+describe("aceitaContatoAutomatizado", () => {
+  it("CGI do site aceita", () => {
+    expect(aceitaContatoAutomatizado({ produto: "CGI", source: "Google Ads" })).toBe(true);
+  });
+
+  it("cliente de parceiro nunca recebe contato automatizado", () => {
+    expect(aceitaContatoAutomatizado({ produto: "CGI", parceiroId: "p1" })).toBe(false);
+    expect(aceitaContatoAutomatizado({ produto: "CGI", parceiroPortalId: "ckx" })).toBe(false);
+    expect(
+      aceitaContatoAutomatizado({ produto: "CGI", source: "Portal de Parceiros" }),
+    ).toBe(false);
+  });
+
+  it("outro produto também não", () => {
+    expect(aceitaContatoAutomatizado({ produto: "CONDOMINIO" })).toBe(false);
   });
 });
