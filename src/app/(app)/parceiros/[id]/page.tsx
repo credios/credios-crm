@@ -23,6 +23,7 @@ import {
   ParceiroStatusSelect,
 } from "@/components/parceiros/parceiro-acoes";
 import { ParceiroAcessoPortal } from "@/components/parceiros/parceiro-acesso-portal";
+import { ParceiroContratos } from "@/components/parceiros/parceiro-contratos";
 import { ParceiroConvidarPortal } from "@/components/parceiros/parceiro-convidar-portal";
 import { ParceiroEditar } from "@/components/parceiros/parceiro-editar";
 import {
@@ -35,6 +36,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { contratosDoParceiro } from "@/lib/portal-parceiro/contrato/servico";
 import {
   PARCEIRO_INTERACAO_LABEL,
   PARCEIRO_ORIGEM_LABEL,
@@ -174,6 +176,8 @@ export default async function ParceiroDetalhePage({ params }: Props) {
         .then((r) => r[0]?.em ?? null)
     : null;
 
+  const contratos = superAdmin ? await contratosDoParceiro(p.id) : [];
+
   const producao = indicacoes.length > 0 || p.portalPartnerId
     ? await db
         .select({
@@ -293,6 +297,22 @@ export default async function ParceiroDetalhePage({ params }: Props) {
               acesso={p.portalAcesso}
               temEmail={Boolean(p.email)}
               ultimoLogin={ultimoLoginPortal ? fmtDataHora.format(ultimoLoginPortal) : null}
+            />
+          )}
+
+          {superAdmin && (
+            <ParceiroContratos
+              parceiroId={p.id}
+              contratos={contratos.map((c) => ({
+                id: c.id,
+                versaoModelo: c.versaoModelo,
+                status: c.status,
+                codigoVerificacao: c.codigoVerificacao,
+                assinadoEm: c.assinadoEm ? fmtDataHora.format(c.assinadoEm) : null,
+                crediosAssinadoEm: c.crediosAssinadoEm
+                  ? fmtDataHora.format(c.crediosAssinadoEm)
+                  : null,
+              }))}
             />
           )}
 

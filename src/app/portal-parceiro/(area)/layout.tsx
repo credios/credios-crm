@@ -7,6 +7,7 @@ const NAV = [
   { href: "/portal-parceiro", label: "Início" },
   { href: "/portal-parceiro/clientes", label: "Meus clientes" },
   { href: "/portal-parceiro/comissoes", label: "Comissões" },
+  { href: "/portal-parceiro/contrato", label: "Contrato" },
   { href: "/portal-parceiro/perfil", label: "Perfil" },
 ];
 

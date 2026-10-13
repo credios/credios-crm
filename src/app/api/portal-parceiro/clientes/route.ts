@@ -1,5 +1,6 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 
+import { precisaAssinarContrato } from "@/lib/portal-parceiro/contrato/servico";
 import { erro, lerJson, limitar, metaDoRequest, origemInvalida } from "@/lib/portal-parceiro/http";
 import { criarIndicacao, notificarIndicacao } from "@/lib/portal-parceiro/indicacoes";
 import { getParceiroSessao } from "@/lib/portal-parceiro/sessao";
@@ -11,6 +12,9 @@ export async function POST(request: NextRequest) {
   if (origemInvalida(request)) return erro("forbidden", 403);
   const sessao = await getParceiroSessao();
   if (!sessao) return erro("unauthorized", 401);
+  if (await precisaAssinarContrato(sessao.parceiroId, sessao.produtosHabilitados)) {
+    return erro("Assine o contrato de parceria antes de indicar clientes.", 403);
+  }
   const limite = limitar(request, `clientes:${sessao.parceiroId}`, 30, 60 * 60_000);
   if (limite) return limite;
 

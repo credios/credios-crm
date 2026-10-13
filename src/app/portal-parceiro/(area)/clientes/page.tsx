@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { listarIndicacoes } from "@/lib/portal-parceiro/indicacoes";
-import { exigirParceiro } from "@/lib/portal-parceiro/sessao";
+import { exigirParceiroComContrato } from "@/lib/portal-parceiro/acesso";
 import { PRODUTO_LABEL_CURTO, type Produto } from "@/lib/produtos";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ const fmtData = new Intl.DateTimeFormat("pt-BR", {
 });
 
 export default async function ClientesPage({ searchParams }: Props) {
-  const sessao = await exigirParceiro();
+  const sessao = await exigirParceiroComContrato();
   const { q } = await searchParams;
   const indicacoes = await listarIndicacoes(sessao.parceiroId, { q });
 

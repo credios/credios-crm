@@ -1,12 +1,12 @@
 import { IndicacaoForm } from "@/components/portal-parceiro/indicacao-form";
-import { exigirParceiro } from "@/lib/portal-parceiro/sessao";
+import { exigirParceiroComContrato } from "@/lib/portal-parceiro/acesso";
 import { PRODUTOS_ATIVOS } from "@/lib/produtos";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Indicar cliente" };
 
 export default async function NovaIndicacaoPage() {
-  const sessao = await exigirParceiro();
+  const sessao = await exigirParceiroComContrato();
   // Só produtos que têm formulário próprio E estão habilitados pro parceiro.
   const produtos = PRODUTOS_ATIVOS.filter((p) => sessao.produtosHabilitados.includes(p));
 
