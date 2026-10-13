@@ -22,11 +22,14 @@ export function ParceiroAcessoPortal({
   acesso,
   temEmail,
   ultimoLogin,
+  legadoAtivo,
 }: {
   parceiroId: string;
   acesso: string;
   temEmail: boolean;
   ultimoLogin: string | null;
+  /** Enquanto o portal antigo ainda existe, deixa claro qual é qual. */
+  legadoAtivo: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -61,7 +64,9 @@ export function ParceiroAcessoPortal({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">Acesso ao portal (novo)</CardTitle>
+        <CardTitle className="text-base">
+          {legadoAtivo ? "Acesso ao portal (novo)" : "Acesso ao portal"}
+        </CardTitle>
         <Badge variant={acesso === "ativo" ? "default" : "outline"}>
           {LABEL[acesso] ?? acesso}
         </Badge>
