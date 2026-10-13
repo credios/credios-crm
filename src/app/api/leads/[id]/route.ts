@@ -186,9 +186,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   // Parceiro indicador: o nome é espelhado em `parceiro_nome` (card e portal).
   if ("parceiroId" in rawBody) {
     if (patch.parceiroId) {
-      const nome = await nomeDoParceiro(patch.parceiroId);
+      const nome = await nomeDoParceiro(patch.parceiroId, existing.produto);
       if (!nome) {
-        return NextResponse.json({ error: "Parceiro não encontrado" }, { status: 400 });
+        return NextResponse.json(
+          { error: "Parceiro não encontrado ou não habilitado para este produto" },
+          { status: 400 },
+        );
       }
       updates.parceiroId = patch.parceiroId;
       updates.parceiroNome = nome;

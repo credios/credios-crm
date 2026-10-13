@@ -160,9 +160,12 @@ export async function POST(request: NextRequest) {
 
   let parceiroNome: string | null = null;
   if (data.parceiroId) {
-    parceiroNome = await nomeDoParceiro(data.parceiroId);
+    parceiroNome = await nomeDoParceiro(data.parceiroId, data.produto ?? "CGI");
     if (!parceiroNome) {
-      return NextResponse.json({ error: "Parceiro não encontrado" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Parceiro não encontrado ou não habilitado para este produto" },
+        { status: 400 },
+      );
     }
   }
 

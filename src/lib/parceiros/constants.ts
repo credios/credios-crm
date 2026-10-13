@@ -111,3 +111,14 @@ export const PARCEIRO_INTERACAO_LABEL: Record<string, string> = {
   mudanca_atribuicao: "Atribuição",
   evento_sistema: "Sistema",
 };
+
+// ── Comissões (0051) ────────────────────────────────────────────────────────
+export const COMISSAO_STATUS = ["prevista", "a_pagar", "paga", "cancelada"] as const;
+export type ComissaoStatus = (typeof COMISSAO_STATUS)[number];
+
+export const COMISSAO_STATUS_LABEL: Record<ComissaoStatus, string> = {
+  prevista: "Prevista",
+  a_pagar: "A pagar",
+  paga: "Paga",
+  cancelada: "Cancelada",
+};

@@ -1077,6 +1077,17 @@ export const parceiros = pgTable(
 
     ultimoContato: timestamp("ultimo_contato", { withTimezone: true }),
     notas: text("notas"),
+
+    // Gestão comercial (0051) — escrita só por admin.
+    /** Produtos que o parceiro pode indicar (src/lib/produtos.ts). */
+    produtosHabilitados: text("produtos_habilitados")
+      .array()
+      .notNull()
+      .default(sql`ARRAY['CGI']::text[]`),
+    pixChave: text("pix_chave"),
+    /** Pontos-base (300 = 3%). NULL = sem regra padrão: comissão caso a caso. */
+    comissaoPadraoBps: integer("comissao_padrao_bps"),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1165,5 +1176,42 @@ export const leadCondominio = pgTable(
     index("idx_lead_condominio_cnpj")
       .on(table.cnpj)
       .where(sql`${table.cnpj} IS NOT NULL`),
+  ],
+);
+
+// ═══════════════════════════════════════════════════════════
+// parceiro_comissoes (0051) — comissão devida ao parceiro por operação
+// indicada. Caso a caso: o admin informa base/percentual/valor por operação;
+// `parceiros.comissao_padrao_bps` só pré-preenche. Admin only.
+// ═══════════════════════════════════════════════════════════
+
+export const parceiroComissoes = pgTable(
+  "parceiro_comissoes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    parceiroId: uuid("parceiro_id")
+      .notNull()
+      .references(() => parceiros.id, { onDelete: "restrict" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    descricao: text("descricao"),
+    baseCentavos: bigint("base_centavos", { mode: "number" }),
+    percentualBps: integer("percentual_bps"),
+    valorCentavos: bigint("valor_centavos", { mode: "number" }).notNull(),
+    /** prevista | a_pagar | paga | cancelada */
+    status: text("status").notNull().default("prevista"),
+    pagoEm: date("pago_em"),
+    observacao: text("observacao"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uq_parceiro_comissoes_lead")
+      .on(table.leadId)
+      .where(sql`lead_id IS NOT NULL`),
+    index("idx_parceiro_comissoes_parceiro").on(
+      table.parceiroId,
+      sql`${table.createdAt} DESC`,
+    ),
   ],
 );

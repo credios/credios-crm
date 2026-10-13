@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import {
   ArrowLeft,
   Building2,
@@ -11,6 +11,7 @@ import { notFound, redirect } from "next/navigation";
 
 import {
   leads as leadsTable,
+  parceiroComissoes,
   parceiroInteracoes,
   parceiros,
   users as usersTable,
@@ -22,10 +23,15 @@ import {
 } from "@/components/parceiros/parceiro-acoes";
 import { ParceiroConvidarPortal } from "@/components/parceiros/parceiro-convidar-portal";
 import { ParceiroEditar } from "@/components/parceiros/parceiro-editar";
+import {
+  ParceiroComissoes,
+  ParceiroGestaoComercial,
+} from "@/components/parceiros/parceiro-gestao";
+import { StatusBadge } from "@/components/leads/status-badge";
 import { ParceiroStatusBadge } from "@/components/parceiros/parceiro-status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAppUser } from "@/lib/auth/get-app-user";
-import { isAdminOrGerente } from "@/lib/auth/permissions";
+import { isAdmin, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   PARCEIRO_INTERACAO_LABEL,
@@ -34,6 +40,7 @@ import {
   type ParceiroSegmento,
   type ParceiroStatus,
 } from "@/lib/parceiros/constants";
+import { PRODUTO_LABEL_CURTO, type Produto } from "@/lib/produtos";
 
 export const dynamic = "force-dynamic";
 
@@ -104,8 +111,59 @@ export default async function ParceiroDetalhePage({ params }: Props) {
       : Promise.resolve(null),
   ]);
 
-  // Produção do parceiro (leads indicados via portal) — só com vínculo.
-  const producao = p.portalPartnerId
+  // Indicações = leads ligados ao parceiro (FK), mais os que vieram do portal
+  // antes de a FK existir.
+  const ehDoParceiro = p.portalPartnerId
+    ? or(
+        eq(leadsTable.parceiroId, p.id),
+        eq(leadsTable.parceiroPortalId, p.portalPartnerId),
+      )
+    : eq(leadsTable.parceiroId, p.id);
+
+  // Consultor só enxerga na lista os leads que são dele.
+  const indicacoes = await db
+    .select({
+      leadId: leadsTable.id,
+      nome: leadsTable.nome,
+      produto: leadsTable.produto,
+      status: leadsTable.status,
+      valorCreditoCentavos: leadsTable.valorCreditoCentavos,
+      valorLiberadoCentavos: leadsTable.valorLiberadoCentavos,
+      createdAt: leadsTable.createdAt,
+    })
+    .from(leadsTable)
+    .where(admin ? ehDoParceiro : and(ehDoParceiro, eq(leadsTable.consultorId, user.id)))
+    .orderBy(desc(leadsTable.createdAt))
+    .limit(100);
+
+  // Comissões: custo confidencial — só admin carrega.
+  const superAdmin = isAdmin(user);
+  const comissoes = superAdmin
+    ? await db
+        .select({
+          id: parceiroComissoes.id,
+          leadId: parceiroComissoes.leadId,
+          leadNome: leadsTable.nome,
+          descricao: parceiroComissoes.descricao,
+          baseCentavos: parceiroComissoes.baseCentavos,
+          percentualBps: parceiroComissoes.percentualBps,
+          valorCentavos: parceiroComissoes.valorCentavos,
+          status: parceiroComissoes.status,
+          pagoEm: parceiroComissoes.pagoEm,
+          observacao: parceiroComissoes.observacao,
+        })
+        .from(parceiroComissoes)
+        .leftJoin(leadsTable, eq(leadsTable.id, parceiroComissoes.leadId))
+        .where(
+          and(
+            eq(parceiroComissoes.parceiroId, p.id),
+            ne(parceiroComissoes.status, "cancelada"),
+          ),
+        )
+        .orderBy(desc(parceiroComissoes.createdAt))
+    : [];
+
+  const producao = indicacoes.length > 0 || p.portalPartnerId
     ? await db
         .select({
           total: count(),
@@ -117,7 +175,7 @@ export default async function ParceiroDetalhePage({ params }: Props) {
           valorLiberado: sql<string>`COALESCE(SUM(CASE WHEN ${leadsTable.status} = 'fechado' THEN ${leadsTable.valorLiberadoCentavos} END), 0)`,
         })
         .from(leadsTable)
-        .where(eq(leadsTable.parceiroPortalId, p.portalPartnerId))
+        .where(ehDoParceiro)
         .then((r) => r[0] ?? null)
     : null;
 
@@ -208,6 +266,16 @@ export default async function ParceiroDetalhePage({ params }: Props) {
             motivoPerda={p.motivoPerda}
           />
 
+          <ParceiroGestaoComercial
+            parceiro={{
+              id: p.id,
+              produtosHabilitados: p.produtosHabilitados,
+              pixChave: superAdmin ? p.pixChave : null,
+              comissaoPadraoBps: superAdmin ? p.comissaoPadraoBps : null,
+            }}
+            canEdit={superAdmin}
+          />
+
           {admin && (
             <ParceiroConvidarPortal
               parceiro={{
@@ -251,11 +319,52 @@ export default async function ParceiroDetalhePage({ params }: Props) {
                   </div>
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Pipeline em aberto: {brl(Number(producao.valorPipeline))} · comissões e
-                  contratos no portal de parceiros.
+                  Pipeline em aberto: {brl(Number(producao.valorPipeline))}
                 </p>
               </CardContent>
             </Card>
+          )}
+
+          {indicacoes.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Indicações</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y">
+                  {indicacoes.map((i) => (
+                    <li key={i.leadId} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
+                      <Link href={`/leads/${i.leadId}`} className="min-w-0 flex-1 font-medium hover:underline">
+                        {i.nome}
+                      </Link>
+                      <span className="text-xs text-muted-foreground">
+                        {PRODUTO_LABEL_CURTO[i.produto as Produto] ?? i.produto}
+                      </span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {brl(i.valorCreditoCentavos)}
+                      </span>
+                      <StatusBadge status={i.status} />
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {superAdmin && (
+            <ParceiroComissoes
+              parceiroId={p.id}
+              comissaoPadraoBps={p.comissaoPadraoBps}
+              indicacoes={indicacoes.map((i) => ({
+                leadId: i.leadId,
+                nome: i.nome,
+                produto: i.produto,
+                status: i.status,
+                valorCreditoCentavos: i.valorCreditoCentavos,
+                valorLiberadoCentavos: i.valorLiberadoCentavos,
+              }))}
+              comissoes={comissoes}
+            />
           )}
         </div>
 

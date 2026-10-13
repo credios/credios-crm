@@ -100,6 +100,9 @@ export const BANCOS_PARCEIROS = [
   "Creditas",
   "Banco Bari",
   "Daycoval",
+  // Fundo próprio (entidade separada da Credios) — entra como mais um
+  // financiador no fechamento, igual aos bancos.
+  "MUSASHI FIDC",
 ] as const;
 
 export const STATUS_PROPOSTA_BANCO_LABEL: Record<string, string> = {

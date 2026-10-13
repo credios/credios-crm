@@ -171,6 +171,7 @@ export default async function LeadDetailPage({ params }: Props) {
     dataFechamento: masked.dataFechamento,
     parceiroNome: row.parceiroNome ?? null,
     parceiroPortalId: row.parceiroPortalId ?? null,
+    parceiroId: row.parceiroId ?? null,
     observacoesParceiro: row.observacoesParceiro ?? null,
     channel: masked.channel ?? null,
     source: masked.source ?? null,

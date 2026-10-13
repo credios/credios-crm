@@ -9,7 +9,7 @@ import {
 } from "../../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser, type AppUser } from "@/lib/auth/get-app-user";
-import { isAdminOrGerente } from "@/lib/auth/permissions";
+import { isAdmin, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   PARCEIRO_MOTIVOS_PERDA,
@@ -18,6 +18,7 @@ import {
   PARCEIRO_STATUS_LABEL,
   type ParceiroStatus,
 } from "@/lib/parceiros/constants";
+import { PRODUTO_LABEL_CURTO, PRODUTOS_ATIVOS } from "@/lib/produtos";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -27,6 +28,7 @@ type Ctx = { params: Promise<{ id: string }> };
 //   - consultor: só os SEUS parceiros; não reatribui
 //   - atribuição (consultorId): só admin/gerente — triagem é do admin
 //   - status perdido exige motivo; ativo/convidado_portal têm timestamps
+//   - gestão comercial (produtos habilitados, PIX, comissão padrão): só admin
 
 const patchSchema = z.object({
   nome: z.string().min(2).max(160).optional(),
@@ -42,6 +44,9 @@ const patchSchema = z.object({
   motivoPerda: z.enum(PARCEIRO_MOTIVOS_PERDA).optional().nullable(),
   motivoPerdaDetalhe: z.string().max(400).optional().nullable(),
   consultorId: z.string().uuid().optional().nullable(),
+  produtosHabilitados: z.array(z.enum(PRODUTOS_ATIVOS)).min(1).optional(),
+  pixChave: z.string().max(160).optional().nullable(),
+  comissaoPadraoBps: z.number().int().min(0).max(10_000).optional().nullable(),
 });
 
 async function loadParceiro(id: string) {
@@ -99,6 +104,39 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   if (data.estado !== undefined) set.estado = data.estado?.toUpperCase() ?? null;
   if (data.cpfCnpj !== undefined) set.cpfCnpj = data.cpfCnpj?.replace(/\D/g, "") || null;
   if (data.notas !== undefined) set.notas = data.notas?.trim() ?? null;
+
+  // ── Gestão comercial (admin) ──
+  if (
+    data.produtosHabilitados !== undefined ||
+    data.pixChave !== undefined ||
+    data.comissaoPadraoBps !== undefined
+  ) {
+    if (!isAdmin(user)) {
+      return NextResponse.json(
+        { error: "apenas admin altera a gestão comercial do parceiro" },
+        { status: 403 },
+      );
+    }
+    if (data.produtosHabilitados !== undefined) {
+      set.produtosHabilitados = data.produtosHabilitados;
+      eventos.push({
+        parceiroId: id,
+        autorId: user.id,
+        tipo: "evento_sistema",
+        conteudo: `Produtos habilitados: ${data.produtosHabilitados
+          .map((p) => PRODUTO_LABEL_CURTO[p])
+          .join(", ")}.`,
+        metadata: {
+          kind: "produtos_habilitados",
+          de: parceiro.produtosHabilitados,
+          para: data.produtosHabilitados,
+        },
+      });
+    }
+    if (data.pixChave !== undefined) set.pixChave = data.pixChave?.trim() || null;
+    if (data.comissaoPadraoBps !== undefined)
+      set.comissaoPadraoBps = data.comissaoPadraoBps;
+  }
 
   // ── Transição de status ──
   if (data.status && data.status !== parceiro.status) {

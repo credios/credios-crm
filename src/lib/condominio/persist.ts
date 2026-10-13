@@ -65,13 +65,24 @@ export async function registrarDuplicidadeCnpj(
   return outro.leadId;
 }
 
-/** Nome de exibição do parceiro indicador — espelhado em `leads.parceiro_nome`. */
-export async function nomeDoParceiro(parceiroId: string): Promise<string | null> {
+/**
+ * Nome de exibição do parceiro indicador — espelhado em `leads.parceiro_nome`.
+ * Com `produto`, só devolve se o parceiro estiver habilitado nele.
+ */
+export async function nomeDoParceiro(
+  parceiroId: string,
+  produto?: string,
+): Promise<string | null> {
   const [p] = await db
-    .select({ nome: parceiros.nome, empresa: parceiros.empresa })
+    .select({
+      nome: parceiros.nome,
+      empresa: parceiros.empresa,
+      produtosHabilitados: parceiros.produtosHabilitados,
+    })
     .from(parceiros)
     .where(eq(parceiros.id, parceiroId))
     .limit(1);
   if (!p) return null;
+  if (produto && !p.produtosHabilitados.includes(produto)) return null;
   return p.empresa ? `${p.nome} (${p.empresa})` : p.nome;
 }

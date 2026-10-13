@@ -4,16 +4,18 @@ import { z } from "zod";
 import { parceiroInteracoes, parceiros } from "../../../../db/schema";
 import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
-import { isAdminOrGerente } from "@/lib/auth/permissions";
+import { isAdmin } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import {
   PARCEIRO_ORIGENS,
   PARCEIRO_SEGMENTOS,
 } from "@/lib/parceiros/constants";
+import { PRODUTOS_ATIVOS } from "@/lib/produtos";
 
 // POST /api/parceiros — criação manual (indicação, prospecção ativa, evento).
-// Admin/gerente podem deixar no pool (triagem) ou atribuir; consultor cria
-// já atribuído a si. Marketing não opera parceiros.
+// Cadastrar parceiro é SÓ do admin (decisão do owner, 2026-10-13); os demais
+// perfis seguem vendo e atendendo os parceiros que já são deles. Candidatos
+// do site continuam entrando sozinhos pelo webhook.
 
 const createSchema = z.object({
   nome: z.string().min(2).max(160),
@@ -28,6 +30,7 @@ const createSchema = z.object({
   notas: z.string().max(4000).optional().nullable(),
   /** admin/gerente: null = pool de triagem; consultor: ignorado (vira ele). */
   consultorId: z.string().uuid().optional().nullable(),
+  produtosHabilitados: z.array(z.enum(PRODUTOS_ATIVOS)).min(1).optional(),
 });
 
 function normalizaWhatsapp(v: string | null | undefined): string | null {
@@ -40,8 +43,11 @@ function normalizaWhatsapp(v: string | null | undefined): string | null {
 export async function POST(request: NextRequest) {
   const user = await getAppUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (user.perfil === "marketing") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!isAdmin(user)) {
+    return NextResponse.json(
+      { error: "apenas admin cadastra parceiros" },
+      { status: 403 },
+    );
   }
 
   let raw: unknown;
@@ -59,9 +65,7 @@ export async function POST(request: NextRequest) {
   }
   const data = parsed.data;
 
-  const consultorId = isAdminOrGerente(user)
-    ? (data.consultorId ?? null)
-    : user.id;
+  const consultorId = data.consultorId ?? null;
 
   const [criado] = await db
     .insert(parceiros)
@@ -76,6 +80,9 @@ export async function POST(request: NextRequest) {
       cpfCnpj: data.cpfCnpj?.replace(/\D/g, "") || null,
       origem: data.origem,
       notas: data.notas?.trim() ?? null,
+      ...(data.produtosHabilitados
+        ? { produtosHabilitados: data.produtosHabilitados }
+        : {}),
       consultorId,
       atribuidoEm: consultorId ? new Date() : null,
       createdBy: user.id,
