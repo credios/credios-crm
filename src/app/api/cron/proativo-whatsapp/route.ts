@@ -1,4 +1,4 @@
-import { and, gt, isNotNull, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { leads } from "../../../../../db/schema";
@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
     .from(leads)
     .where(
       and(
+        eq(leads.produto, "CGI"), // Heloísa só qualifica CGI
         isNull(leads.qualifWhatsappStatus), // ainda não recebeu/abriu
         isNotNull(leads.whatsapp),
         isNotNull(leads.valorCreditoCentavos), // simulou (1ª etapa capturou valor)

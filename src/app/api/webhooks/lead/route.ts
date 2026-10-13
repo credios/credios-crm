@@ -8,6 +8,7 @@ import {
   interacoes,
   leadPortalTokens,
   leads,
+  parceiros,
   trackingUnknowns,
   users as usersTable,
   webhookIdempotency,
@@ -26,6 +27,7 @@ import {
   SCORE_MINIMO_REUNIAO,
 } from "@/lib/score/gate";
 import { formatProperName } from "@/lib/formatters/proper-name";
+import { ehCgi } from "@/lib/produtos";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { sendPortalEmail } from "@/lib/portal/email";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
@@ -44,6 +46,8 @@ import { encerrarCadencia } from "@/lib/cadencia/engine";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
+import { registrarDuplicidadeCnpj, salvarCondominio } from "@/lib/condominio/persist";
+import { condominioDoWebhook } from "@/lib/validators/condominio";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { resolveSource } from "@/lib/tracking/resolver";
 import { extractTrackingFromUrl } from "@/lib/tracking/url-fallback";
@@ -469,24 +473,32 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const portalUrlEnriched = await invitePortal({
-        leadId: existing.id,
-        nome: enrichedLead.nome,
-        email: enrichedLead.email,
-        notify: payload.notify,
-      });
+      // Portal de documentos, score, agenda pública, CAPI e proativo da
+      // Heloísa são o funil de pessoa física do CGI — outros produtos ficam
+      // no atendimento manual (src/lib/produtos.ts).
+      const cgiEnriched = ehCgi(enrichedLead);
 
-      const gateConversaoPedido = payload.gate_conversao_score === true;
-      const { token: agendaTokenEnriched, score: scoreEnriched } =
-        await aplicarGateDeScore(
-          enrichedLead,
-          tokenAgendaSeElegivel(
+      const portalUrlEnriched = cgiEnriched
+        ? await invitePortal({
+            leadId: existing.id,
+            nome: enrichedLead.nome,
+            email: enrichedLead.email,
+            notify: payload.notify,
+          })
+        : null;
+
+      const gateConversaoPedido = cgiEnriched && payload.gate_conversao_score === true;
+      const { token: agendaTokenEnriched, score: scoreEnriched } = cgiEnriched
+        ? await aplicarGateDeScore(
             enrichedLead,
-            payload.notify,
-            !!enrichedLead.objetivoCredito,
-          ),
-          { aguardarScore: gateConversaoPedido },
-        );
+            tokenAgendaSeElegivel(
+              enrichedLead,
+              payload.notify,
+              !!enrichedLead.objetivoCredito,
+            ),
+            { aguardarScore: gateConversaoPedido },
+          )
+        : { token: null, score: null };
       const conversaoLiberadaEnriched = await resolverGateDeConversao(
         existing.id,
         scoreEnriched,
@@ -507,7 +519,7 @@ export async function POST(request: NextRequest) {
       // `meta_event_id`. Sem esse filtro o evento sairia duas vezes com ids
       // diferentes — a intermediária com o fallback, a final com o id do
       // browser — e o Meta contaria duas conversões.
-      if (payload.notify !== false) {
+      if (cgiEnriched && payload.notify !== false) {
         after(() =>
           capiOnLeadCreated(enrichedLead, metaEventId, conversaoLiberadaEnriched),
         );
@@ -527,7 +539,7 @@ export async function POST(request: NextRequest) {
         nome: enrichedLead.nome,
         whatsapp: enrichedLead.whatsapp,
         notify: payload.notify,
-        completo: !!enrichedLead.objetivoCredito,
+        completo: cgiEnriched && !!enrichedLead.objetivoCredito,
         qualifStatusAtual: existing.qualifWhatsappStatus,
         deferirParaCron: !!agendaTokenEnriched,
       });
@@ -688,12 +700,28 @@ export async function POST(request: NextRequest) {
 
     // 7b. Detecção de valores monetários fora do range esperado. Lead é
     // aceito normalmente — admin/gerente revisa via UI no /leads/[id].
-    const valoresSuspeitos = detectarValoresSuspeitos({
-      rendaMensal: payload.renda_mensal ?? null,
-      valorImovel: payload.valor_imovel ?? null,
-      saldoDevedor: payload.saldo_devedor ?? null,
-      valorCredito: payload.valor_credito ?? null,
-    });
+    // As faixas são as do CGI; outro produto não passa por esse crivo.
+    const valoresSuspeitos =
+      payload.produto && payload.produto !== "CGI"
+        ? null
+        : detectarValoresSuspeitos({
+            rendaMensal: payload.renda_mensal ?? null,
+            valorImovel: payload.valor_imovel ?? null,
+            saldoDevedor: payload.saldo_devedor ?? null,
+            valorCredito: payload.valor_credito ?? null,
+          });
+
+    // 7c. Indicação do portal: liga ao parceiro do CRM pelo id do portal.
+    const portalPartnerId = emptyToNull(payload.parceiro_portal_id ?? null);
+    let parceiroId: string | null = null;
+    if (portalPartnerId) {
+      const [p] = await db
+        .select({ id: parceiros.id })
+        .from(parceiros)
+        .where(eq(parceiros.portalPartnerId, portalPartnerId))
+        .limit(1);
+      parceiroId = p?.id ?? null;
+    }
 
     // 8. Insere lead.
     const inserted = await db
@@ -737,7 +765,8 @@ export async function POST(request: NextRequest) {
       conjugeOcupacao: emptyToNull(payload.conjuge_ocupacao ?? null),
       // ── Parceria (Portal de Parceiros) ──────────────────────────────────
       parceiroNome: emptyToNull(payload.parceiro_nome ?? null),
-      parceiroPortalId: emptyToNull(payload.parceiro_portal_id ?? null),
+      parceiroPortalId: portalPartnerId,
+      parceiroId,
       observacoesParceiro: emptyToNull(payload.observacoes_parceiro ?? null),
       // Flag de revisão (migration 0025). Drizzle jsonb aceita objeto JS.
       valoresSuspeitos: valoresSuspeitos as never,
@@ -835,13 +864,21 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 10b. Condomínio: dados próprios na tabela-irmã + duplicidade por CNPJ.
+    if (newLead.produto === "CONDOMINIO") {
+      const cond = condominioDoWebhook(payload.condominio ?? {});
+      await salvarCondominio(newLead.id, cond);
+      leadExistenteId =
+        (await registrarDuplicidadeCnpj(newLead.id, cond.cnpj)) ?? leadExistenteId;
+    }
+
     // 11. Interação automática.
     await db.insert(interacoes).values({
       leadId: newLead.id,
       autorId: null,
       tipo: "evento_sistema",
       conteudo: `Lead criado via webhook (${routing.regraAplicada})${
-        leadExistenteId ? " — possível duplicidade por CPF" : ""
+        leadExistenteId ? " — possível duplicidade por CPF/CNPJ" : ""
       }`,
       metadata: {
         channel: classification.channel,
@@ -937,20 +974,26 @@ export async function POST(request: NextRequest) {
 
   // Lead novo já com e-mail (ex.: simulador Google Ads, fluxo único): convida
   // pro portal e devolve a URL pra página de sucesso do site.
-  const portalUrlCreated = await invitePortal({
-    leadId: newLead.id,
-    nome: newLead.nome,
-    email: newLead.email,
-    notify: payload.notify,
-  });
+  // Só CGI — ver a nota no caminho de enriquecimento.
+  const cgi = ehCgi(newLead);
 
-  const gateConversaoCriacao = payload.gate_conversao_score === true;
-  const { token: agendaTokenCreated, score: scoreCriacao } =
-    await aplicarGateDeScore(
-      newLead,
-      tokenAgendaSeElegivel(newLead, payload.notify, !!newLead.objetivoCredito),
-      { aguardarScore: gateConversaoCriacao },
-    );
+  const portalUrlCreated = cgi
+    ? await invitePortal({
+        leadId: newLead.id,
+        nome: newLead.nome,
+        email: newLead.email,
+        notify: payload.notify,
+      })
+    : null;
+
+  const gateConversaoCriacao = cgi && payload.gate_conversao_score === true;
+  const { token: agendaTokenCreated, score: scoreCriacao } = cgi
+    ? await aplicarGateDeScore(
+        newLead,
+        tokenAgendaSeElegivel(newLead, payload.notify, !!newLead.objetivoCredito),
+        { aguardarScore: gateConversaoCriacao },
+      )
+    : { token: null, score: null };
   const conversaoLiberadaCriacao = await resolverGateDeConversao(
     newLead.id,
     scoreCriacao,
@@ -960,7 +1003,9 @@ export async function POST(request: NextRequest) {
   // CAPI `Lead` — depois do gate de score pelo mesmo motivo do caminho de
   // enriquecimento: a CAPI dispara independente do browser, então antes do
   // gate ela furaria a supressão.
-  after(() => capiOnLeadCreated(newLead, metaEventId, conversaoLiberadaCriacao));
+  if (cgi) {
+    after(() => capiOnLeadCreated(newLead, metaEventId, conversaoLiberadaCriacao));
+  }
 
   if (agendaTokenCreated) {
     // Marca a oferta da agenda — o cron do proativo espera 7 min a partir daqui.
@@ -977,7 +1022,7 @@ export async function POST(request: NextRequest) {
     nome: newLead.nome,
     whatsapp: newLead.whatsapp,
     notify: payload.notify,
-    completo: !!newLead.objetivoCredito,
+    completo: cgi && !!newLead.objetivoCredito,
     qualifStatusAtual: newLead.qualifWhatsappStatus,
     deferirParaCron: !!agendaTokenCreated,
   });

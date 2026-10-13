@@ -7,6 +7,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { ehCgi } from "@/lib/produtos";
 import { getSimulacaoConfig } from "@/lib/simulador/config";
 import { generateSimulationId } from "@/lib/simulador/simulation-id";
 import { LTV_MAX } from "@/lib/simulador/validator";
@@ -35,7 +36,11 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
   const { id } = await params;
   const [lead] = await db
-    .select({ id: leadsTable.id, consultorId: leadsTable.consultorId })
+    .select({
+      id: leadsTable.id,
+      consultorId: leadsTable.consultorId,
+      produto: leadsTable.produto,
+    })
     .from(leadsTable)
     .where(eq(leadsTable.id, id))
     .limit(1);
@@ -48,6 +53,14 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     })
   ) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // Faixas de taxa e LTV são da simulação de CGI.
+  if (!ehCgi(lead)) {
+    return NextResponse.json(
+      { error: "Proposta em faixa disponível apenas para CGI." },
+      { status: 422 },
+    );
   }
 
   let body: unknown;

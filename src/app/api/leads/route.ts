@@ -6,11 +6,17 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { checkPermission } from "@/lib/auth/permissions";
+import {
+  nomeDoParceiro,
+  registrarDuplicidadeCnpj,
+  salvarCondominio,
+} from "@/lib/condominio/persist";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import { contextFromCreateLead } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
 import { aplicarRoteamento } from "@/lib/routing/engine";
+import { condominioSchema } from "@/lib/validators/condominio";
 import { createLeadSchema, listLeadsQuerySchema } from "@/lib/validators/lead";
 import { normalizarCpf, normalizarWhatsapp } from "@/lib/validators/webhook";
 
@@ -152,6 +158,14 @@ export async function POST(request: NextRequest) {
   const cpfClean = normalizarCpf(data.cpf ?? null);
   const whatsappClean = normalizarWhatsapp(data.whatsapp);
 
+  let parceiroNome: string | null = null;
+  if (data.parceiroId) {
+    parceiroNome = await nomeDoParceiro(data.parceiroId);
+    if (!parceiroNome) {
+      return NextResponse.json({ error: "Parceiro não encontrado" }, { status: 400 });
+    }
+  }
+
   const [newLead] = await db
     .insert(leadsTable)
     .values({
@@ -178,16 +192,26 @@ export async function POST(request: NextRequest) {
       consultorId,
       atribuidoEm: consultorId ? new Date() : null,
       atribuidoPor: consultorId ? user.id : null,
+      parceiroId: data.parceiroId ?? null,
+      parceiroNome,
       origem: data.origem ?? "Manual",
       createdBy: user.id,
     })
     .returning();
 
+  // Condomínio: dados próprios na tabela-irmã + duplicidade por CNPJ.
+  let duplicidadeCnpj: string | null = null;
+  if (newLead.produto === "CONDOMINIO") {
+    const cond = data.condominio ?? condominioSchema.parse({});
+    await salvarCondominio(newLead.id, cond);
+    duplicidadeCnpj = await registrarDuplicidadeCnpj(newLead.id, cond.cnpj);
+  }
+
   await db.insert(interacoes).values({
     leadId: newLead.id,
     autorId: user.id,
     tipo: "evento_sistema",
-    conteudo: `Lead criado manualmente por ${user.nome}${regraAplicada ? ` (engine: ${regraAplicada})` : ""}`,
+    conteudo: `Lead criado manualmente por ${user.nome}${regraAplicada ? ` (engine: ${regraAplicada})` : ""}${duplicidadeCnpj ? " — possível duplicidade por CNPJ" : ""}`,
     metadata: {
       origem: data.origem ?? "Manual",
       consultorId,

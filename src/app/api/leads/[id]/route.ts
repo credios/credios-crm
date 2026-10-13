@@ -10,9 +10,11 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { checkPermission } from "@/lib/auth/permissions";
+import { nomeDoParceiro, salvarCondominio } from "@/lib/condominio/persist";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
+import { condominioEnviado } from "@/lib/validators/condominio";
 import { updateLeadSchema } from "@/lib/validators/lead";
 import { normalizarCpf, normalizarWhatsapp } from "@/lib/validators/webhook";
 
@@ -181,10 +183,36 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       ? normalizarWhatsapp(patch.conjugeWhatsapp)
       : null;
   if ("origem" in rawBody) updates.origem = patch.origem ?? null;
+  // Parceiro indicador: o nome é espelhado em `parceiro_nome` (card e portal).
+  if ("parceiroId" in rawBody) {
+    if (patch.parceiroId) {
+      const nome = await nomeDoParceiro(patch.parceiroId);
+      if (!nome) {
+        return NextResponse.json({ error: "Parceiro não encontrado" }, { status: 400 });
+      }
+      updates.parceiroId = patch.parceiroId;
+      updates.parceiroNome = nome;
+    } else {
+      updates.parceiroId = null;
+      updates.parceiroNome = null;
+    }
+  }
 
-  if (Object.keys(updates).length === 0) {
+  // Dados do condomínio (tabela-irmã) — só as chaves enviadas.
+  const condominio =
+    existing.produto === "CONDOMINIO" && "condominio" in rawBody && patch.condominio
+      ? condominioEnviado(rawBody.condominio, patch.condominio)
+      : {};
+  const temCondominio = Object.keys(condominio).length > 0;
+
+  if (Object.keys(updates).length === 0 && !temCondominio) {
     return NextResponse.json({ error: "no fields to update" }, { status: 400 });
   }
+
+  if (temCondominio) await salvarCondominio(id, condominio);
+
+  // Só condomínio mudou: ainda assim marca o lead como atualizado.
+  if (Object.keys(updates).length === 0) updates.updatedAt = new Date();
 
   const [updated] = await db
     .update(leadsTable)
@@ -200,7 +228,12 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
       "lead_editado",
       "lead",
       id,
-      { fields: Object.keys(updates) },
+      {
+        fields: [
+          ...Object.keys(updates),
+          ...Object.keys(condominio).map((k) => `condominio.${k}`),
+        ],
+      },
       extractRequestMeta(request),
     ),
   );

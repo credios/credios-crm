@@ -13,6 +13,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 // ============================================================================
@@ -132,6 +133,7 @@ export const leads = pgTable(
     estado: text("estado"), // UF de 2 letras
 
     // --- Operação ---
+    // CHECK em 0048: 'CGI' | 'CONDOMINIO' | 'FINANCIAMENTO' (src/lib/produtos.ts).
     produto: text("produto").notNull().default("CGI"),
     objetivoCredito: text("objetivo_credito"),
     tipoImovel: text("tipo_imovel"),
@@ -283,6 +285,10 @@ export const leads = pgTable(
     parceiroNome: text("parceiro_nome"),
     parceiroPortalId: text("parceiro_portal_id"),
     observacoesParceiro: text("observacoes_parceiro"),
+    // Parceiro indicador como FK (0049). `parceiros` é declarada mais abaixo.
+    parceiroId: uuid("parceiro_id").references((): AnyPgColumn => parceiros.id, {
+      onDelete: "set null",
+    }),
 
     // --- Fechamento ---
     bancoAprovador: text("banco_aprovador"),
@@ -339,6 +345,10 @@ export const leads = pgTable(
       .on(table.paid)
       .where(sql`${table.paid} = true`),
     index("idx_leads_criado").on(sql`${table.createdAt} DESC`),
+    index("idx_leads_produto").on(table.produto, sql`${table.createdAt} DESC`),
+    index("idx_leads_parceiro")
+      .on(table.parceiroId)
+      .where(sql`${table.parceiroId} IS NOT NULL`),
     index("idx_leads_cpf")
       .on(table.cpf)
       .where(sql`${table.cpf} IS NOT NULL`),
@@ -515,6 +525,8 @@ export const mensagensTemplate = pgTable("mensagens_template", {
   nome: text("nome").notNull(),
   ordem: integer("ordem").notNull().default(0),
   statusAplicavel: text("status_aplicavel").array(),
+  /** Produto a que o template pertence (0050). */
+  produto: text("produto").notNull().default("CGI"),
   conteudo: text("conteudo").notNull(),
   ativa: boolean("ativa").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -1107,5 +1119,51 @@ export const parceiroInteracoes = pgTable(
       table.parceiroId,
       sql`${table.criadoEm} DESC`,
     ),
+  ],
+);
+
+// ═══════════════════════════════════════════════════════════
+// lead_condominio (0049) — dados que só existem no produto CONDOMINIO.
+// 1:1 com `leads`: o lead segue sendo a espinha (status, atribuição,
+// timeline, cadência); aqui ficam condomínio, síndico, saúde financeira e
+// assembleia. Em `leads`: nome = nome do condomínio, whatsapp/email = contato
+// do síndico, valor_credito/objetivo_credito = operação.
+// ═══════════════════════════════════════════════════════════
+
+export const leadCondominio = pgTable(
+  "lead_condominio",
+  {
+    leadId: uuid("lead_id")
+      .primaryKey()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    cnpj: text("cnpj"), // só dígitos (14)
+    cep: text("cep"),
+    logradouro: text("logradouro"),
+    numero: text("numero"),
+    complemento: text("complemento"),
+    bairro: text("bairro"),
+    sindicoNome: text("sindico_nome"),
+    sindicoCpf: text("sindico_cpf"),
+    sindicoProfissional: boolean("sindico_profissional"),
+    sindicoMandatoFim: date("sindico_mandato_fim"),
+    administradora: text("administradora"),
+    numUnidades: integer("num_unidades"),
+    arrecadacaoMensalCentavos: bigint("arrecadacao_mensal_centavos", { mode: "number" }),
+    /** Inadimplência em pontos-base: 850 = 8,50%. */
+    inadimplenciaBps: integer("inadimplencia_bps"),
+    fundoReservaCentavos: bigint("fundo_reserva_centavos", { mode: "number" }),
+    finalidadeDetalhes: text("finalidade_detalhes"),
+    prazoDesejadoMeses: integer("prazo_desejado_meses"),
+    obraOrcada: boolean("obra_orcada"),
+    /** nao_convocada | convocada | aprovada | reprovada */
+    assembleiaStatus: text("assembleia_status"),
+    assembleiaData: date("assembleia_data"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_lead_condominio_cnpj")
+      .on(table.cnpj)
+      .where(sql`${table.cnpj} IS NOT NULL`),
   ],
 );

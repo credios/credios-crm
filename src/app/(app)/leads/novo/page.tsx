@@ -1,14 +1,20 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { users as usersTable } from "../../../../../db/schema";
+import { parceiros as parceirosTable, users as usersTable } from "../../../../../db/schema";
+import { LeadCondominioCreateForm } from "@/components/leads/lead-condominio-create-form";
 import { LeadCreateForm } from "@/components/leads/lead-create-form";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { PRODUTO_LABEL, PRODUTOS_ATIVOS, type Produto } from "@/lib/produtos";
 import { listActiveSources } from "@/lib/tracking/resolver";
+import { cn } from "@/lib/utils";
 
-export default async function NovoLeadPage() {
+type Props = { searchParams: Promise<{ produto?: string }> };
+
+export default async function NovoLeadPage({ searchParams }: Props) {
   const user = await getAppUser();
   if (!user) redirect("/login");
   if (!["admin", "gerente", "consultor"].includes(user.perfil)) {
@@ -32,6 +38,28 @@ export default async function NovoLeadPage() {
   // Sources ativos da tabela tracking_sources (substitui o enum ORIGENS).
   const sources = await listActiveSources();
 
+  const { produto: produtoParam } = await searchParams;
+  const produto: Produto = produtoParam === "CONDOMINIO" ? "CONDOMINIO" : "CGI";
+
+  // Parceiros selecionáveis como indicador (só nome — a gestão é em /parceiros).
+  const parceiros =
+    produto === "CONDOMINIO"
+      ? (
+          await db
+            .select({
+              id: parceirosTable.id,
+              nome: parceirosTable.nome,
+              empresa: parceirosTable.empresa,
+            })
+            .from(parceirosTable)
+            .where(ne(parceirosTable.status, "perdido"))
+            .orderBy(parceirosTable.nome)
+        ).map((p) => ({
+          id: p.id,
+          nome: p.empresa ? `${p.nome} (${p.empresa})` : p.nome,
+        }))
+      : [];
+
   return (
     <div className="space-y-6">
       <div>
@@ -44,11 +72,37 @@ export default async function NovoLeadPage() {
           .
         </p>
       </div>
-      <LeadCreateForm
-        currentUser={user}
-        consultores={consultores}
-        sources={sources}
-      />
+      <nav className="flex gap-1 rounded-lg border bg-muted/40 p-1 w-fit" aria-label="Produto">
+        {PRODUTOS_ATIVOS.map((p) => (
+          <Link
+            key={p}
+            href={p === "CGI" ? "/leads/novo" : `/leads/novo?produto=${p}`}
+            aria-current={p === produto ? "page" : undefined}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm transition-colors",
+              p === produto
+                ? "bg-background font-medium shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {PRODUTO_LABEL[p]}
+          </Link>
+        ))}
+      </nav>
+      {produto === "CONDOMINIO" ? (
+        <LeadCondominioCreateForm
+          currentUser={user}
+          consultores={consultores}
+          sources={sources}
+          parceiros={parceiros}
+        />
+      ) : (
+        <LeadCreateForm
+          currentUser={user}
+          consultores={consultores}
+          sources={sources}
+        />
+      )}
     </div>
   );
 }

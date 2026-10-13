@@ -2,7 +2,7 @@
 
 > Este documento é o **único contrato** entre o owner (Gabriel Marinho Meirelles) e o agente de codificação (Claude Code). Toda decisão que não estiver aqui deve ser perguntada antes de implementada. Toda decisão que estiver aqui é vinculante e não deve ser "melhorada" sem confirmação.
 
-> **Stack alvo:** Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui + Supabase (Postgres + Auth + Storage) + Vercel. Domínio: `crm.credios.com.br`.
+> **Stack alvo:** Next.js 16 (App Router) + TypeScript + Tailwind + shadcn/ui + Supabase (Postgres + Auth + Storage) + Vercel. Domínio: `crm.credios.com.br`.
 
 ---
 
@@ -12,7 +12,9 @@ A **Credios** é uma consultoria de crédito imobiliário e correspondente banc�
 
 Hoje, o CRM da empresa vive em uma database do Notion ("CRM de Leads"). Essa solução não escala — falta autenticação granular, relatórios, automação de roteamento, e sobretudo confiança para parceiros externos submeterem operações. Esse projeto substitui o CRM do Notion por um sistema próprio, multi-usuário, com auth, pipeline visual, e relatórios.
 
-**Foco do MVP:** apenas o produto **Crédito com Garantia de Imóvel (CGI)**. Outros produtos (financiamento imobiliário, condomínio, consórcio) ficam fora do MVP e entram em versões futuras.
+**Foco do MVP:** apenas o produto **Crédito com Garantia de Imóvel (CGI)**. Outros produtos (financiamento imobiliário, consórcio) ficam fora do MVP e entram em versões futuras.
+
+**Expansão multiproduto (decisão do owner, 2026-10-13):** a Credios passa a originar também **Crédito para Condomínios** e vai operar, em paralelo à intermediação, uma carteira própria via fundo. O CRM ganha um segundo perfil de cliente (condomínio) e absorve o sistema de parceiros. Escopo, fases e decisões em aberto: §14.
 
 **Usuários:** 2 hoje (Gabriel + Rodrigo), expectativa de 8-10 nos próximos 12 meses.
 
@@ -34,7 +36,7 @@ Hoje, o CRM da empresa vive em uma database do Notion ("CRM de Leads"). Essa sol
 
 | Camada | Tecnologia | Versão alvo |
 |---|---|---|
-| Framework | Next.js (App Router) | 15.x |
+| Framework | Next.js (App Router) | 16.x |
 | Linguagem | TypeScript | 5.x (strict mode) |
 | Estilização | Tailwind CSS | 4.x |
 | Componentes UI | shadcn/ui | latest |
@@ -550,10 +552,10 @@ Tela `/audit` (Admin only):
 - Upload e gestão de documentos do lead com OCR.
 - Integração WhatsApp Business API (Kommo).
 - Conversões offline para Google Ads (server-side tracking).
-- Sistema de parceiros externos (portal de submissão).
+- ~~Sistema de parceiros externos (portal de submissão).~~ Entrou em escopo — ver §14.
 - Motor de pré-qualificação proprietário (Peak Score-like).
 - Integrações com bancos parceiros.
-- Outros produtos além do CGI (financiamento imobiliário, condomínio).
+- Outros produtos além do CGI e do condomínio (ex.: financiamento imobiliário). Condomínio entrou em escopo — ver §14.
 - App mobile nativo.
 - Notificações push/SMS.
 - Importação de dados do Notion atual.
@@ -773,3 +775,35 @@ Documentado aqui apenas para garantir que o schema seja projetado com expansão 
 5. **Motor de pré-qualificação proprietário** com regras determinísticas baseadas na política de crédito interna.
 6. **Outros produtos:** financiamento imobiliário, crédito condomínio.
 7. **Importação histórica** dos dados do Notion atual (se necessário).
+
+---
+
+## 14. Multiproduto e parceiros (em andamento desde 2026-10-13)
+
+**Produtos:** `leads.produto` ∈ `CGI` | `CONDOMINIO` | `FINANCIAMENTO` (CHECK na migration 0048; fonte única em `src/lib/produtos.ts`). `FINANCIAMENTO` é aceito só porque o portal de parceiros já o envia — não tem fluxo próprio.
+
+**Regra central:** as automações do funil de pessoa física — Heloísa (proativo e respostas), score/cadastro PF, agenda pública, portal de documentos, proposta em faixa e conversões de mídia (Google Ads/CAPI) — rodam **somente para CGI** (`ehCgi`). Toda automação nova precisa decidir explicitamente para quais produtos vale.
+
+**Arquitetura acordada:**
+1. Condomínio fica na tabela `leads` + tabela-irmã 1:1 `lead_condominio` (não é entidade separada).
+2. Mesmo conjunto de status para os dois produtos; Kanban/Lista/Relatórios filtram por produto. Assembleia entra como campos, não como status.
+3. Parceiro é identidade separada dos funcionários (nunca uma linha em `users`); portal servido pelo mesmo app em `parceiros.credios.com.br`.
+4. O repositório `credios-parceiros` é portado para cá e desligado ao final.
+
+**Fases:**
+- **Fase 1 — produto como dimensão** (feita em código; migration 0048 pendente de aplicar em prod): CHECK de produto, bloqueio das automações de CGI, condição `produto_in` no roteamento, filtro de produto em Lista/Kanban/Relatórios.
+- **Fase 2 — perfil condomínio** (feita em código; migrations 0049 e 0050 pendentes de aplicar em prod): `lead_condominio` 1:1 (CNPJ, endereço, síndico, administradora, unidades, arrecadação, inadimplência em pontos-base, fundo de reserva, prazo, assembleia), `leads.parceiro_id` (FK), formulário em `/leads/novo?produto=CONDOMINIO`, cartões próprios no detalhe, duplicidade por CNPJ, bloco `condominio` no webhook, templates de mensagem por produto (`mensagens_template.produto`, variável `{{sindico}}`). Em `leads`: `nome` = nome do condomínio, `whatsapp`/`email` = contato do síndico, `objetivo_credito` = finalidade (`src/lib/condominio/constants.ts`).
+- **Fase 3 — gestão de parceiros (admin only):** cadastro completo, produtos habilitados, responsável, `leads.parceiro_id` como FK, tabelas de comissão por parceiro × produto.
+- **Fase 4 — portal do parceiro dentro do CRM:** login, indicação por produto habilitado, comissões, contrato; migração dos dados e dos contratos assinados.
+- **Fase 5 — virada:** DNS, portal antigo em somente leitura por 30 dias, remoção dos webhooks entre os sistemas.
+
+**Decisões do owner (2026-10-13):**
+- Gestão da carteira do fundo **nunca** entra no CRM — o fundo é outra entidade, com ERP próprio. Não criar módulo de carteira, parcelas ou cobrança aqui.
+- Comissão de parceiro: percentuais ficam para depois; no início é **caso a caso** (valor/percentual informado por operação). A estrutura deve aceitar uma regra padrão no futuro, sem exigi-la.
+- `/parceiros`: cadastrar e gerenciar é admin; o consultor **continua vendo os parceiros que ele atende** (comportamento atual).
+- Condomínio terá formulário público no site em breve — o webhook já aceita `produto: "CONDOMINIO"` + bloco `condominio`.
+
+**Pendências conhecidas da Fase 1:**
+- Relatórios em SQL cru (saúde do pipeline, projeção do mês, percentis, distribuições) e a Minha Mesa ainda não filtram por produto.
+- Cadências (`cadencia_config`) ainda são por status, não por produto: a Mesa sugere a lead de condomínio os passos e textos da cadência de CGI (envio é manual). Templates das "Mensagens sugeridas" já são por produto, mas não há templates de condomínio cadastrados.
+- O formulário de indicação do portal de parceiros ainda não envia o bloco `condominio` (entra na Fase 4).

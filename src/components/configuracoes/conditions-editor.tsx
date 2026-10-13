@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { TIPOS_IMOVEL, UFS } from "@/lib/constants";
+import { PRODUTO_LABEL, PRODUTOS_ATIVOS } from "@/lib/produtos";
 import { CANONICAL_SOURCES } from "@/lib/tracking/taxonomy";
 
 // Lista de sources usada nas condições de roteamento. Vem da taxonomia
@@ -24,6 +25,7 @@ import type { RuleCondicoes } from "@/lib/routing/types";
 import { cn } from "@/lib/utils";
 
 const TIPOS_CONDICAO = [
+  { key: "produto_in", label: "Produto (lista permitida)", kind: "produto_multi" },
   { key: "valor_credito_min", label: "Valor crédito mínimo (R$)", kind: "money" },
   { key: "valor_credito_max", label: "Valor crédito máximo (R$)", kind: "money" },
   { key: "valor_imovel_min", label: "Valor imóvel mínimo (R$)", kind: "money" },
@@ -132,6 +134,7 @@ function defaultValueFor(key: CondKey): unknown {
     case "estado_in":
     case "origem_in":
     case "tipo_imovel_in":
+    case "produto_in":
       return [];
     case "horario_comercial":
       return true;
@@ -195,6 +198,17 @@ function renderEditor(
           gridClassName="grid grid-cols-2 sm:grid-cols-3 gap-2"
         />
       );
+    case "produto_in":
+      return (
+        <CheckboxList
+          options={PRODUTOS_ATIVOS}
+          labels={PRODUTO_LABEL}
+          value={Array.isArray(value) ? (value as string[]) : []}
+          onChange={onChange as (v: string[]) => void}
+          disabled={disabled}
+          gridClassName="grid grid-cols-1 sm:grid-cols-2 gap-2"
+        />
+      );
     case "horario_comercial":
       return (
         <div className="flex items-center gap-3">
@@ -213,12 +227,14 @@ function renderEditor(
 
 function CheckboxList({
   options,
+  labels,
   value,
   onChange,
   disabled,
   gridClassName,
 }: {
   options: readonly string[];
+  labels?: Record<string, string>;
   value: string[];
   onChange: (v: string[]) => void;
   disabled?: boolean;
@@ -242,7 +258,7 @@ function CheckboxList({
               onCheckedChange={(v) => toggle(opt, v === true)}
               disabled={disabled}
             />
-            {opt}
+            {labels?.[opt] ?? opt}
           </label>
         );
       })}

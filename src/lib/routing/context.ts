@@ -13,6 +13,7 @@ export function contextFromWebhook(p: WebhookLeadPayload): RoutingContext {
     estado: p.estado ? p.estado.toUpperCase() : null,
     origem: p.origem || null,
     tipoImovel: p.tipo_imovel || null,
+    produto: p.produto ?? null,
   };
 }
 
@@ -23,5 +24,6 @@ export function contextFromCreateLead(p: CreateLeadInput): RoutingContext {
     estado: p.estado ? p.estado.toUpperCase() : null,
     origem: p.origem ?? null,
     tipoImovel: p.tipoImovel ?? null,
+    produto: p.produto ?? null,
   };
 }

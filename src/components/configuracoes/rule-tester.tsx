@@ -23,6 +23,12 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { TIPOS_IMOVEL, UFS } from "@/lib/constants";
+import {
+  PRODUTO_LABEL_CURTO,
+  PRODUTO_PADRAO,
+  PRODUTOS_ATIVOS,
+  type Produto,
+} from "@/lib/produtos";
 import { CANONICAL_SOURCES } from "@/lib/tracking/taxonomy";
 
 const ORIGENS_AVAILABLE = CANONICAL_SOURCES.map((s) => s.source);
@@ -40,6 +46,7 @@ export function RuleTester() {
   const [estado, setEstado] = useState("");
   const [origem, setOrigem] = useState("");
   const [tipoImovel, setTipoImovel] = useState("");
+  const [produto, setProduto] = useState<string>(PRODUTO_PADRAO);
   const [forcarHorario, setForcarHorario] = useState(false);
   const [horarioComercial, setHorarioComercial] = useState(true);
 
@@ -57,6 +64,7 @@ export function RuleTester() {
       estado: estado || null,
       origem: origem || null,
       tipoImovel: tipoImovel || null,
+      produto,
       ...(forcarHorario ? { horarioComercial } : {}),
     };
     const res = await fetch("/api/configuracoes/roteamento/testar", {
@@ -132,6 +140,23 @@ export function RuleTester() {
                 {ORIGENS_AVAILABLE.map((u) => (
                   <SelectItem key={u} value={u}>
                     {u}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Produto</Label>
+            <Select value={produto} onValueChange={(v) => setProduto(v ?? PRODUTO_PADRAO)}>
+              <SelectTrigger>
+                <SelectValue>
+                  {(v: unknown) => PRODUTO_LABEL_CURTO[v as Produto] ?? String(v ?? "")}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {PRODUTOS_ATIVOS.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {PRODUTO_LABEL_CURTO[p]}
                   </SelectItem>
                 ))}
               </SelectContent>

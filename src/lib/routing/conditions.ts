@@ -1,4 +1,5 @@
 import { dentroHorarioComercial } from "@/lib/horario-comercial";
+import { PRODUTO_PADRAO } from "@/lib/produtos";
 
 import type { RoutingContext, RuleCondicoes } from "./types";
 
@@ -48,6 +49,9 @@ export function matchesConditions(
   if (conds.tipo_imovel_in?.length) {
     if (!ctx.tipoImovel || !conds.tipo_imovel_in.includes(ctx.tipoImovel))
       return false;
+  }
+  if (conds.produto_in?.length) {
+    if (!conds.produto_in.includes(ctx.produto ?? PRODUTO_PADRAO)) return false;
   }
   if (conds.horario_comercial != null) {
     const dentro = ctx.horarioComercial ?? dentroHorarioComercial();

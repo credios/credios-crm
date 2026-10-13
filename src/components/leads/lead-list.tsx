@@ -23,12 +23,14 @@ import { StatusBadge } from "./status-badge";
 import { ViewToggle } from "./view-toggle";
 import { EmptyState } from "@/components/shared/empty-state";
 import { EmptyLeads } from "@/components/shared/illustrations";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { formatRelative, isEsfriando } from "@/lib/formatters/date";
 import { formatPhoneBr, whatsappUrl } from "@/lib/formatters/phone";
 import type { LeadRow, ListLeadsResult } from "@/lib/leads/list-leads";
+import { PRODUTO_LABEL_CURTO, type Produto } from "@/lib/produtos";
 import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
 import { cn } from "@/lib/utils";
 import type { SavedLeadView } from "@/lib/validators/lead-view";
@@ -120,6 +122,12 @@ export function LeadList({
               >
                 {row.original.nome}
               </Link>
+              {row.original.produto !== "CGI" && (
+                <Badge variant="default" className="text-[10px] shrink-0">
+                  {PRODUTO_LABEL_CURTO[row.original.produto as Produto] ??
+                    row.original.produto}
+                </Badge>
+              )}
             </div>
           );
         },

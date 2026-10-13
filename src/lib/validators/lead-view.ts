@@ -20,6 +20,7 @@ export const FILTRO_KEYS = [
   "channel",
   "estado",
   "dispositivo",
+  "produto",
   "q",
   "valorMin",
   "valorMax",

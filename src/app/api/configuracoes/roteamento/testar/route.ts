@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
       estado: ctx.estado ?? null,
       origem: ctx.origem ?? null,
       tipoImovel: ctx.tipoImovel ?? null,
+      produto: ctx.produto ?? null,
       horarioComercial: ctx.horarioComercial,
     },
     realRoutingDeps,

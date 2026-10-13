@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PRODUTOS } from "@/lib/produtos";
+
 export const ACAO_TIPOS = [
   "atribuir_usuario",
   "round_robin_grupo",
@@ -18,6 +20,7 @@ export const ruleCondicoesSchema = z
       .optional(),
     origem_in: z.array(z.string().min(1)).min(1).optional(),
     tipo_imovel_in: z.array(z.string().min(1)).min(1).optional(),
+    produto_in: z.array(z.enum(PRODUTOS)).min(1).optional(),
     horario_comercial: z.boolean().optional(),
   })
   .strict();
@@ -60,6 +63,7 @@ export const testarRoteamentoSchema = z.object({
   estado: z.string().regex(/^[A-Z]{2}$/).nullable().optional(),
   origem: z.string().nullable().optional(),
   tipoImovel: z.string().nullable().optional(),
+  produto: z.enum(PRODUTOS).nullable().optional(),
   horarioComercial: z.boolean().optional(),
 });
 export type TestarRoteamentoInput = z.infer<typeof testarRoteamentoSchema>;

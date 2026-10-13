@@ -14,6 +14,7 @@ import {
 } from "@/lib/leads/credito-total";
 import { formatRelative, isEsfriando } from "@/lib/formatters/date";
 import type { LeadRow } from "@/lib/leads/list-leads";
+import { PRODUTO_LABEL_CURTO, type Produto } from "@/lib/produtos";
 import { cn } from "@/lib/utils";
 
 function initials(nome: string | null): string {
@@ -138,6 +139,11 @@ function LeadKanbanCardImpl({
       </div>
 
       <div className="flex items-center gap-1 flex-wrap">
+        {lead.produto !== "CGI" && (
+          <Badge variant="default" className="text-[10px]">
+            {PRODUTO_LABEL_CURTO[lead.produto as Produto] ?? lead.produto}
+          </Badge>
+        )}
         {lead.origem && (
           <Badge variant="soft" className="text-[10px]">
             {lead.origem}

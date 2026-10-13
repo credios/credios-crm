@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { PRODUTOS } from "@/lib/produtos";
+
 const STATUS_LEAD_VALUES = [
   "novo",
   "conversa_inicial",
@@ -25,6 +27,8 @@ export const upsertTemplateSchema = z.object({
     .array(z.enum(STATUS_LEAD_VALUES))
     .min(1, "Selecione pelo menos 1 status"),
   ativa: z.boolean().optional().default(true),
+  // Opcional de propósito: ausente = não mexe no produto (edição) / CGI (criação).
+  produto: z.enum(PRODUTOS).optional(),
 });
 export type UpsertTemplateInput = z.infer<typeof upsertTemplateSchema>;
 

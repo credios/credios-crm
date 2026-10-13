@@ -15,6 +15,7 @@ export default async function MensagensPage() {
     ordem: r.ordem,
     conteudo: r.conteudo,
     statusAplicavel: r.statusAplicavel ?? null,
+    produto: r.produto,
     ativa: r.ativa,
   }));
 

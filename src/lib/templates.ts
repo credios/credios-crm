@@ -9,6 +9,8 @@ export type TemplateLeadVars = {
   valorImovelCentavos: number | null;
   /** Nome do consultor logado (assina mensagens). Resolve {{consultor}}. */
   consultor?: string | null;
+  /** Condomínio: nome do síndico. Resolve {{sindico}} (primeiro nome). */
+  sindico?: string | null;
 };
 
 /**
@@ -60,8 +62,8 @@ export function valorCreditoRedondo(valorCentavos: number | null): string {
 /**
  * Substitui variáveis {{saudacao}}, {{nome}}, {{primeiro_nome}},
  * {{primeiro_nome_consultor}}, {{consultor}}, {{valor_credito}},
- * {{valor_credito_redondo}}, {{valor_imovel}}, {{cidade}}, {{estado}} no
- * conteúdo do template.
+ * {{valor_credito_redondo}}, {{valor_imovel}}, {{cidade}}, {{estado}},
+ * {{sindico}} no conteúdo do template.
  *
  * Nomes (lead e consultor) passam por `formatProperName` antes da substituição
  * — o cliente preenche o form em qualquer caixa ("FABIANA", "fabiana") mas a
@@ -78,12 +80,15 @@ export function renderTemplate(
   const primeiroNome = nomeFormatado.split(/\s+/)[0] ?? "";
   const consultorFormatado = formatProperName(lead.consultor);
   const primeiroNomeConsultor = consultorFormatado.split(/\s+/)[0] ?? "";
+  const primeiroNomeSindico = formatProperName(lead.sindico).split(/\s+/)[0] ?? "";
   if (links?.agenda) content = content.replace(/\{\{link_agenda\}\}/g, links.agenda);
   if (links?.docs) content = content.replace(/\{\{link_docs\}\}/g, links.docs);
   return content
     .replace(/\{\{saudacao\}\}/g, getSaudacao())
     .replace(/\{\{nome\}\}/g, nomeFormatado)
     .replace(/\{\{primeiro_nome\}\}/g, primeiroNome)
+    // Condomínio: {{nome}} é o condomínio; quem lê a mensagem é o síndico.
+    .replace(/\{\{sindico\}\}/g, primeiroNomeSindico)
     .replace(/\{\{consultor\}\}/g, consultorFormatado || "—")
     .replace(/\{\{primeiro_nome_consultor\}\}/g, primeiroNomeConsultor || "—")
     .replace(
@@ -105,6 +110,17 @@ export function renderTemplate(
     .replace(/\{\{cidade\}\}/g, lead.cidade ?? "—")
     .replace(/\{\{estado\}\}/g, lead.estado ?? "—");
 }
+
+/** Condomínio fictício pro preview de templates de CONDOMINIO. */
+export const SAMPLE_CONDOMINIO: TemplateLeadVars = {
+  nome: "Condomínio Edifício Solar das Palmeiras",
+  cidade: "Blumenau",
+  estado: "SC",
+  valorCreditoCentavos: 30_000_000,
+  valorImovelCentavos: null,
+  consultor: "Gabriel Marinho",
+  sindico: "ANA PAULA SOUZA",
+};
 
 /** Lead fictício pra preview no editor de templates. Inclui caixa irregular
  *  pra deixar visível no preview que `formatProperName` está em ação. */

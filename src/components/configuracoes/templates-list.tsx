@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { STATUS_LEAD_LABEL } from "@/lib/constants";
+import { PRODUTO_LABEL_CURTO, type Produto } from "@/lib/produtos";
 import { cn } from "@/lib/utils";
 
 import type { TemplateRow } from "./template-edit-dialog";
@@ -139,6 +140,11 @@ function Row({
           <Badge variant="secondary" className="text-xs">
             #{template.ordem}
           </Badge>
+          {template.produto !== "CGI" && (
+            <Badge variant="default" className="text-xs">
+              {PRODUTO_LABEL_CURTO[template.produto as Produto] ?? template.produto}
+            </Badge>
+          )}
         </div>
         <p className="text-xs text-muted-foreground line-clamp-2">{template.conteudo}</p>
         <div className="flex flex-wrap gap-1 mt-1">

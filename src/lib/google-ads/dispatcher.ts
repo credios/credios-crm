@@ -5,6 +5,7 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 import { capiOnStageChange, type CapiLeadFields } from "@/lib/capi/dispatch";
 import { googleAdsConversions } from "../../../db/schema";
 import { db } from "@/lib/db";
+import { ehCgi } from "@/lib/produtos";
 
 import {
   isGoogleAdsEnabled,
@@ -57,6 +58,7 @@ const MAX_ATTEMPTS = 8;
  * `.returning()`, então declarar a exigência não custa nada e trava a regressão.
  */
 export type LeadForConversion = CapiLeadFields & {
+  produto: string;
   gclid: string | null;
   wbraid: string | null;
   gbraid: string | null;
@@ -75,6 +77,11 @@ export async function onLeadStageChange(
   lead: LeadForConversion,
   newStatus: string,
 ): Promise<void> {
+  // O modelo de valor (fee × taxa de fechamento) e os estágios "qualificados"
+  // são do CGI, e as campanhas otimizam pra ele. Outro produto não vira
+  // conversão de mídia até ter evento e valor próprios.
+  if (!ehCgi(lead)) return;
+
   // CAPI (Meta/TikTok/LinkedIn) roda ANTES dos early-returns do Google Ads —
   // são gates independentes (lead orgânico do Insta não tem gclid, mas tem
   // fbclid). Best-effort; adapters não configurados retornam skipped.
