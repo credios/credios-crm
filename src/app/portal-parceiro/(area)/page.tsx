@@ -6,12 +6,12 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { listarIndicacoes, resumoDoParceiro } from "@/lib/portal-parceiro/indicacoes";
-import { exigirParceiro } from "@/lib/portal-parceiro/sessao";
+import { exigirParceiroComContrato } from "@/lib/portal-parceiro/acesso";
 
 export const dynamic = "force-dynamic";
 
 export default async function InicioPage() {
-  const sessao = await exigirParceiro();
+  const sessao = await exigirParceiroComContrato();
   const [resumo, indicacoes] = await Promise.all([
     resumoDoParceiro(sessao.parceiroId),
     listarIndicacoes(sessao.parceiroId),

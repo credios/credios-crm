@@ -708,3 +708,7 @@ ALTER TABLE public.parceiro_comissoes ENABLE ROW LEVEL SECURITY;
 -- Portal do parceiro (0052) — credenciais e sessões: RLS sem policy = deny total.
 ALTER TABLE public.parceiro_usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.parceiro_sessoes ENABLE ROW LEVEL SECURITY;
+
+-- Contratos de parceria (0053) — RLS sem policy = deny total.
+ALTER TABLE public.parceiro_contratos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parceiro_contrato_eventos ENABLE ROW LEVEL SECURITY;

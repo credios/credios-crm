@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  customType,
   date,
   index,
   integer,
@@ -1260,4 +1261,72 @@ export const parceiroSessoes = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("idx_parceiro_sessoes_usuario").on(table.usuarioId)],
+);
+
+// ═══════════════════════════════════════════════════════════
+// Contrato de parceria (0053) — assinatura eletrônica do parceiro + contra-
+// assinatura da Credios. Texto mesclado e PDFs ficam na própria linha:
+// contrato assinado não pode depender de modelo que muda depois.
+// ═══════════════════════════════════════════════════════════
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
+export const parceiroContratos = pgTable(
+  "parceiro_contratos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    parceiroId: uuid("parceiro_id")
+      .notNull()
+      .references(() => parceiros.id, { onDelete: "restrict" }),
+    versaoModelo: integer("versao_modelo").notNull(),
+    corpoHtml: text("corpo_html").notNull(),
+    /** enviado | visualizado | assinado_parceiro | concluido | cancelado */
+    status: text("status").notNull().default("enviado"),
+    codigoVerificacao: text("codigo_verificacao").notNull().unique(),
+    otpHash: text("otp_hash"),
+    otpExpiraEm: timestamp("otp_expira_em", { withTimezone: true }),
+    otpTentativas: integer("otp_tentativas").notNull().default(0),
+    otpVerificado: boolean("otp_verificado").notNull().default(false),
+    pdfOriginal: bytea("pdf_original"),
+    pdfAssinado: bytea("pdf_assinado"),
+    hashDocumento: text("hash_documento"),
+    enviadoEm: timestamp("enviado_em", { withTimezone: true }),
+    visualizadoEm: timestamp("visualizado_em", { withTimezone: true }),
+    assinadoEm: timestamp("assinado_em", { withTimezone: true }),
+    crediosAssinadoEm: timestamp("credios_assinado_em", { withTimezone: true }),
+    crediosAssinanteId: uuid("credios_assinante_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    crediosAssinanteNome: text("credios_assinante_nome"),
+    /** Id do contrato no portal antigo (migração). */
+    legadoId: text("legado_id").unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_parceiro_contratos_parceiro").on(
+      table.parceiroId,
+      sql`${table.createdAt} DESC`,
+    ),
+  ],
+);
+
+export const parceiroContratoEventos = pgTable(
+  "parceiro_contrato_eventos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contratoId: uuid("contrato_id")
+      .notNull()
+      .references(() => parceiroContratos.id, { onDelete: "cascade" }),
+    evento: text("evento").notNull(),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+    metadata: jsonb("metadata"),
+    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("idx_parceiro_contrato_eventos").on(table.contratoId, table.criadoEm)],
 );

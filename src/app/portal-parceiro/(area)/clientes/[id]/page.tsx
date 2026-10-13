@@ -6,7 +6,7 @@ import { EtapaBadge, EtapaProgresso } from "@/components/portal-parceiro/etapa";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { buscarIndicacao } from "@/lib/portal-parceiro/indicacoes";
-import { exigirParceiro } from "@/lib/portal-parceiro/sessao";
+import { exigirParceiroComContrato } from "@/lib/portal-parceiro/acesso";
 import { ETAPA_META } from "@/lib/portal-parceiro/status";
 import { PRODUTO_LABEL, type Produto } from "@/lib/produtos";
 
@@ -25,7 +25,7 @@ const fmtData = new Intl.DateTimeFormat("pt-BR", {
 });
 
 export default async function IndicacaoPage({ params }: Props) {
-  const sessao = await exigirParceiro();
+  const sessao = await exigirParceiroComContrato();
   const { id } = await params;
   // id malformado ou de outro parceiro → 404 igual (não revela que existe).
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();

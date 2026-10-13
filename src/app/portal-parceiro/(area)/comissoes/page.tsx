@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { COMISSAO_STATUS_LABEL, type ComissaoStatus } from "@/lib/parceiros/constants";
 import { listarComissoes, resumoDoParceiro } from "@/lib/portal-parceiro/indicacoes";
-import { exigirParceiro } from "@/lib/portal-parceiro/sessao";
+import { exigirParceiroComContrato } from "@/lib/portal-parceiro/acesso";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Comissões" };
@@ -13,7 +13,7 @@ function dataBr(iso: string | null): string | null {
 }
 
 export default async function ComissoesPage() {
-  const sessao = await exigirParceiro();
+  const sessao = await exigirParceiroComContrato();
   const [comissoes, resumo] = await Promise.all([
     listarComissoes(sessao.parceiroId),
     resumoDoParceiro(sessao.parceiroId),

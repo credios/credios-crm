@@ -159,9 +159,9 @@ export function ConviteForm({ token }: { token: string }) {
         <Checkbox checked={termos} onCheckedChange={(v) => setTermos(v === true)} disabled={pending} className="mt-0.5" />
         <span>
           Li e aceito os{" "}
-          <Link href="/termos" target="_blank" className="text-primary hover:underline">termos de uso</Link>{" "}
-          e a{" "}
-          <Link href="/privacidade" target="_blank" className="text-primary hover:underline">política de privacidade</Link>.
+          <Link href="/portal-parceiro/termos" target="_blank" className="text-primary hover:underline">termos de uso</Link>{" "}
+          e o{" "}
+          <Link href="/portal-parceiro/privacidade" target="_blank" className="text-primary hover:underline">aviso de privacidade</Link>.
         </span>
       </label>
       <Enviar pending={pending}>Criar senha e entrar</Enviar>
