@@ -5,12 +5,14 @@ import { redirect } from "next/navigation";
 
 import { parceiros, users as usersTable } from "../../../../db/schema";
 import { BlocoParceiros } from "@/components/parceiros/bloco-parceiros";
+import { ConvidarEmLote } from "@/components/parceiros/convidar-em-lote";
 import { ParceiroStatusBadge } from "@/components/parceiros/parceiro-status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { parceirosParaConvidar } from "@/lib/portal-parceiro/lote";
 import {
   PARCEIRO_SEGMENTO_LABEL,
   PARCEIRO_STATUS,
@@ -102,6 +104,8 @@ export default async function ParceirosPage({ searchParams }: Props) {
     { label: "Perdidos (90d)", valor: kpis?.perdidos90 ?? 0, href: "/parceiros?status=perdido" },
   ];
 
+  const paraConvidar = isAdmin(user) ? (await parceirosParaConvidar()).length : 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -123,6 +127,8 @@ export default async function ParceirosPage({ searchParams }: Props) {
           </Link>
         )}
       </div>
+
+      {paraConvidar > 0 && <ConvidarEmLote quantidade={paraConvidar} />}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {kpiCards.map((k) => (

@@ -78,6 +78,7 @@ export default async function ParceiroDetalhePage({ params }: Props) {
 
   const admin = isAdminOrGerente(user);
   if (!admin && p.consultorId !== user.id) notFound();
+  const portalLegadoAtivo = Boolean(process.env.PORTAL_WEBHOOK_URL);
 
   const [timeline, consultores, consultorAtual] = await Promise.all([
     db
@@ -296,6 +297,7 @@ export default async function ParceiroDetalhePage({ params }: Props) {
               parceiroId={p.id}
               acesso={p.portalAcesso}
               temEmail={Boolean(p.email)}
+              legadoAtivo={portalLegadoAtivo}
               ultimoLogin={ultimoLoginPortal ? fmtDataHora.format(ultimoLoginPortal) : null}
             />
           )}
@@ -316,7 +318,9 @@ export default async function ParceiroDetalhePage({ params }: Props) {
             />
           )}
 
-          {admin && (
+          {/* Handoff pro portal ANTIGO: some quando a integração é desligada
+              (PORTAL_WEBHOOK_URL removida na virada). */}
+          {admin && portalLegadoAtivo && (
             <ParceiroConvidarPortal
               parceiro={{
                 id: p.id,

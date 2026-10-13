@@ -1312,6 +1312,10 @@ export const parceiroContratos = pgTable(
       table.parceiroId,
       sql`${table.createdAt} DESC`,
     ),
+    // 0054: no máximo um contrato pendente por parceiro.
+    uniqueIndex("uq_parceiro_contratos_pendente")
+      .on(table.parceiroId)
+      .where(sql`status IN ('enviado', 'visualizado')`),
   ],
 );
 

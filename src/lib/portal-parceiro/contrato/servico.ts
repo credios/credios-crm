@@ -137,7 +137,7 @@ export async function garantirContratoPendente(
     .where(
       and(eq(parceiroContratos.parceiroId, parceiroId), inArray(parceiroContratos.status, PENDENTES)),
     )
-    .orderBy(desc(parceiroContratos.createdAt))
+    .orderBy(asc(parceiroContratos.createdAt), asc(parceiroContratos.id))
     .limit(1);
   if (pendente && pendente.versaoModelo === VERSAO_MODELO) {
     return { ok: true, ...pendente };
@@ -158,21 +158,56 @@ export async function garantirContratoPendente(
   const codigo = gerarCodigoVerificacao();
   const pdf = Buffer.from(await renderContractPdf(corpoHtml, { verifyCode: codigo }));
 
-  const [novo] = await db
-    .insert(parceiroContratos)
-    .values({
-      parceiroId,
-      versaoModelo: VERSAO_MODELO,
-      corpoHtml,
-      status: "enviado",
-      codigoVerificacao: codigo,
-      pdfOriginal: pdf,
-      enviadoEm: agora,
+  // A página pode ser renderizada duas vezes em paralelo (prefetch + navegação).
+  // O índice único (0054) barra o segundo INSERT; sem ele, a convergência
+  // abaixo cancela o excedente. Nos dois casos todo mundo recebe o MESMO
+  // contrato — o mais antigo.
+  let criadoId: string | null = null;
+  try {
+    const [novo] = await db
+      .insert(parceiroContratos)
+      .values({
+        parceiroId,
+        versaoModelo: VERSAO_MODELO,
+        corpoHtml,
+        status: "enviado",
+        codigoVerificacao: codigo,
+        pdfOriginal: pdf,
+        enviadoEm: agora,
+      })
+      .returning({ id: parceiroContratos.id });
+    criadoId = novo!.id;
+  } catch (e) {
+    if ((e as { code?: string }).code !== "23505") throw e;
+  }
+
+  const pendentes = await db
+    .select({
+      id: parceiroContratos.id,
+      corpoHtml: parceiroContratos.corpoHtml,
+      codigo: parceiroContratos.codigoVerificacao,
+      otpVerificado: parceiroContratos.otpVerificado,
     })
-    .returning({ id: parceiroContratos.id });
-  await evento(novo!.id, "GENERATED");
-  await evento(novo!.id, "SENT");
-  return { ok: true, id: novo!.id, corpoHtml, codigo, otpVerificado: false };
+    .from(parceiroContratos)
+    .where(
+      and(eq(parceiroContratos.parceiroId, parceiroId), inArray(parceiroContratos.status, PENDENTES)),
+    )
+    .orderBy(asc(parceiroContratos.createdAt), asc(parceiroContratos.id));
+  const vencedor = pendentes[0];
+  if (!vencedor) return { ok: false, erro: "Não foi possível gerar o contrato. Recarregue a página." };
+
+  const excedentes = pendentes.slice(1).map((c) => c.id);
+  if (excedentes.length > 0) {
+    await db
+      .update(parceiroContratos)
+      .set({ status: "cancelado", updatedAt: new Date() })
+      .where(inArray(parceiroContratos.id, excedentes));
+  }
+  if (criadoId === vencedor.id) {
+    await evento(vencedor.id, "GENERATED");
+    await evento(vencedor.id, "SENT");
+  }
+  return { ok: true, ...vencedor };
 }
 
 /** Parceiro abriu o contrato pra ler. */
@@ -203,7 +238,8 @@ async function pendenteDoParceiro(parceiroId: string) {
         eq(parceiroContratos.versaoModelo, VERSAO_MODELO),
       ),
     )
-    .orderBy(desc(parceiroContratos.createdAt))
+    // O mais antigo — o mesmo que garantirContratoPendente entrega.
+    .orderBy(asc(parceiroContratos.createdAt), asc(parceiroContratos.id))
     .limit(1);
   return c ?? null;
 }
@@ -308,6 +344,12 @@ export async function assinarComoParceiro(
     .returning({ id: parceiroContratos.id });
   if (!assinado) return { ok: true };
 
+  await db
+    .update(parceiroContratos)
+    .set({ status: "cancelado", updatedAt: new Date() })
+    .where(
+      and(eq(parceiroContratos.parceiroId, parceiroId), inArray(parceiroContratos.status, PENDENTES)),
+    );
   await evento(c.id, "SIGNED", meta);
   await evento(c.id, "ADMIN_SIGN_REQUESTED");
   await db.insert(parceiroInteracoes).values({
