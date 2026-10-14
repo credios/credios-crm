@@ -21,7 +21,14 @@ const fmt = new Intl.DateTimeFormat("pt-BR", {
 // existe e quem assinou — documento mascarado, sem contato nem texto do contrato.
 export default async function VerificarCodigoPage({ params }: Props) {
   const { codigo } = await params;
-  const c = await verificarPorCodigo(decodeURIComponent(codigo));
+  // `%` solto na URL faria o decode lançar — trata como código inexistente.
+  let bruto = codigo;
+  try {
+    bruto = decodeURIComponent(codigo);
+  } catch {
+    bruto = "";
+  }
+  const c = await verificarPorCodigo(bruto);
 
   if (!c) {
     return (

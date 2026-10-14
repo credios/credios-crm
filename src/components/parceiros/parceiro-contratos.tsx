@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Confirmar } from "@/components/shared/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,34 +39,28 @@ export function ParceiroContratos({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
-  async function contraAssinar(c: ContratoRow) {
-    if (
-      !window.confirm(
-        "Você leu o contrato e assina em nome da Credios? Isso gera a via final com as duas assinaturas.",
-      )
-    ) {
-      return;
-    }
+  async function chamar(c: ContratoRow, acao: "contra-assinar" | "cancelar") {
     setBusy(true);
     try {
-      const res = await fetch(
-        `/api/parceiros/${parceiroId}/contratos/${c.id}/contra-assinar`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ aceito: true }),
-        },
-      );
+      const res = await fetch(`/api/parceiros/${parceiroId}/contratos/${c.id}/${acao}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ aceito: true }),
+      });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) toast.error(json.error ?? "Não consegui assinar.");
-      else {
-        toast.success("Contrato concluído.");
-        router.refresh();
+      if (!res.ok) {
+        toast.error(json.error ?? "Não consegui concluir.");
+        throw new Error("falhou");
       }
-    } catch {
-      toast.error("Falha de conexão.");
+      toast.success(
+        acao === "cancelar"
+          ? "Contrato cancelado."
+          : "Contrato concluído. A via final foi enviada por e-mail às duas partes.",
+      );
+      router.refresh();
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return (
@@ -105,9 +100,33 @@ export function ParceiroContratos({
                   </a>
                 )}
                 {c.status === "assinado_parceiro" && (
-                  <Button size="sm" disabled={busy} onClick={() => void contraAssinar(c)}>
-                    Contra-assinar
-                  </Button>
+                  <Confirmar
+                    titulo="Assinar pela Credios?"
+                    descricao="Confirme que você leu este contrato (baixe o PDF se ainda não leu). Ao assinar, o sistema gera a via final com as duas assinaturas e a envia por e-mail ao parceiro e a você."
+                    rotulo="Assinar pela Credios"
+                    onConfirmar={() => chamar(c, "contra-assinar")}
+                  >
+                    {(abrir) => (
+                      <Button size="sm" disabled={busy} onClick={abrir}>
+                        Contra-assinar
+                      </Button>
+                    )}
+                  </Confirmar>
+                )}
+                {["enviado", "visualizado", "assinado_parceiro"].includes(c.status) && (
+                  <Confirmar
+                    titulo="Cancelar este contrato?"
+                    descricao="Use quando houver dado errado no cadastro. O parceiro precisará ler e assinar um novo contrato antes de voltar a indicar clientes."
+                    rotulo="Cancelar contrato"
+                    destrutivo
+                    onConfirmar={() => chamar(c, "cancelar")}
+                  >
+                    {(abrir) => (
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={abrir}>
+                        Cancelar
+                      </Button>
+                    )}
+                  </Confirmar>
                 )}
               </li>
             ))}

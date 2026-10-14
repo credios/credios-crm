@@ -9,6 +9,7 @@ import {
   inArray,
   isNull,
   lt,
+  not,
   notInArray,
   or,
   sql,
@@ -25,8 +26,27 @@ import {
 } from "../../../db/schema";
 import { db } from "@/lib/db";
 import { endOfDayBrt, startOfDayBrt, todayYmdBrt } from "@/lib/datetime/brt";
-import { listCadencias } from "@/lib/cadencia/config";
+import { cadenciaDoLead, listCadencias } from "@/lib/cadencia/config";
+import type { CadenciaStatus } from "@/lib/cadencia/tipos";
 import { NAO_CONTATO_TIPOS } from "@/lib/leads/interacao-tipos";
+
+// Cadência é por (status, produto): um status pode ter cadência em CGI e não
+// em condomínio. Estes helpers levam o par pra dentro do SQL.
+type ParCadencia = { status: string; produto: string };
+
+function paresComCadencia(cadencias: CadenciaStatus[]): ParCadencia[] {
+  return cadencias
+    .filter((c) => c.ativa)
+    .map((c) => ({ status: c.statusKey, produto: c.produto }));
+}
+
+/** Condição SQL: o (status, produto) do lead tem cadência ativa. */
+function leadTemCadencia(pares: ParCadencia[]) {
+  return sql`(${leadsTable.status}, ${leadsTable.produto}) IN (${sql.join(
+    pares.map((p) => sql`(${p.status}, ${p.produto})`),
+    sql`, `,
+  )})`;
+}
 
 // ============================================================================
 // Tipos compartilhados
@@ -134,9 +154,7 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
   // prioridade por lead — evita o mesmo lead aparecer duas vezes.
   // docs_paradas e esfriando foram substituídos pela CADÊNCIA (playbook
   // executável): cada card já é uma ação pronta com data pra acontecer.
-  const statusComCadencia = (await listCadencias())
-    .filter((c) => c.ativa)
-    .map((c) => c.statusKey);
+  const comCadencia = paresComCadencia(await listCadencias());
   const [reunioesSemDesfecho, sla, docsNovos, cadencia, novosHoje, negociacaoParada, altoValorParado] =
     await Promise.all([
       qReuniaoSemDesfecho(consultorId),
@@ -145,7 +163,7 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
       qCadenciaDue(consultorId),
       qNovosHoje(consultorId),
       qNegociacaoParada(consultorId),
-      qAltoValorParado(consultorId, statusComCadencia),
+      qAltoValorParado(consultorId, comCadencia),
     ]);
 
   const todos: FilaItem[] = [
@@ -308,6 +326,7 @@ async function qCadenciaDue(consultorId: string): Promise<FilaItem[]> {
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       cadenciaPasso: leadsTable.cadenciaPasso,
       cadenciaProximaEm: leadsTable.cadenciaProximaEm,
+      produto: leadsTable.produto,
     })
     .from(leadsTable)
     .where(
@@ -323,7 +342,7 @@ async function qCadenciaDue(consultorId: string): Promise<FilaItem[]> {
   const cadencias = await listCadencias();
   const out: FilaItem[] = [];
   for (const r of rows) {
-    const cad = cadencias.find((c) => c.statusKey === r.status && c.ativa);
+    const cad = cadenciaDoLead(cadencias, r);
     const passo = cad?.passos[r.cadenciaPasso ?? -1];
     if (!cad || !passo) continue; // config mudou — some da fila, hook realinha
     const atrasoDias = r.cadenciaProximaEm
@@ -508,7 +527,7 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
 
 async function qAltoValorParado(
   consultorId: string,
-  statusComCadencia: string[],
+  comCadencia: ParCadencia[],
 ): Promise<FilaItem[]> {
   const rows = await db
     .select({
@@ -531,7 +550,8 @@ async function qAltoValorParado(
         // Estágios com cadência ficam de fora: quem tem cadência ativa aparece
         // no card de cadência; quem não tem, na FAXINA. Duplicar aqui só
         // afogava a fila com cards antigos sem ação pronta.
-        notInArray(leadsTable.status, [...STATUS_TERMINAIS, ...statusComCadencia]),
+        notInArray(leadsTable.status, STATUS_TERMINAIS),
+        ...(comCadencia.length > 0 ? [not(leadTemCadencia(comCadencia))] : []),
         or(
           and(
             isNull(leadsTable.ultimoContato),
@@ -811,8 +831,8 @@ const FAXINA_QUOTA_DIA = 20;
  */
 export async function getFaxina(consultorId: string): Promise<Faxina> {
   const cadencias = await listCadencias();
-  const statusComCadencia = cadencias.filter((c) => c.ativa).map((c) => c.statusKey);
-  if (statusComCadencia.length === 0) {
+  const comCadencia = paresComCadencia(cadencias);
+  if (comCadencia.length === 0) {
     return { feitasHoje: 0, quota: FAXINA_QUOTA_DIA, restantes: 0, itens: [] };
   }
   const inicioDia = startOfDayBrt(todayYmdBrt());
@@ -833,7 +853,7 @@ export async function getFaxina(consultorId: string): Promise<Faxina> {
   const base = and(
     eq(leadsTable.consultorId, consultorId),
     notInArray(leadsTable.status, STATUS_TERMINAIS),
-    inArray(leadsTable.status, statusComCadencia),
+    leadTemCadencia(comCadencia),
     sql`${leadsTable.cadenciaPasso} is null`,
     sql`coalesce(${leadsTable.ultimoContato}, ${leadsTable.atribuidoEm}, ${leadsTable.createdAt}) < now() - interval '3 days'`,
   );

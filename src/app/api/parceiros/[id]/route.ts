@@ -11,6 +11,8 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser, type AppUser } from "@/lib/auth/get-app-user";
 import { isAdmin, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { isValidCpf, limparDocumento } from "@/lib/formatters/cpf-cnpj";
+import { sincronizarEmailDeLogin } from "@/lib/portal-parceiro/conta";
 import {
   PARCEIRO_MOTIVOS_PERDA,
   PARCEIRO_SEGMENTOS,
@@ -39,6 +41,8 @@ const patchSchema = z.object({
   cidade: z.string().max(120).optional().nullable(),
   estado: z.string().length(2).optional().nullable(),
   cpfCnpj: z.string().max(20).optional().nullable(),
+  representanteNome: z.string().max(160).optional().nullable(),
+  representanteCpf: z.string().max(20).optional().nullable(),
   notas: z.string().max(4000).optional().nullable(),
   status: z.enum(PARCEIRO_STATUS).optional(),
   motivoPerda: z.enum(PARCEIRO_MOTIVOS_PERDA).optional().nullable(),
@@ -94,7 +98,43 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   // ── Campos simples ──
   if (data.nome !== undefined) set.nome = data.nome.trim();
   if (data.empresa !== undefined) set.empresa = data.empresa?.trim() ?? null;
-  if (data.email !== undefined) set.email = data.email?.trim().toLowerCase() ?? null;
+  // Identidade do parceiro (e-mail = login do portal; CPF/CNPJ e representante
+  // = partes do contrato). Depois que o acesso ao portal existe, só admin
+  // altera: senão quem edita o e-mail receberia o próximo link de criar senha.
+  const novoEmail = data.email !== undefined ? (data.email?.trim().toLowerCase() ?? null) : undefined;
+  const novoDoc = data.cpfCnpj !== undefined ? limparDocumento(data.cpfCnpj) || null : undefined;
+  const novoRepNome =
+    data.representanteNome !== undefined ? data.representanteNome?.trim() || null : undefined;
+  const novoRepCpf =
+    data.representanteCpf !== undefined
+      ? data.representanteCpf?.replace(/\D/g, "") || null
+      : undefined;
+  const mudouIdentidade =
+    (novoEmail !== undefined && novoEmail !== (parceiro.email ?? null)) ||
+    (novoDoc !== undefined && novoDoc !== (parceiro.cpfCnpj ?? null)) ||
+    (novoRepNome !== undefined && novoRepNome !== (parceiro.representanteNome ?? null)) ||
+    (novoRepCpf !== undefined && novoRepCpf !== (parceiro.representanteCpf ?? null));
+  if (mudouIdentidade && parceiro.portalAcesso !== "sem_acesso" && !isAdmin(user)) {
+    return NextResponse.json(
+      {
+        error:
+          "Este parceiro já tem acesso ao portal: e-mail, CPF/CNPJ e representante só podem ser alterados pelo admin.",
+      },
+      { status: 403 },
+    );
+  }
+  if (novoRepCpf && !isValidCpf(novoRepCpf)) {
+    return NextResponse.json({ error: "CPF do representante inválido." }, { status: 400 });
+  }
+  if (novoEmail !== undefined && novoEmail !== (parceiro.email ?? null)) {
+    // Admin trocou o e-mail de um parceiro que já tem login: o login acompanha
+    // e as sessões abertas caem.
+    const r = await sincronizarEmailDeLogin(id, novoEmail);
+    if (!r.ok) return NextResponse.json({ error: r.erro }, { status: 400 });
+  }
+  if (novoEmail !== undefined) set.email = novoEmail;
+  if (novoRepNome !== undefined) set.representanteNome = novoRepNome;
+  if (novoRepCpf !== undefined) set.representanteCpf = novoRepCpf;
   if (data.whatsapp !== undefined) {
     const d = (data.whatsapp ?? "").replace(/\D/g, "");
     set.whatsapp = d.length >= 10 ? (d.startsWith("55") ? `+${d}` : `+55${d}`) : null;
@@ -102,7 +142,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   if (data.segmento !== undefined) set.segmento = data.segmento;
   if (data.cidade !== undefined) set.cidade = data.cidade?.trim() ?? null;
   if (data.estado !== undefined) set.estado = data.estado?.toUpperCase() ?? null;
-  if (data.cpfCnpj !== undefined) set.cpfCnpj = data.cpfCnpj?.replace(/\D/g, "") || null;
+  if (novoDoc !== undefined) set.cpfCnpj = novoDoc;
   if (data.notas !== undefined) set.notas = data.notas?.trim() ?? null;
 
   // ── Gestão comercial (admin) ──

@@ -17,6 +17,8 @@ export type PassoCadencia = {
 export type CadenciaStatus = {
   id: string;
   statusKey: string;
+  /** Produto da cadência (src/lib/produtos.ts) — cada produto tem as suas. */
+  produto: string;
   passos: PassoCadencia[];
   ativa: boolean;
 };

@@ -119,12 +119,20 @@ export default async function ParceirosPage({ searchParams }: Props) {
           </p>
         </div>
         {isAdmin(user) && (
-          <Link
-            href="/parceiros/novo"
-            className={buttonVariants({ size: "sm", className: "gap-1.5" })}
-          >
-            <Plus className="size-4" /> Novo parceiro
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/parceiros/comissoes"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Comissões
+            </Link>
+            <Link
+              href="/parceiros/novo"
+              className={buttonVariants({ size: "sm", className: "gap-1.5" })}
+            >
+              <Plus className="size-4" /> Novo parceiro
+            </Link>
+          </div>
         )}
       </div>
 

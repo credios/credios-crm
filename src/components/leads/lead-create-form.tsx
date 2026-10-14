@@ -76,6 +76,7 @@ const formSchema = z.object({
   saldoDevedorReais: z.string().optional(),
   valorCreditoReais: z.string().optional(),
   consultorId: z.string().optional(),
+  parceiroId: z.string().optional(),
   origem: z.string().default("Manual"),
 });
 type FormValues = z.input<typeof formSchema>;
@@ -92,9 +93,13 @@ type Props = {
   consultores: { id: string; nome: string }[];
   /** Sources ativos da tabela tracking_sources (carregado pelo server component pai). */
   sources: Array<{ source: string; channel: string; displayName: string; ordem: number }>;
+  /** Parceiros habilitados em CGI — pra marcar quem indicou. */
+  parceiros?: { id: string; nome: string }[];
 };
 
-export function LeadCreateForm({ currentUser, consultores, sources }: Props) {
+const SEM_PARCEIRO = "__none__";
+
+export function LeadCreateForm({ currentUser, consultores, sources, parceiros = [] }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -145,6 +150,8 @@ export function LeadCreateForm({ currentUser, consultores, sources }: Props) {
           : null,
       valorCreditoCentavos: reaisToCents(values.valorCreditoReais),
       consultorId: values.consultorId || null,
+      parceiroId:
+        values.parceiroId && values.parceiroId !== SEM_PARCEIRO ? values.parceiroId : null,
       origem: values.origem || "Manual",
     };
 
@@ -384,6 +391,26 @@ export function LeadCreateForm({ currentUser, consultores, sources }: Props) {
               </SelectContent>
             </Select>
           </div>
+          {parceiros.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Parceiro que indicou</Label>
+              <Select value={watch("parceiroId") ?? ""} onValueChange={(v) => setValue("parceiroId", v ?? "")} disabled={pending}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Nenhum">
+                    {(v: unknown) =>
+                      typeof v === "string" && v && v !== SEM_PARCEIRO
+                        ? (parceiros.find((p) => p.id === v)?.nome ?? v)
+                        : null
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SEM_PARCEIRO}>Nenhum</SelectItem>
+                  {parceiros.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {isAdminOrGerente && consultores.length > 0 && (
             <div className="space-y-1.5">
               <Label>Atribuir ao consultor</Label>

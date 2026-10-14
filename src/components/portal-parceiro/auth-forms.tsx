@@ -156,7 +156,7 @@ export function ConviteForm({ token }: { token: string }) {
       <Erro mensagem={erro} />
       <NovaSenhaCampos senha={senha} setSenha={setSenha} confirma={confirma} setConfirma={setConfirma} pending={pending} />
       <label className="flex items-start gap-2 text-sm leading-snug cursor-pointer">
-        <Checkbox checked={termos} onCheckedChange={(v) => setTermos(v === true)} disabled={pending} className="mt-0.5" />
+        <Checkbox aria-label="Li e aceito os termos de uso e o aviso de privacidade" checked={termos} onCheckedChange={(v) => setTermos(v === true)} disabled={pending} className="mt-0.5" />
         <span>
           Li e aceito os{" "}
           <Link href="/portal-parceiro/termos" target="_blank" className="text-primary hover:underline">termos de uso</Link>{" "}
@@ -298,5 +298,62 @@ export function SairButton() {
     >
       Sair
     </Button>
+  );
+}
+
+export function PixForm({ pixAtual }: { pixAtual: string | null }) {
+  const router = useRouter();
+  const [pix, setPix] = useState(pixAtual ?? "");
+  const [senha, setSenha] = useState("");
+  const [pending, setPending] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErro(null);
+    setOk(false);
+    setPending(true);
+    try {
+      const res = await fetch("/api/portal-parceiro/perfil", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pixChave: pix, senhaAtual: senha }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        setErro(json.error ?? "Não foi possível salvar.");
+      } else {
+        setSenha("");
+        setOk(true);
+        router.refresh();
+      }
+    } catch {
+      setErro("Falha de conexão. Tente de novo.");
+    }
+    setPending(false);
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4 max-w-sm" noValidate>
+      <Erro mensagem={erro} />
+      {ok && (
+        <Alert>
+          <AlertDescription>Chave PIX atualizada.</AlertDescription>
+        </Alert>
+      )}
+      <div className="space-y-1.5">
+        <Label htmlFor="pp-pix">Chave PIX para receber comissões</Label>
+        <Input id="pp-pix" value={pix} onChange={(e) => setPix(e.target.value)} disabled={pending} placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória" />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="pp-pix-senha">Sua senha, para confirmar</Label>
+        <Input id="pp-pix-senha" type="password" autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} disabled={pending} />
+      </div>
+      <Button type="submit" disabled={pending || !pix.trim() || !senha}>
+        {pending && <Loader2 className="size-4 animate-spin" />}
+        Salvar chave PIX
+      </Button>
+    </form>
   );
 }

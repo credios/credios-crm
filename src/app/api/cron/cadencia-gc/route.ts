@@ -2,7 +2,7 @@ import { and, eq, isNotNull, lt, notInArray, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { interacoes, leads as leadsTable, users as usersTable } from "../../../../../db/schema";
-import { listCadencias } from "@/lib/cadencia/config";
+import { cadenciaDoLead, listCadencias } from "@/lib/cadencia/config";
 import { encerrarCadencia } from "@/lib/cadencia/engine";
 import { motivoPerdidoPadrao } from "@/lib/cadencia/tipos";
 import { db } from "@/lib/db";
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   for (const lead of candidatos) {
     // Só coleta quem parou no passo de DECISÃO (o resto é atraso de execução —
     // aparece na Mesa como atrasado, mas não é encerrado à revelia).
-    const cad = cadencias.find((c) => c.statusKey === lead.status && c.ativa);
+    const cad = cadenciaDoLead(cadencias, lead);
     const passo = cad?.passos[lead.cadenciaPasso ?? -1];
     if (!passo || passo.tipo !== "decisao") continue;
 

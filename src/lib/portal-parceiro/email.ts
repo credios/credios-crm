@@ -4,6 +4,8 @@ import { Resend } from "resend";
 
 import { renderClientEmail } from "@/lib/notifications/client-email";
 
+import { ETAPA_META, type Etapa } from "./status";
+
 const apiKey = process.env.RESEND_API_KEY;
 const replyTo = process.env.EMAIL_REPLY_TO;
 const resend = apiKey ? new Resend(apiKey) : null;
@@ -20,7 +22,16 @@ export function portalParceiroUrl(path = ""): string {
 }
 
 function primeiroNome(nome: string): string {
-  return nome.trim().split(/\s+/)[0] || nome;
+  return esc(nome.trim().split(/\s+/)[0] || nome);
+}
+
+/** Todo valor digitado por alguém (nomes) passa por aqui antes de virar HTML. */
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function p(texto: string): string {
@@ -28,10 +39,11 @@ function p(texto: string): string {
 }
 
 async function enviar(input: {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   tag: string;
+  attachments?: { filename: string; content: Buffer }[];
 }): Promise<{ ok: boolean; reason?: string }> {
   if (!resend) return { ok: false, reason: "RESEND_API_KEY ausente" };
   try {
@@ -41,6 +53,7 @@ async function enviar(input: {
       replyTo,
       subject: input.subject,
       html: input.html,
+      ...(input.attachments ? { attachments: input.attachments } : {}),
     });
     if (result.error) {
       console.error(`[portal-parceiro:${input.tag}] resend error:`, result.error);
@@ -107,19 +120,44 @@ export async function sendIndicacaoRecebidaEmail(input: {
 }) {
   const nome = primeiroNome(input.nome);
   const html = renderClientEmail({
-    preheader: `Recebemos a indicação de ${input.clienteNome}.`,
+    preheader: `Recebemos a indicação de ${esc(input.clienteNome)}.`,
     title: `${nome}, recebemos sua indicação`,
     bodyHtml:
       p(
-        `A indicação de <strong style="color:#0f1b3d">${input.clienteNome}</strong> já está com a nossa equipe. Entramos em contato com o cliente em até 1 dia útil.`,
+        `A indicação de <strong style="color:#0f1b3d">${esc(input.clienteNome)}</strong> já está com a nossa equipe. Entramos em contato com o cliente em até 1 dia útil.`,
       ) + p("Você acompanha cada etapa pelo portal."),
     cta: { href: portalParceiroUrl(`/clientes/${input.leadId}`), label: "Acompanhar indicação" },
   });
   return enviar({
     to: input.email,
-    subject: `Indicação recebida: ${input.clienteNome}`,
+    subject: `Indicação recebida: ${input.clienteNome.replace(/[\r\n]/g, " ")}`,
     html,
     tag: "indicacao",
+  });
+}
+
+export async function sendEtapaIndicacaoEmail(input: {
+  nome: string;
+  email: string;
+  clienteNome: string;
+  leadId: string;
+  etapa: Etapa;
+}) {
+  const meta = ETAPA_META[input.etapa];
+  const html = renderClientEmail({
+    preheader: `${esc(input.clienteNome)}: ${meta.label}.`,
+    title: `${primeiroNome(input.nome)}, novidade na sua indicação`,
+    bodyHtml:
+      p(
+        `A indicação de <strong style="color:#0f1b3d">${esc(input.clienteNome)}</strong> avançou para <strong style="color:#0f1b3d">${meta.label}</strong>.`,
+      ) + p(meta.descricao),
+    cta: { href: portalParceiroUrl(`/clientes/${input.leadId}`), label: "Ver no portal" },
+  });
+  return enviar({
+    to: input.email,
+    subject: `${meta.label}: ${input.clienteNome.replace(/[\r\n]/g, " ")}`,
+    html,
+    tag: "etapa",
   });
 }
 
@@ -158,18 +196,31 @@ export async function sendContratoAssinadoParceiroEmail(input: {
 
 export async function sendContratoConcluidoEmail(input: {
   nome: string;
-  email: string;
+  para: string[];
   codigo: string;
+  hash: string;
+  pdf: Buffer;
 }) {
   const html = renderClientEmail({
-    preheader: "A via final do contrato, assinada pelas duas partes, está disponível.",
+    preheader: "A via final do contrato, assinada pelas duas partes, segue em anexo.",
     title: "Contrato de parceria concluído",
     bodyHtml:
-      p("A Credios também assinou o contrato de parceria. A via final, com as duas assinaturas e a trilha de auditoria, está disponível para download no portal.") +
-      p(`Qualquer pessoa pode conferir a autenticidade pelo código <strong style="color:#0f1b3d">${input.codigo}</strong>.`),
-    cta: { href: portalParceiroUrl("/contrato"), label: "Baixar o contrato" },
+      p(
+        `O contrato de parceria entre <strong style="color:#0f1b3d">${esc(input.nome)}</strong> e a Credios foi assinado pelas duas partes. A via final, com as assinaturas e a trilha de auditoria, segue <strong style="color:#0f1b3d">em anexo</strong> — guarde este e-mail.`,
+      ) +
+      p(`Código de verificação: <strong style="color:#0f1b3d">${input.codigo}</strong>`) +
+      p(
+        `Impressão digital (SHA-256) do arquivo anexo:<br><span style="font-family:'Courier New',monospace;font-size:12px;word-break:break-all">${input.hash}</span>`,
+      ),
+    cta: { href: portalParceiroUrl(`/verificar/${input.codigo}`), label: "Conferir autenticidade" },
   });
-  return enviar({ to: input.email, subject: "Contrato de parceria concluído — Credios", html, tag: "concluido" });
+  return enviar({
+    to: [...new Set(input.para.filter(Boolean))],
+    subject: `Contrato de parceria concluído — ${input.codigo}`,
+    html,
+    tag: "concluido",
+    attachments: [{ filename: `contrato-credios-${input.codigo}.pdf`, content: input.pdf }],
+  });
 }
 
 /** Aviso interno: parceiro assinou, falta a contra-assinatura da Credios. */
@@ -181,10 +232,10 @@ export async function sendPedidoContraAssinaturaEmail(input: {
   if (input.para.length === 0) return { ok: true };
   const url = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/parceiros/${input.parceiroId}`;
   const html = renderClientEmail({
-    preheader: `${input.parceiroNome} assinou o contrato de parceria.`,
+    preheader: `${esc(input.parceiroNome)} assinou o contrato de parceria.`,
     title: "Contrato aguardando a assinatura da Credios",
     bodyHtml: p(
-      `<strong style="color:#0f1b3d">${input.parceiroNome}</strong> assinou o contrato de parceria. Falta a contra-assinatura da Credios para gerar a via final.`,
+      `<strong style="color:#0f1b3d">${esc(input.parceiroNome)}</strong> assinou o contrato de parceria. Falta a contra-assinatura da Credios para gerar a via final.`,
     ),
     cta: { href: url, label: "Abrir a ficha do parceiro" },
   });
@@ -194,7 +245,7 @@ export async function sendPedidoContraAssinaturaEmail(input: {
       from: FROM,
       to: input.para,
       replyTo,
-      subject: `Contrato para contra-assinar: ${input.parceiroNome}`,
+      subject: `Contrato para contra-assinar: ${input.parceiroNome.replace(/[\r\n]/g, " ")}`,
       html,
     });
     return r.error ? { ok: false, reason: r.error.message } : { ok: true };

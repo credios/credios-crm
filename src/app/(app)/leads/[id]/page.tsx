@@ -9,6 +9,7 @@ import {
   leadDocumentos,
   leads as leadsTable,
   mensagensTemplate,
+  parceiros as parceirosTable,
   reunioes,
   scoreSolicitacoes,
   users as usersTable,
@@ -31,6 +32,7 @@ import {
   LeadQualificacaoCard,
 } from "@/components/leads/lead-detail-sections";
 import { LeadCadastroCard } from "@/components/leads/lead-cadastro-card";
+import { LeadParceiroEditar } from "@/components/leads/lead-parceiro-editar";
 import {
   type CondominioDetailData,
   LeadCondominioCard,
@@ -318,6 +320,15 @@ export default async function LeadDetailPage({ params }: Props) {
           <LeadContatoCard lead={lead} canEdit={canEdit} />
           {cgi && <LeadConjugeCard lead={lead} canEdit={canEdit} />}
           <LeadParceriaCard lead={lead} />
+          {canAssign && (
+            <Suspense fallback={null}>
+              <ParceiroIndicadorBlock
+                leadId={lead.id}
+                produto={row.produto}
+                parceiroId={row.parceiroId}
+              />
+            </Suspense>
+          )}
           {condominio ? (
             <>
               <LeadCondominioOperacaoCard lead={lead} condominio={condominio} canEdit={canEdit} />
@@ -439,6 +450,31 @@ export default async function LeadDetailPage({ params }: Props) {
 // Suspense blocks — cada um carrega seu próprio dado em paralelo.
 // Falha de um bloco mostra um fallback local (via try/catch dentro do bloco).
 // ============================================================================
+
+async function ParceiroIndicadorBlock(props: {
+  leadId: string;
+  produto: string;
+  parceiroId: string | null;
+}) {
+  const lista = await db
+    .select({ id: parceirosTable.id, nome: parceirosTable.nome, empresa: parceirosTable.empresa })
+    .from(parceirosTable)
+    .where(
+      sql`(${parceirosTable.status} <> 'perdido' AND ${parceirosTable.produtosHabilitados} @> ARRAY[${props.produto}]::text[]) OR ${parceirosTable.id} = ${props.parceiroId}`,
+    )
+    .orderBy(parceirosTable.nome)
+    .catch(() => []);
+  return (
+    <LeadParceiroEditar
+      leadId={props.leadId}
+      parceiroId={props.parceiroId}
+      parceiros={lista.map((p) => ({
+        id: p.id,
+        nome: p.empresa ? `${p.nome} (${p.empresa})` : p.nome,
+      }))}
+    />
+  );
+}
 
 async function HeaderBlock(props: {
   leadId: string;

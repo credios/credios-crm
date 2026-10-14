@@ -1,3 +1,4 @@
+import { EnviarNotaFiscal } from "@/components/portal-parceiro/nota-fiscal";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { COMISSAO_STATUS_LABEL, type ComissaoStatus } from "@/lib/parceiros/constants";
@@ -42,8 +43,9 @@ export default async function ComissoesPage() {
         <CardContent className="pt-5">
           {comissoes.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Nenhuma comissão registrada ainda. Ela aparece aqui quando o crédito de um
-              cliente indicado é liberado.
+              Nenhuma comissão registrada ainda. Ela aparece aqui quando a operação de um
+              cliente indicado é concluída. Se o seu cadastro é de pessoa jurídica, é por
+              aqui que você envia a nota fiscal.
             </p>
           ) : (
             <ul className="divide-y">
@@ -54,9 +56,23 @@ export default async function ComissoesPage() {
                     <p className="text-xs text-muted-foreground">
                       {COMISSAO_STATUS_LABEL[c.status as ComissaoStatus] ?? c.status}
                       {c.pagoEm ? ` em ${dataBr(c.pagoEm)}` : ""}
+                      {!c.pagoEm && c.vencimento ? ` · pagamento previsto até ${dataBr(c.vencimento)}` : ""}
+                    </p>
+                    <p className="mt-1 flex flex-wrap gap-x-3 text-xs">
+                      {c.temComprovante && (
+                        <a href={`/api/portal-parceiro/comissoes/${c.id}/arquivo?tipo=comprovante`} className="text-primary hover:underline">
+                          Comprovante de pagamento
+                        </a>
+                      )}
+                      {c.temNota && (
+                        <a href={`/api/portal-parceiro/comissoes/${c.id}/arquivo?tipo=nota`} className="text-primary hover:underline">
+                          Nota fiscal enviada
+                        </a>
+                      )}
                     </p>
                   </div>
                   <span className="font-semibold tabular-nums">{formatBrlFromCents(c.valorCentavos)}</span>
+                  {c.status !== "paga" && <EnviarNotaFiscal comissaoId={c.id} jaTem={c.temNota} />}
                 </li>
               ))}
             </ul>

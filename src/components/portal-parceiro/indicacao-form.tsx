@@ -23,15 +23,18 @@ import { FINALIDADES_CONDOMINIO } from "@/lib/condominio/constants";
 import { UFS } from "@/lib/constants";
 import { maskCnpj, maskCpfCnpj } from "@/lib/formatters/cpf-cnpj";
 import { TIPOS_IMOVEL_PARCEIRO } from "@/lib/portal-parceiro/prequal";
+
+import { InputReais, mascaraTelefone } from "./campos";
 import { PRODUTO_LABEL, type Produto } from "@/lib/produtos";
 
 // Indicação de cliente pelo parceiro. O formulário muda conforme o produto;
 // a política de crédito (pisos, LTV, renda) é validada no servidor, que
 // devolve os erros por campo.
 
-function centavos(s: string): number {
-  const n = Number(s.replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+/** Os campos de valor guardam reais inteiros (só dígitos). */
+function centavos(digitos: string): number {
+  const n = Number(digitos);
+  return Number.isFinite(n) && n > 0 ? n * 100 : 0;
 }
 
 function Campo({
@@ -232,7 +235,7 @@ export function IndicacaoForm({ produtos }: { produtos: string[] }) {
             </Campo>
           )}
           <Campo id="in-wa" label={cond ? "WhatsApp do síndico *" : "WhatsApp *"} erro={err("whatsapp")}>
-            <Input id="in-wa" type="tel" placeholder="(00) 00000-0000" value={f.whatsapp} onChange={set("whatsapp")} disabled={pending} />
+            <Input id="in-wa" type="tel" inputMode="numeric" placeholder="(00) 00000-0000" value={f.whatsapp} onChange={(e) => setF((p) => ({ ...p, whatsapp: mascaraTelefone(e.target.value) }))} disabled={pending} />
           </Campo>
           <Campo id="in-email" label="E-mail" erro={err("email")}>
             <Input id="in-email" type="email" value={f.email} onChange={set("email")} disabled={pending} />
@@ -267,7 +270,7 @@ export function IndicacaoForm({ produtos }: { produtos: string[] }) {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Campo id="in-credito" label="Crédito desejado (R$) *" erro={err("valorCredito")}>
-            <Input id="in-credito" inputMode="decimal" placeholder="300000" value={f.valorCredito} onChange={set("valorCredito")} disabled={pending} />
+            <InputReais id="in-credito" value={f.valorCredito} onChange={(v) => setF((p) => ({ ...p, valorCredito: v }))} disabled={pending} placeholder="300.000" />
           </Campo>
           {cond ? (
             <Campo label="Finalidade do crédito *" erro={err("finalidade")}>
@@ -291,16 +294,16 @@ export function IndicacaoForm({ produtos }: { produtos: string[] }) {
                 </Select>
               </Campo>
               <Campo id="in-imovel" label="Valor do imóvel (R$) *" erro={err("valorImovel")}>
-                <Input id="in-imovel" inputMode="decimal" placeholder="800000" value={f.valorImovel} onChange={set("valorImovel")} disabled={pending} />
+                <InputReais id="in-imovel" value={f.valorImovel} onChange={(v) => setF((p) => ({ ...p, valorImovel: v }))} disabled={pending} placeholder="800.000" />
               </Campo>
               <Campo id="in-saldo" label="Saldo devedor do imóvel (R$)" erro={err("saldoDevedor")} dica="Deixe em branco se o imóvel está quitado.">
-                <Input id="in-saldo" inputMode="decimal" value={f.saldoDevedor} onChange={set("saldoDevedor")} disabled={pending} />
+                <InputReais id="in-saldo" value={f.saldoDevedor} onChange={(v) => setF((p) => ({ ...p, saldoDevedor: v }))} disabled={pending} />
               </Campo>
               <Campo id="in-renda" label="Renda mensal do titular (R$) *" erro={err("rendaTitular")}>
-                <Input id="in-renda" inputMode="decimal" value={f.rendaTitular} onChange={set("rendaTitular")} disabled={pending} />
+                <InputReais id="in-renda" value={f.rendaTitular} onChange={(v) => setF((p) => ({ ...p, rendaTitular: v }))} disabled={pending} />
               </Campo>
               <Campo id="in-renda2" label="Renda do cônjuge (R$)" erro={err("rendaConjuge")} dica="Só se compõe renda.">
-                <Input id="in-renda2" inputMode="decimal" value={f.rendaConjuge} onChange={set("rendaConjuge")} disabled={pending} />
+                <InputReais id="in-renda2" value={f.rendaConjuge} onChange={(v) => setF((p) => ({ ...p, rendaConjuge: v }))} disabled={pending} />
               </Campo>
             </>
           )}
@@ -311,7 +314,7 @@ export function IndicacaoForm({ produtos }: { produtos: string[] }) {
       </Card>
 
       <label className="flex items-start gap-2 text-sm leading-snug cursor-pointer">
-        <Checkbox checked={consentimento} onCheckedChange={(v) => setConsentimento(v === true)} disabled={pending} className="mt-0.5" />
+        <Checkbox aria-label="Confirmo que tenho autorização do cliente" checked={consentimento} onCheckedChange={(v) => setConsentimento(v === true)} disabled={pending} className="mt-0.5" />
         <span>
           Confirmo que tenho autorização do cliente para compartilhar estes dados com a
           Credios para análise de crédito.

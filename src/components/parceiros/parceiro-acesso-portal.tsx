@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Confirmar } from "@/components/shared/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,8 +35,7 @@ export function ParceiroAcessoPortal({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
-  async function agir(acao: "convidar" | "suspender" | "reativar", confirmar?: string) {
-    if (confirmar && !window.confirm(confirmar)) return;
+  async function agir(acao: "convidar" | "suspender" | "reativar") {
     setBusy(true);
     try {
       const res = await fetch(`/api/parceiros/${parceiroId}/acesso-portal`, {
@@ -86,14 +86,7 @@ export function ParceiroAcessoPortal({
               size="sm"
               variant={acesso === "sem_acesso" ? "default" : "outline"}
               disabled={busy || !temEmail}
-              onClick={() =>
-                void agir(
-                  "convidar",
-                  acesso === "ativo"
-                    ? "Enviar um link para o parceiro definir uma nova senha?"
-                    : undefined,
-                )
-              }
+              onClick={() => void agir("convidar")}
             >
               {acesso === "sem_acesso"
                 ? "Convidar para o portal"
@@ -103,14 +96,19 @@ export function ParceiroAcessoPortal({
             </Button>
           )}
           {(acesso === "ativo" || acesso === "convidado") && (
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => void agir("suspender", "Suspender o acesso deste parceiro ao portal?")}
+            <Confirmar
+              titulo="Suspender o acesso ao portal?"
+              descricao="O parceiro é desconectado na hora e não consegue mais entrar. Indicações e comissões ficam preservadas, e você pode reativar depois."
+              rotulo="Suspender acesso"
+              destrutivo
+              onConfirmar={() => agir("suspender")}
             >
-              Suspender
-            </Button>
+              {(abrir) => (
+                <Button size="sm" variant="ghost" disabled={busy} onClick={abrir}>
+                  Suspender
+                </Button>
+              )}
+            </Confirmar>
           )}
           {acesso === "suspenso" && (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => void agir("reativar")}>

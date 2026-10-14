@@ -44,6 +44,8 @@ type ParceiroDados = {
   cidade: string | null;
   estado: string | null;
   cpfCnpj: string | null;
+  representanteNome: string | null;
+  representanteCpf: string | null;
   notas: string | null;
 };
 
@@ -78,6 +80,8 @@ export function ParceiroEditar({
     cidade: parceiro.cidade ?? "",
     estado: parceiro.estado ?? "",
     cpfCnpj: parceiro.cpfCnpj ?? "",
+    representanteNome: parceiro.representanteNome ?? "",
+    representanteCpf: parceiro.representanteCpf ?? "",
     notas: parceiro.notas ?? "",
   });
 
@@ -100,6 +104,8 @@ export function ParceiroEditar({
           cidade: f.cidade || null,
           estado: f.estado || null,
           cpfCnpj: f.cpfCnpj || null,
+          representanteNome: f.representanteNome || null,
+          representanteCpf: f.representanteCpf || null,
           notas: f.notas || null,
         }),
       });
@@ -124,6 +130,12 @@ export function ParceiroEditar({
     ["CPF/CNPJ", fmtCpfCnpj(parceiro.cpfCnpj)],
     ["Responsável", consultorNome ?? "Triagem (sem dono)"],
   ];
+  if (parceiro.representanteNome) {
+    linhas.push([
+      "Representante legal",
+      `${parceiro.representanteNome}${parceiro.representanteCpf ? ` · CPF ${fmtCpfCnpj(parceiro.representanteCpf)}` : ""}`,
+    ]);
+  }
   if (motivoPerda) {
     const [chave, ...resto] = motivoPerda.split(":");
     const label =
@@ -199,6 +211,21 @@ export function ParceiroEditar({
                 value={f.cpfCnpj}
                 onChange={(e) => set("cpfCnpj", e.target.value)}
                 placeholder="Necessário pro contrato"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Representante legal (PJ)</Label>
+              <Input
+                value={f.representanteNome}
+                onChange={(e) => set("representanteNome", e.target.value)}
+                placeholder="Quem assina pela empresa"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>CPF do representante</Label>
+              <Input
+                value={f.representanteCpf}
+                onChange={(e) => set("representanteCpf", e.target.value)}
               />
             </div>
             <div className="space-y-1.5">

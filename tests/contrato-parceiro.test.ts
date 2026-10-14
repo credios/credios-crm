@@ -8,7 +8,11 @@ import {
   percentual,
   percentualExtenso,
 } from "@/lib/portal-parceiro/contrato/mescla";
-import { CONTRATO_MODELO_V3 } from "@/lib/portal-parceiro/contrato/modelo";
+import {
+  CONTRATO_MODELO_V3,
+  CONTRATO_MODELO_VIGENTE,
+  VERSAO_MODELO,
+} from "@/lib/portal-parceiro/contrato/modelo";
 import { buildSignedPdf, renderContractPdf } from "@/lib/portal-parceiro/contrato/pdf";
 import { gerarCodigoVerificacao, gerarOtp, hashIgual, hashToken, sha256Hex } from "@/lib/portal-parceiro/tokens";
 
@@ -21,8 +25,8 @@ const PF = {
   comissaoPadraoBps: null,
 };
 
-describe("mescla do contrato v3", () => {
-  const html = mesclarContrato(CONTRATO_MODELO_V3, PF, new Date("2026-10-13T15:00:00Z"));
+describe("mescla do contrato vigente", () => {
+  const html = mesclarContrato(CONTRATO_MODELO_VIGENTE, PF, new Date("2026-10-13T15:00:00Z"));
 
   it("não deixa nenhum campo {{...}} sem preencher", () => {
     expect(html).not.toMatch(/\{\{/);
@@ -37,10 +41,14 @@ describe("mescla do contrato v3", () => {
     // Condomínio: 3% fixo, 10 dias corridos da assinatura do contrato de crédito
     expect(html).toContain("comissão fixa de <strong>3,00%");
     expect(html).toContain("em até 10 dias corridos contados da assinatura do contrato de crédito");
+    // v4: de uma vez, sobre o total contratado, mesmo com liberação em parcelas
+    expect(html).toContain("paga de uma única vez");
+    expect(html).toContain("sobre o valor líquido total do crédito contratado pelo condomínio");
+    expect(html).toContain("ainda que a liberação do crédito ao condomínio ocorra em parcelas");
   });
 
   it("usa o percentual próprio do parceiro no CGI, sem mexer no de condomínio", () => {
-    const h = mesclarContrato(CONTRATO_MODELO_V3, { ...PF, comissaoPadraoBps: 250 }, new Date());
+    const h = mesclarContrato(CONTRATO_MODELO_VIGENTE, { ...PF, comissaoPadraoBps: 250 }, new Date());
     expect(h).toContain("2,50% (dois vírgula cinco zero por cento)</strong> sobre o valor líquido da operação");
     expect(h).toContain("comissão fixa de <strong>3,00%");
   });
@@ -53,14 +61,30 @@ describe("mescla do contrato v3", () => {
 
   it("PJ: a empresa é a parte e a pessoa assina como representante", () => {
     const pj = { ...PF, empresa: "Imobiliária Exemplo Ltda", cpfCnpj: "11222333000181" };
-    const h = mesclarContrato(CONTRATO_MODELO_V3, pj, new Date());
+    const h = mesclarContrato(CONTRATO_MODELO_VIGENTE, pj, new Date());
     expect(h).toContain("Imobiliária Exemplo Ltda, inscrito(a) no CPF/CNPJ sob nº 11.222.333/0001-81, neste ato representada por Maria da Silva");
+    // representante informado, com CPF, substitui a pessoa do cadastro
+    const h2 = mesclarContrato(
+      CONTRATO_MODELO_VIGENTE,
+      { ...pj, representanteNome: "João Souza", representanteCpf: "52998224725" },
+      new Date(),
+    );
+    expect(h2).toContain("neste ato representada por João Souza, CPF 529.982.247-25");
+    expect(h2).toContain("declara, sob as penas da lei, ser seu representante legal");
     expect(nomeContratual(pj)).toBe("Imobiliária Exemplo Ltda");
   });
 
   it("escapa HTML vindo do cadastro", () => {
-    const h = mesclarContrato(CONTRATO_MODELO_V3, { ...PF, nome: "<script>x</script>" }, new Date());
+    const h = mesclarContrato(CONTRATO_MODELO_VIGENTE, { ...PF, nome: "<script>x</script>" }, new Date());
     expect(h).not.toContain("<script>");
+  });
+});
+
+describe("versões do modelo", () => {
+  it("a vigente é a 4 e a 3 continua intacta (contrato assinado não muda)", () => {
+    expect(VERSAO_MODELO).toBe(4);
+    expect(CONTRATO_MODELO_V3).toContain("sobre o valor líquido do crédito liberado ao condomínio");
+    expect(CONTRATO_MODELO_V3).not.toContain("paga de uma única vez");
   });
 });
 
@@ -87,7 +111,7 @@ describe("helpers", () => {
 
 describe("PDF do contrato", () => {
   it("gera o original e a via final com manifesto; o hash confere", async () => {
-    const html = mesclarContrato(CONTRATO_MODELO_V3, PF, new Date("2026-10-13T15:00:00Z"));
+    const html = mesclarContrato(CONTRATO_MODELO_VIGENTE, PF, new Date("2026-10-13T15:00:00Z"));
     const original = await renderContractPdf(html, { verifyCode: "CRD-TEST-0001" });
     const paginasOriginal = (await PDFDocument.load(original)).getPageCount();
     expect(paginasOriginal).toBeGreaterThanOrEqual(2);

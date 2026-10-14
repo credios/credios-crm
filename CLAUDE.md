@@ -811,7 +811,16 @@ Documentado aqui apenas para garantir que o schema seja projetado com expansão 
 - `/parceiros`: cadastrar e gerenciar é admin; o consultor **continua vendo os parceiros que ele atende** (comportamento atual).
 - Condomínio terá formulário público no site em breve — o webhook já aceita `produto: "CONDOMINIO"` + bloco `condominio`.
 
-**Pendências conhecidas da Fase 1:**
-- Relatórios em SQL cru (saúde do pipeline, projeção do mês, percentis, distribuições) e a Minha Mesa ainda não filtram por produto.
-- Cadências (`cadencia_config`) ainda são por status, não por produto: a Mesa sugere a lead de condomínio os passos e textos da cadência de CGI (envio é manual). Templates das "Mensagens sugeridas" já são por produto, mas não há templates de condomínio cadastrados.
-- O formulário de indicação do portal de parceiros ainda não envia o bloco `condominio` (entra na Fase 4).
+**Consolidação (2026-10-13/14) — decisões do owner e regras novas:**
+- Comissão de CGI é sempre **caso a caso** (nada nasce sozinho; a página `/parceiros/comissoes` lista "fechadas sem comissão"). Condomínio: 3% fixo nasce no fechamento, status `a_pagar`, vencimento = `data_fechamento` + 10 dias corridos. **No lead de condomínio, `data_fechamento` é a data de assinatura do contrato de crédito.** Reabrir o lead cancela a comissão não paga.
+- Contrato **v4** (`modelo.ts`): condomínio pago de uma vez sobre o total contratado, mesmo com liberação em parcelas; PJ assina por representante com CPF e declaração de poderes (`parceiros.representante_*`). Publicado sem revisão de advogado, por decisão do owner.
+- Validade da assinatura: toda etapa recebe o `contratoId` exibido; código e assinatura conferem que o cadastro não mudou (`dados_hash`) — mudou, o pendente é cancelado e refeito; confirmação por código vale 15 min; `SIGNED` grava hash do PDF, usuário e e-mail do código; retrato do signatário em `parceiro_contratos.signatario`; a contra-assinatura usa esse retrato e manda a via final em anexo com o hash às duas partes. "Contrato aberto" é registrado pelo navegador (`/contrato/visualizado`), nunca no render (o Next pré-carrega páginas).
+- Parceiro edita a própria chave PIX (com senha; evento na ficha) e envia nota fiscal. E-mail ao parceiro só nas etapas `em_credito`, `liberada`, `nao_aprovada` (`avisos.ts`, um por indicação+etapa).
+- Depois do convite, e-mail/CPF-CNPJ/representante do parceiro só o admin altera; o e-mail de login acompanha.
+- CNPJ alfanumérico (Receita, jul/2026) aceito: use `limparDocumento()` / `isValidCnpj()` de `src/lib/formatters/cpf-cnpj.ts`, nunca `replace(/\D/g, "")` em CNPJ.
+- Cadências são por **(status, produto)** (`cadencia_config.produto`, 0055). Produto sem cadência não herda a do CGI; o editor copia as etapas do CGI desligadas e sem template.
+- Templates de condomínio iniciais inseridos pela 0055 (5, editáveis em Configurações → Mensagens).
+
+**Pendências conhecidas:**
+- Minha Mesa não tem filtro de produto; os widgets fixos de relatório (projeção do mês, pipeline em reais, saúde por consultor) somam todos os produtos.
+- Integração com o portal antigo (`notifyPartnerPortal` → webhook, card de handoff) só sai depois da virada do domínio.

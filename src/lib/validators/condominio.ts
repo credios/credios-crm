@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { ASSEMBLEIA_STATUS } from "@/lib/condominio/constants";
-import { isValidCnpj, isValidCpf } from "@/lib/formatters/cpf-cnpj";
+import { isValidCnpj, isValidCpf, limparDocumento } from "@/lib/formatters/cpf-cnpj";
 
 const texto = (max: number) =>
   z
@@ -29,8 +29,8 @@ export const condominioSchema = z.object({
   cnpj: z
     .string()
     .nullish()
-    .refine((v) => !soDigitos(v) || isValidCnpj(v), "CNPJ inválido")
-    .transform((v) => soDigitos(v) || null),
+    .refine((v) => !limparDocumento(v) || isValidCnpj(v), "CNPJ inválido")
+    .transform((v) => limparDocumento(v) || null),
   cep: texto(20),
   logradouro: texto(200),
   numero: texto(20),

@@ -19,6 +19,9 @@ export type DadosParceiroContrato = {
   email: string;
   whatsapp: string | null;
   comissaoPadraoBps: number | null;
+  /** PJ: quem assina pela empresa. Ausente = a pessoa do cadastro (`nome`). */
+  representanteNome?: string | null;
+  representanteCpf?: string | null;
 };
 
 const MESES = [
@@ -71,8 +74,14 @@ export function mesclarContrato(
   const pj = doc.length === 14;
   // PJ: quem contrata é a empresa; a pessoa cadastrada assina como representante.
   const nome = pj && p.empresa ? p.empresa : p.nome;
+  const repNome = p.representanteNome?.trim() || p.nome;
+  const repCpf = (p.representanteCpf ?? "").replace(/\D/g, "");
   const representante =
-    pj && p.empresa ? `, neste ato representada por ${escapar(p.nome)}` : "";
+    pj && p.empresa
+      ? `, neste ato representada por ${escapar(repNome)}${
+          repCpf.length === 11 ? `, CPF ${formatCpfOrCnpj(repCpf)}` : ""
+        }`
+      : "";
   const cgi = percentual(p.comissaoPadraoBps ?? COMISSAO_CGI_PADRAO_BPS);
   const cond = percentual(COMISSAO_CONDOMINIO_BPS);
 
@@ -84,7 +93,7 @@ export function mesclarContrato(
     "parceiro.documento": formatCpfOrCnpj(doc),
     "parceiro.representante": representante,
     "parceiro.email": escapar(p.email),
-    "parceiro.telefone": p.whatsapp ? formatPhoneBr(p.whatsapp) : "não informado",
+    "parceiro.telefone": p.whatsapp ? escapar(formatPhoneBr(p.whatsapp)) : "não informado",
     "comissao.cgi": cgi,
     "comissao.cgiExtenso": percentualExtenso(cgi),
     "comissao.cgiPrazo": String(PRAZO_CGI_DIAS_UTEIS),

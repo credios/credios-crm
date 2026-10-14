@@ -1,5 +1,9 @@
-import { TrocarSenhaForm } from "@/components/portal-parceiro/auth-forms";
+import { eq } from "drizzle-orm";
+
+import { parceiros } from "../../../../../db/schema";
+import { PixForm, TrocarSenhaForm } from "@/components/portal-parceiro/auth-forms";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { db } from "@/lib/db";
 import { exigirParceiro } from "@/lib/portal-parceiro/sessao";
 import { PRODUTO_LABEL, type Produto } from "@/lib/produtos";
 
@@ -8,6 +12,11 @@ export const metadata = { title: "Perfil" };
 
 export default async function PerfilPage() {
   const sessao = await exigirParceiro();
+  const [p] = await db
+    .select({ pixChave: parceiros.pixChave })
+    .from(parceiros)
+    .where(eq(parceiros.id, sessao.parceiroId))
+    .limit(1);
   return (
     <>
       <h1 className="font-display text-2xl font-semibold tracking-[-0.02em]">Perfil</h1>
@@ -30,8 +39,17 @@ export default async function PerfilPage() {
             </dd>
           </dl>
           <p className="mt-3 text-xs text-muted-foreground">
-            Para alterar cadastro, dados de pagamento ou produtos, fale com a Credios.
+            Para alterar cadastro ou produtos, fale com a Credios.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pagamento</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PixForm pixAtual={p?.pixChave ?? null} />
         </CardContent>
       </Card>
 

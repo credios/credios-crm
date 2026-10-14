@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PRODUTO_LABEL, PRODUTOS_ATIVOS, type Produto } from "@/lib/produtos";
 import { Input } from "@/components/ui/input";
 
 // Editor das cadências (Admin). Um card por estágio; linhas de passo editáveis
@@ -40,23 +41,73 @@ export function CadenciasEditor() {
   const [cadencias, setCadencias] = useState<Cadencia[] | null>(null);
   const [templates, setTemplates] = useState<TemplateOpt[]>([]);
   const [salvando, setSalvando] = useState<string | null>(null);
+  const [produto, setProduto] = useState<Produto>("CGI");
+  const [recarga, setRecarga] = useState(0);
+  const [copiando, setCopiando] = useState(false);
 
   useEffect(() => {
-    void fetch("/api/configuracoes/cadencias")
+    let vivo = true;
+    void fetch(`/api/configuracoes/cadencias?produto=${produto}`)
       .then((r) => r.json())
       .then((json: { cadencias?: Cadencia[]; templates?: TemplateOpt[] }) => {
+        if (!vivo) return;
         setCadencias(json.cadencias ?? []);
         setTemplates(json.templates ?? []);
       })
       .catch(() => toast.error("Não consegui carregar as cadências"));
-  }, []);
+    return () => {
+      vivo = false;
+    };
+  }, [produto, recarga]);
+
+  const seletor = (
+    <div className="flex w-fit gap-1 rounded-lg border bg-muted/40 p-1" role="tablist" aria-label="Produto">
+      {PRODUTOS_ATIVOS.map((p) => (
+        <button
+          key={p}
+          type="button"
+          role="tab"
+          aria-selected={p === produto}
+          onClick={() => {
+            if (p === produto) return;
+            setCadencias(null);
+            setProduto(p);
+          }}
+          className={
+            p === produto
+              ? "rounded-md bg-background px-3 py-1.5 text-sm font-medium shadow-sm"
+              : "rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+          }
+        >
+          {PRODUTO_LABEL[p]}
+        </button>
+      ))}
+    </div>
+  );
 
   if (!cadencias) {
     return (
-      <div className="surface-solid rounded-xl p-8 text-center">
-        <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" />
+      <div className="space-y-4">
+        {seletor}
+        <div className="surface-solid rounded-xl p-8 text-center">
+          <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" />
+        </div>
       </div>
     );
+  }
+
+  async function copiarDoCgi() {
+    setCopiando(true);
+    const res = await fetch("/api/configuracoes/cadencias", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ produto }),
+    });
+    setCopiando(false);
+    if (!res.ok) return void toast.error("Não consegui copiar as etapas.");
+    toast.success("Etapas copiadas. Escolha os templates e ligue cada cadência.");
+    setCadencias(null);
+    setRecarga((n) => n + 1);
   }
 
   function mudar(statusKey: string, fn: (c: Cadencia) => Cadencia) {
@@ -68,7 +119,7 @@ export function CadenciasEditor() {
     const res = await fetch("/api/configuracoes/cadencias", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ statusKey: c.statusKey, passos: c.passos, ativa: c.ativa }),
+      body: JSON.stringify({ statusKey: c.statusKey, produto, passos: c.passos, ativa: c.ativa }),
     });
     setSalvando(null);
     if (!res.ok) {
@@ -81,6 +132,21 @@ export function CadenciasEditor() {
 
   return (
     <div className="space-y-4">
+      {seletor}
+      {cadencias.length === 0 && (
+        <div className="surface-solid space-y-3 rounded-xl p-6">
+          <p className="text-sm text-muted-foreground">
+            {PRODUTO_LABEL[produto]} ainda não tem cadências. Enquanto não tiver, os leads
+            desse produto não entram na fila de follow-up automático. Você pode começar
+            copiando as etapas do CGI (dias e tipos de passo); os templates de mensagem
+            ficam em branco para você escolher os do produto.
+          </p>
+          <Button size="sm" onClick={() => void copiarDoCgi()} disabled={copiando}>
+            {copiando && <Loader2 className="size-4 animate-spin" />}
+            Copiar etapas do CGI
+          </Button>
+        </div>
+      )}
       {cadencias.map((c) => {
         // Dia acumulado (D+N) pra leitura fácil.
         let acumulado = 0;

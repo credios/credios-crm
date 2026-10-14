@@ -33,7 +33,12 @@ export async function iniciarCadencia(
   statusKey: string,
   opts?: { primeiraEm?: Date },
 ): Promise<boolean> {
-  const cad = await cadenciaDoStatus(statusKey);
+  const [alvo] = await db
+    .select({ produto: leads.produto })
+    .from(leads)
+    .where(eq(leads.id, leadId))
+    .limit(1);
+  const cad = await cadenciaDoStatus(statusKey, alvo?.produto);
   if (!cad) {
     await encerrarCadencia(leadId);
     return false;
@@ -115,6 +120,7 @@ export async function reagendarPorInteracao(leadId: string): Promise<void> {
 type LeadCadencia = {
   id: string;
   status: string;
+  produto?: string | null;
   cadenciaPasso: number | null;
 };
 
@@ -123,7 +129,7 @@ export async function avancarPasso(
   lead: LeadCadencia,
   motivo: "executou" | "pulou",
 ): Promise<void> {
-  const cad = await cadenciaDoStatus(lead.status);
+  const cad = await cadenciaDoStatus(lead.status, lead.produto);
   if (!cad || lead.cadenciaPasso == null) return;
   const prox = proximaDataAposExecutar(cad.passos, lead.cadenciaPasso);
   const patch: Record<string, unknown> = prox

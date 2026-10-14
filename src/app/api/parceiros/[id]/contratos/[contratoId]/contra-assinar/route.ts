@@ -27,7 +27,9 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
   const { id, contratoId } = await params;
   const meta = extractRequestMeta(request);
+  // O contrato precisa ser DESTE parceiro (o id da URL entra na auditoria).
   const r = await contraAssinar(
+    id,
     contratoId,
     { id: user.id, nome: user.nome, email: user.email },
     meta,

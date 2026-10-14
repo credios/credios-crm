@@ -333,6 +333,9 @@ export type ComissaoDoParceiro = {
   valorCentavos: number;
   status: string;
   pagoEm: string | null;
+  vencimento: string | null;
+  temComprovante: boolean;
+  temNota: boolean;
 };
 
 /** Comissões do parceiro (sem as canceladas e sem observação interna). */
@@ -347,6 +350,9 @@ export async function listarComissoes(parceiroId: string): Promise<ComissaoDoPar
       valorCentavos: parceiroComissoes.valorCentavos,
       status: parceiroComissoes.status,
       pagoEm: parceiroComissoes.pagoEm,
+      vencimento: parceiroComissoes.vencimento,
+      temComprovante: sql<boolean>`${parceiroComissoes.comprovante} is not null`,
+      temNota: sql<boolean>`${parceiroComissoes.notaFiscal} is not null`,
     })
     .from(parceiroComissoes)
     .leftJoin(leads, eq(leads.id, parceiroComissoes.leadId))
