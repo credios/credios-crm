@@ -6,6 +6,7 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { limparDocumento } from "@/lib/formatters/cpf-cnpj";
 import {
   PARCEIRO_ORIGENS,
   PARCEIRO_SEGMENTOS,
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       segmento: data.segmento ?? null,
       cidade: data.cidade?.trim() ?? null,
       estado: data.estado?.toUpperCase() ?? null,
-      cpfCnpj: data.cpfCnpj?.replace(/\D/g, "") || null,
+      cpfCnpj: limparDocumento(data.cpfCnpj) || null,
       origem: data.origem,
       notas: data.notas?.trim() ?? null,
       ...(data.produtosHabilitados

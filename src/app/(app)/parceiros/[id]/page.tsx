@@ -33,6 +33,7 @@ import {
 import { StatusBadge } from "@/components/leads/status-badge";
 import { ParceiroStatusBadge } from "@/components/parceiros/parceiro-status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin, isAdminOrGerente } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
@@ -156,6 +157,9 @@ export default async function ParceiroDetalhePage({ params }: Props) {
           status: parceiroComissoes.status,
           pagoEm: parceiroComissoes.pagoEm,
           observacao: parceiroComissoes.observacao,
+          vencimento: parceiroComissoes.vencimento,
+          temComprovante: sql<boolean>`${parceiroComissoes.comprovante} is not null`,
+          temNota: sql<boolean>`${parceiroComissoes.notaFiscal} is not null`,
         })
         .from(parceiroComissoes)
         .leftJoin(leadsTable, eq(leadsTable.id, parceiroComissoes.leadId))
@@ -264,7 +268,15 @@ export default async function ParceiroDetalhePage({ params }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-5">
         {/* Coluna esquerda: dados + handoff + produção */}
-        <div className="space-y-6 lg:col-span-3">
+        <div className="lg:col-span-3">
+          {/* Abas: a ficha tinha até oito blocos empilhados. */}
+          <Tabs defaultValue="cadastro" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="cadastro">Cadastro</TabsTrigger>
+              {admin && <TabsTrigger value="portal">Portal e contrato</TabsTrigger>}
+              <TabsTrigger value="indicacoes">Indicações e comissões</TabsTrigger>
+            </TabsList>
+            <TabsContent value="cadastro" className="space-y-6">
           <ParceiroEditar
             parceiro={{
               id: p.id,
@@ -276,6 +288,8 @@ export default async function ParceiroDetalhePage({ params }: Props) {
               cidade: p.cidade,
               estado: p.estado,
               cpfCnpj: p.cpfCnpj,
+              representanteNome: p.representanteNome,
+              representanteCpf: p.representanteCpf,
               notas: p.notas,
             }}
             consultorNome={consultorAtual}
@@ -292,6 +306,8 @@ export default async function ParceiroDetalhePage({ params }: Props) {
             canEdit={superAdmin}
           />
 
+            </TabsContent>
+            <TabsContent value="portal" className="space-y-6">
           {superAdmin && (
             <ParceiroAcessoPortal
               parceiroId={p.id}
@@ -333,6 +349,13 @@ export default async function ParceiroDetalhePage({ params }: Props) {
             />
           )}
 
+            </TabsContent>
+            <TabsContent value="indicacoes" className="space-y-6">
+              {!producao && indicacoes.length === 0 && (
+                <p className="rounded-xl border bg-card p-5 text-sm text-muted-foreground">
+                  Este parceiro ainda não indicou nenhum cliente.
+                </p>
+              )}
           {producao && (
             <Card>
               <CardHeader>
@@ -399,6 +422,7 @@ export default async function ParceiroDetalhePage({ params }: Props) {
             <ParceiroComissoes
               parceiroId={p.id}
               comissaoPadraoBps={p.comissaoPadraoBps}
+              pixChave={p.pixChave}
               indicacoes={indicacoes.map((i) => ({
                 leadId: i.leadId,
                 nome: i.nome,
@@ -410,6 +434,8 @@ export default async function ParceiroDetalhePage({ params }: Props) {
               comissoes={comissoes}
             />
           )}
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Coluna direita: registrar contato + timeline */}

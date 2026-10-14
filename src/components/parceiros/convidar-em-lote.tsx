@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Confirmar } from "@/components/shared/confirmar";
 import { Button } from "@/components/ui/button";
 
 // Virada do portal: convida de uma vez os parceiros que já têm contrato
@@ -14,13 +15,6 @@ export function ConvidarEmLote({ quantidade }: { quantidade: number }) {
   const [busy, setBusy] = useState(false);
 
   async function convidar() {
-    if (
-      !window.confirm(
-        `Enviar convite por e-mail para ${quantidade} parceiro(s) criarem a senha do portal?`,
-      )
-    ) {
-      return;
-    }
     setBusy(true);
     try {
       const res = await fetch("/api/parceiros/convidar-portal-em-lote", { method: "POST" });
@@ -49,9 +43,18 @@ export function ConvidarEmLote({ quantidade }: { quantidade: number }) {
         <strong>{quantidade}</strong> parceiro(s) com contrato assinado ainda não têm login
         no portal.
       </p>
-      <Button size="sm" className="gap-1.5" disabled={busy} onClick={() => void convidar()}>
-        <Send className="size-4" /> {busy ? "Enviando…" : "Convidar todos"}
-      </Button>
+      <Confirmar
+        titulo={`Convidar ${quantidade} parceiro(s)?`}
+        descricao="Cada um recebe um e-mail com o link para criar a senha do portal. O link vale por 7 dias."
+        rotulo="Enviar convites"
+        onConfirmar={convidar}
+      >
+        {(abrir) => (
+          <Button size="sm" className="gap-1.5" disabled={busy} onClick={abrir}>
+            <Send className="size-4" /> {busy ? "Enviando…" : "Convidar todos"}
+          </Button>
+        )}
+      </Confirmar>
     </div>
   );
 }

@@ -26,6 +26,13 @@ const authUsers = authSchema.table("users", {
   id: uuid("id").primaryKey(),
 });
 
+// Coluna binária (PDFs de contrato, comprovantes) — o Drizzle não traz pronto.
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
 // ============================================================================
 // Enums
 // ============================================================================
@@ -574,7 +581,9 @@ export const statusLeadConfig = pgTable(
 export const cadenciaConfig = pgTable("cadencia_config", {
   id: uuid("id").primaryKey().defaultRandom(),
   // FK lógico pra status_lead_config.key (sem hard FK, como leads.status).
-  statusKey: text("status_key").notNull().unique(),
+  // Única por (status_key, produto) — índice uq_cadencia_status_produto (0055).
+  statusKey: text("status_key").notNull(),
+  produto: text("produto").notNull().default("CGI"),
   /** Array de passos: { titulo, deltaDias, tipo: 'mensagem'|'ligacao'|'decisao',
    *  templateId (mensagens_template.id) | null, energia | null }. */
   passos: jsonb("passos").notNull(),
@@ -1089,6 +1098,9 @@ export const parceiros = pgTable(
     /** Pontos-base (300 = 3%). NULL = sem regra padrão: comissão caso a caso. */
     comissaoPadraoBps: integer("comissao_padrao_bps"),
 
+    /** Representante legal quando o parceiro é PJ (0055) — vai pro contrato. */
+    representanteNome: text("representante_nome"),
+    representanteCpf: text("representante_cpf"),
     /** Acesso ao portal do parceiro (0052): sem_acesso | convidado | ativo | suspenso */
     portalAcesso: text("portal_acesso").notNull().default("sem_acesso"),
 
@@ -1205,6 +1217,14 @@ export const parceiroComissoes = pgTable(
     status: text("status").notNull().default("prevista"),
     pagoEm: date("pago_em"),
     observacao: text("observacao"),
+    // 0055 — prazo e arquivos (bytes no banco, como os contratos; máx. 5 MB).
+    vencimento: date("vencimento"),
+    comprovante: bytea("comprovante"),
+    comprovanteNome: text("comprovante_nome"),
+    comprovanteMime: text("comprovante_mime"),
+    notaFiscal: bytea("nota_fiscal"),
+    notaFiscalNome: text("nota_fiscal_nome"),
+    notaFiscalMime: text("nota_fiscal_mime"),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1269,11 +1289,6 @@ export const parceiroSessoes = pgTable(
 // contrato assinado não pode depender de modelo que muda depois.
 // ═══════════════════════════════════════════════════════════
 
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({
-  dataType() {
-    return "bytea";
-  },
-});
 
 export const parceiroContratos = pgTable(
   "parceiro_contratos",
@@ -1304,6 +1319,12 @@ export const parceiroContratos = pgTable(
     crediosAssinanteNome: text("credios_assinante_nome"),
     /** Id do contrato no portal antigo (migração). */
     legadoId: text("legado_id").unique(),
+    // 0055 — prova: impressão digital dos dados mesclados, hash do PDF que o
+    // parceiro assinou, hora da conferência do código e retrato do signatário.
+    dadosHash: text("dados_hash"),
+    hashOriginal: text("hash_original"),
+    otpVerificadoEm: timestamp("otp_verificado_em", { withTimezone: true }),
+    signatario: jsonb("signatario"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

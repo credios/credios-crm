@@ -7,11 +7,24 @@ export function digitsOnly(value: string | null | undefined): string {
   return value.replace(/\D/g, "");
 }
 
-/** Detecta o "tipo" baseado em quantidade de dígitos. */
+/**
+ * Documento sem pontuação, pronto pra guardar. CPF e CNPJ numérico saem só
+ * com dígitos; o CNPJ ALFANUMÉRICO (emitido pela Receita desde julho/2026 —
+ * 12 posições com letras ou números + 2 dígitos verificadores) mantém as
+ * letras, em maiúsculas.
+ */
+export function limparDocumento(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+}
+
+const CNPJ_RE = /^[0-9A-Z]{12}\d{2}$/;
+
+/** Detecta o "tipo": 11 dígitos = CPF; 14 posições no formato de CNPJ = CNPJ. */
 export function detectKind(value: string | null | undefined): "cpf" | "cnpj" | "unknown" {
-  const d = digitsOnly(value);
-  if (d.length === 11) return "cpf";
-  if (d.length === 14) return "cnpj";
+  const c = limparDocumento(value);
+  if (/^\d{11}$/.test(c)) return "cpf";
+  if (CNPJ_RE.test(c)) return "cnpj";
   return "unknown";
 }
 
@@ -24,9 +37,9 @@ export function maskCpf(value: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-/** Aplica máscara CNPJ: 00.000.000/0000-00 */
+/** Aplica máscara CNPJ: 00.000.000/0000-00 (aceita letras do CNPJ alfanumérico) */
 export function maskCnpj(value: string): string {
-  const d = digitsOnly(value).slice(0, 14);
+  const d = limparDocumento(value).slice(0, 14);
   if (d.length <= 2) return d;
   if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
   if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
@@ -41,9 +54,10 @@ export function maskCnpj(value: string): string {
  * call site pode validar tamanho final).
  */
 export function maskCpfCnpj(value: string): string {
-  const d = digitsOnly(value);
-  if (d.length <= 11) return maskCpf(value);
-  return maskCnpj(value);
+  const c = limparDocumento(value);
+  // Letra só existe em CNPJ; sem letra, decide pelo tamanho.
+  if (/[A-Z]/.test(c) || c.length > 11) return maskCnpj(value);
+  return maskCpf(value);
 }
 
 /** Validador de CPF (algoritmo Receita Federal — 2 dígitos verificadores). */
@@ -68,27 +82,27 @@ export function isValidCpf(value: string | null | undefined): boolean {
   return dv2 === Number(d[10]);
 }
 
-/** Validador de CNPJ (algoritmo Receita Federal — 2 dígitos verificadores). */
+/**
+ * Validador de CNPJ — numérico e alfanumérico, mesma conta. Cada posição vale
+ * o código ASCII do caractere menos 48 ("0"→0 … "9"→9, "A"→17 … "Z"→42);
+ * módulo 11 com os pesos de sempre. Pra CNPJ só com números o resultado é
+ * idêntico ao algoritmo antigo. Exemplo oficial: 12.ABC.345/01DE-35.
+ */
 export function isValidCnpj(value: string | null | undefined): boolean {
-  const d = digitsOnly(value);
-  if (d.length !== 14) return false;
-  if (/^(\d)\1{13}$/.test(d)) return false;
+  const c = limparDocumento(value);
+  if (!CNPJ_RE.test(c)) return false;
+  if (/^(.)\1{13}$/.test(c)) return false;
 
-  // Pesos pra primeiro DV: 5,4,3,2,9,8,7,6,5,4,3,2
-  const w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  let sum = 0;
-  for (let i = 0; i < 12; i++) sum += Number(d[i]!) * w1[i]!;
-  let dv1 = sum % 11;
-  dv1 = dv1 < 2 ? 0 : 11 - dv1;
-  if (dv1 !== Number(d[12])) return false;
-
-  // Pesos pra segundo DV: 6,5,4,3,2,9,8,7,6,5,4,3,2
-  const w2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-  sum = 0;
-  for (let i = 0; i < 13; i++) sum += Number(d[i]!) * w2[i]!;
-  let dv2 = sum % 11;
-  dv2 = dv2 < 2 ? 0 : 11 - dv2;
-  return dv2 === Number(d[13]);
+  const valor = (i: number) => c.charCodeAt(i) - 48;
+  const dv = (pesos: number[]) => {
+    let soma = 0;
+    for (let i = 0; i < pesos.length; i++) soma += valor(i) * pesos[i]!;
+    const resto = soma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+  // Pesos pra primeiro DV: 5,4,3,2,9,8,7,6,5,4,3,2 — segundo: 6,5,4,3,2,9,8,7,6,5,4,3,2
+  if (dv([5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) !== valor(12)) return false;
+  return dv([6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === valor(13);
 }
 
 /** Valida CPF OU CNPJ baseado no tamanho. */

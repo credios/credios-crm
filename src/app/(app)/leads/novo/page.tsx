@@ -42,9 +42,7 @@ export default async function NovoLeadPage({ searchParams }: Props) {
   const produto: Produto = produtoParam === "CONDOMINIO" ? "CONDOMINIO" : "CGI";
 
   // Parceiros selecionáveis como indicador (só nome — a gestão é em /parceiros).
-  const parceiros =
-    produto === "CONDOMINIO"
-      ? (
+  const parceiros = (
           await db
             .select({
               id: parceirosTable.id,
@@ -62,8 +60,7 @@ export default async function NovoLeadPage({ searchParams }: Props) {
         ).map((p) => ({
           id: p.id,
           nome: p.empresa ? `${p.nome} (${p.empresa})` : p.nome,
-        }))
-      : [];
+        }));
 
   return (
     <div className="space-y-6">
@@ -106,6 +103,7 @@ export default async function NovoLeadPage({ searchParams }: Props) {
           currentUser={user}
           consultores={consultores}
           sources={sources}
+          parceiros={parceiros}
         />
       )}
     </div>

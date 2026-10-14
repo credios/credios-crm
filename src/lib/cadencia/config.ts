@@ -1,6 +1,6 @@
 import "server-only";
 
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 
 import { cadenciaConfig } from "../../../db/schema";
@@ -22,6 +22,7 @@ async function fetchCadencias(): Promise<CadenciaStatus[]> {
   return rows.map((r) => ({
     id: r.id,
     statusKey: r.statusKey,
+    produto: r.produto,
     passos: (r.passos ?? []) as PassoCadencia[],
     ativa: r.ativa,
   }));
@@ -42,19 +43,38 @@ export async function listCadencias(): Promise<CadenciaStatus[]> {
   }
 }
 
-/** Cadência ATIVA de um status (null = status sem cadência). */
-export async function cadenciaDoStatus(statusKey: string): Promise<CadenciaStatus | null> {
+/**
+ * Cadência ATIVA de um status PARA UM PRODUTO (null = sem cadência). Produto
+ * sem cadência configurada não herda a de outro: os passos e textos de CGI
+ * não servem pra um síndico.
+ */
+export async function cadenciaDoStatus(
+  statusKey: string,
+  produto: string | null | undefined = "CGI",
+): Promise<CadenciaStatus | null> {
   const todas = await listCadencias();
-  const c = todas.find((x) => x.statusKey === statusKey && x.ativa);
+  const c = todas.find(
+    (x) => x.statusKey === statusKey && x.produto === (produto ?? "CGI") && x.ativa,
+  );
   return c && c.passos.length > 0 ? c : null;
 }
 
+/** A cadência ativa que vale pra este lead (status + produto), numa lista já carregada. */
+export function cadenciaDoLead(
+  cadencias: CadenciaStatus[],
+  lead: { status: string; produto?: string | null },
+): CadenciaStatus | undefined {
+  return cadencias.find(
+    (c) => c.statusKey === lead.status && c.produto === (lead.produto ?? "CGI") && c.ativa,
+  );
+}
+
 /** Lookup direto no banco (sem cache) — usado pelo editor do admin. */
-export async function cadenciaDoStatusFresh(statusKey: string) {
+export async function cadenciaDoStatusFresh(statusKey: string, produto = "CGI") {
   const [r] = await db
     .select()
     .from(cadenciaConfig)
-    .where(eq(cadenciaConfig.statusKey, statusKey))
+    .where(and(eq(cadenciaConfig.statusKey, statusKey), eq(cadenciaConfig.produto, produto)))
     .limit(1);
   return r ?? null;
 }

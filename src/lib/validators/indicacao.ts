@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { FINALIDADES_CONDOMINIO } from "@/lib/condominio/constants";
-import { isValidCnpj, isValidCpfOrCnpj } from "@/lib/formatters/cpf-cnpj";
+import { isValidCnpj, isValidCpfOrCnpj, limparDocumento } from "@/lib/formatters/cpf-cnpj";
 
 // Indicação de cliente feita pelo parceiro no portal. Valores em CENTAVOS.
 // As regras de política (pisos, LTV, renda) ficam em prequal.ts — aqui só
@@ -49,7 +49,7 @@ export const indicacaoCgiSchema = z.object({
   documento: z
     .string()
     .refine((v) => isValidCpfOrCnpj(v), "CPF ou CNPJ inválido.")
-    .transform(digitos),
+    .transform(limparDocumento),
   tipoImovel: z.string().trim().min(1, "Selecione o tipo do imóvel."),
   valorImovelCentavos: centavos.refine((v) => v > 0, "Informe o valor aproximado do imóvel."),
   rendaTitularCentavos: centavos.refine((v) => v > 0, "Informe a renda mensal do titular."),
@@ -65,7 +65,7 @@ export const indicacaoCondominioSchema = z.object({
   documento: z
     .string()
     .refine((v) => isValidCnpj(v), "CNPJ inválido.")
-    .transform(digitos),
+    .transform(limparDocumento),
   sindicoNome: z.string().trim().min(3, "Informe o nome do síndico.").max(200),
   finalidade: z.enum(FINALIDADES_CONDOMINIO, { message: "Selecione a finalidade." }),
   numUnidades: z.number().int().positive().max(100_000).nullish(),

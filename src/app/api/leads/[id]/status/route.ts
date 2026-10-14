@@ -12,6 +12,7 @@ import { checkPermission } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { ensureBancoInteracao, hasLeadBanks, isLeadBankStage } from "@/lib/leads/bancos";
+import { aoFecharLeadDeParceiro, aoReabrirLeadDeParceiro } from "@/lib/parceiros/comissoes";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { aoEncerrarLead } from "@/lib/leads/encerramento";
 import { concluirReunioesImplicitas } from "@/lib/sdr/agendar";
@@ -190,6 +191,18 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     await auditCall();
   } else {
     after(() => auditCall());
+  }
+
+  // Comissão do parceiro: condomínio nasce no fechamento (3% fixo do contrato);
+  // sair de `fechado` cancela a que ainda não foi paga.
+  if (updated && data.status === "fechado") {
+    await aoFecharLeadDeParceiro(updated, user.id).catch((e) =>
+      console.error("[status] comissão automática falhou:", e),
+    );
+  } else if (existing.status === "fechado" && data.status !== "fechado") {
+    await aoReabrirLeadDeParceiro(id).catch((e) =>
+      console.error("[status] cancelamento de comissão falhou:", e),
+    );
   }
 
   // Notifica o Portal de Parceiros (no-op para leads que não vieram dele).

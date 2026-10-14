@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { ComissaoAcoes } from "@/components/parceiros/comissao-acoes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -255,11 +256,10 @@ export type ComissaoRow = {
   status: string;
   pagoEm: string | null;
   observacao: string | null;
+  vencimento: string | null;
+  temComprovante: boolean;
+  temNota: boolean;
 };
-
-function hojeIso(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-}
 
 function dataBr(iso: string | null): string {
   if (!iso) return "";
@@ -270,11 +270,13 @@ function dataBr(iso: string | null): string {
 export function ParceiroComissoes({
   parceiroId,
   comissaoPadraoBps,
+  pixChave,
   indicacoes,
   comissoes,
 }: {
   parceiroId: string;
   comissaoPadraoBps: number | null;
+  pixChave: string | null;
   indicacoes: IndicacaoRow[];
   comissoes: ComissaoRow[];
 }) {
@@ -353,27 +355,6 @@ export function ParceiroComissoes({
     setBusy(false);
   }
 
-  async function mudarStatus(c: ComissaoRow, status: ComissaoStatus) {
-    let pagoEm: string | null = null;
-    if (status === "paga") {
-      pagoEm = window.prompt("Data do pagamento (AAAA-MM-DD):", hojeIso());
-      if (!pagoEm) return;
-    }
-    if (status === "cancelada" && !window.confirm("Cancelar esta comissão?")) return;
-    const res = await fetch(`/api/parceiros/${parceiroId}/comissoes/${c.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status, pagoEm }),
-    });
-    if (!res.ok) {
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
-      toast.error(json.error ?? "Não consegui atualizar.");
-      return;
-    }
-    toast.success("Comissão atualizada.");
-    router.refresh();
-  }
-
   const aPagar = comissoes
     .filter((c) => c.status === "prevista" || c.status === "a_pagar")
     .reduce((s, c) => s + c.valorCentavos, 0);
@@ -424,6 +405,7 @@ export function ParceiroComissoes({
                       ? `${pctDeBps(c.percentualBps)}% sobre ${formatBrlFromCents(c.baseCentavos)}`
                       : "Valor definido caso a caso"}
                     {c.pagoEm ? ` · paga em ${dataBr(c.pagoEm)}` : ""}
+                    {!c.pagoEm && c.vencimento ? ` · vence em ${dataBr(c.vencimento)}` : ""}
                     {c.observacao ? ` · ${c.observacao}` : ""}
                   </p>
                 </div>
@@ -433,21 +415,18 @@ export function ParceiroComissoes({
                 <Badge variant={c.status === "paga" ? "default" : "outline"}>
                   {COMISSAO_STATUS_LABEL[c.status as ComissaoStatus] ?? c.status}
                 </Badge>
-                {c.status !== "paga" && c.status !== "cancelada" && (
-                  <div className="flex gap-1">
-                    {c.status === "prevista" && (
-                      <Button variant="outline" size="sm" onClick={() => void mudarStatus(c, "a_pagar")}>
-                        A pagar
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => void mudarStatus(c, "paga")}>
-                      Marcar paga
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => void mudarStatus(c, "cancelada")}>
-                      Cancelar
-                    </Button>
-                  </div>
-                )}
+                <ComissaoAcoes
+                  c={{
+                    id: c.id,
+                    parceiroId,
+                    status: c.status,
+                    valorCentavos: c.valorCentavos,
+                    rotulo: c.leadNome ?? c.descricao ?? "Comissão",
+                    pixChave,
+                    temComprovante: c.temComprovante,
+                    temNota: c.temNota,
+                  }}
+                />
               </li>
             ))}
           </ul>

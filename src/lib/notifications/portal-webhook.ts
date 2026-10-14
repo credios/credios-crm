@@ -14,6 +14,7 @@
 import crypto from "node:crypto";
 
 import type { leads } from "../../../db/schema";
+import { avisarParceiroDaEtapa } from "@/lib/portal-parceiro/avisos";
 
 type LeadRow = typeof leads.$inferSelect;
 
@@ -24,6 +25,12 @@ export async function notifyPartnerPortal(
   lead: LeadRow,
   novoStatus: string,
 ): Promise<void> {
+  // Portal novo (dentro do CRM): e-mail ao parceiro nas etapas que importam.
+  // Independe da integração antiga abaixo e nunca derruba quem chamou.
+  await avisarParceiroDaEtapa(lead, novoStatus).catch((err) =>
+    console.error("[portal-parceiro] aviso de etapa falhou:", err),
+  );
+
   try {
     const url = process.env.PORTAL_WEBHOOK_URL;
     const secret = process.env.PORTAL_WEBHOOK_SECRET;

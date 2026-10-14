@@ -63,7 +63,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   }
 
   const agora = new Date();
-  const cad = await cadenciaDoStatus(lead.status);
+  const cad = await cadenciaDoStatus(lead.status, lead.produto);
   const passo =
     lead.cadenciaPasso != null ? (cad?.passos[lead.cadenciaPasso] ?? null) : null;
 

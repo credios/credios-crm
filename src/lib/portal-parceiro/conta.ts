@@ -27,7 +27,8 @@ const HASH_ISCA =
 type Meta = { ip?: string | null; userAgent?: string | null };
 type Resultado = { ok: true } | { ok: false; erro: string };
 
-const ERRO_LOGIN = "E-mail ou senha incorretos. Confira e tente de novo.";
+const ERRO_LOGIN =
+  "E-mail ou senha incorretos. Depois de várias tentativas o acesso fica bloqueado por 15 minutos.";
 
 export async function autenticar(emailRaw: string, senha: string, meta: Meta): Promise<Resultado> {
   const email = emailRaw.toLowerCase().trim();
@@ -35,7 +36,6 @@ export async function autenticar(emailRaw: string, senha: string, meta: Meta): P
     .select({
       id: parceiroUsuarios.id,
       senhaHash: parceiroUsuarios.senhaHash,
-      falhasLogin: parceiroUsuarios.falhasLogin,
       bloqueadoAte: parceiroUsuarios.bloqueadoAte,
       portalAcesso: parceiros.portalAcesso,
     })
@@ -44,25 +44,27 @@ export async function autenticar(emailRaw: string, senha: string, meta: Meta): P
     .where(eq(parceiroUsuarios.email, email))
     .limit(1);
 
-  if (!u) {
-    await verificarSenha(senha, HASH_ISCA);
-    return { ok: false, erro: ERRO_LOGIN };
-  }
-  if (u.bloqueadoAte && u.bloqueadoAte > new Date()) {
-    return { ok: false, erro: "Muitas tentativas. Aguarde 15 minutos e tente de novo." };
-  }
+  // Todo caminho de falha gasta o MESMO scrypt e devolve a MESMA mensagem:
+  // nem o texto nem o tempo dizem se o e-mail existe, se a conta está
+  // bloqueada, suspensa ou ainda sem senha.
+  const bloqueado = !!u?.bloqueadoAte && u.bloqueadoAte > new Date();
+  const senhaOk = await verificarSenha(senha, u?.senhaHash ?? HASH_ISCA);
+  if (!u || !u.senhaHash) return { ok: false, erro: ERRO_LOGIN };
+  if (bloqueado) return { ok: false, erro: ERRO_LOGIN };
 
-  const senhaOk = await verificarSenha(senha, u.senhaHash);
   if (!senhaOk) {
-    const falhas = u.falhasLogin + 1;
-    await db
+    // Incremento atômico: tentativas em paralelo não passam do limite.
+    const [f] = await db
       .update(parceiroUsuarios)
-      .set(
-        falhas >= MAX_FALHAS
-          ? { falhasLogin: 0, bloqueadoAte: new Date(Date.now() + BLOQUEIO_MS) }
-          : { falhasLogin: falhas },
-      )
-      .where(eq(parceiroUsuarios.id, u.id));
+      .set({ falhasLogin: sql`${parceiroUsuarios.falhasLogin} + 1` })
+      .where(eq(parceiroUsuarios.id, u.id))
+      .returning({ falhas: parceiroUsuarios.falhasLogin });
+    if ((f?.falhas ?? 0) >= MAX_FALHAS) {
+      await db
+        .update(parceiroUsuarios)
+        .set({ falhasLogin: 0, bloqueadoAte: new Date(Date.now() + BLOQUEIO_MS) })
+        .where(eq(parceiroUsuarios.id, u.id));
+    }
     return { ok: false, erro: ERRO_LOGIN };
   }
   // Senha certa mas acesso suspenso/não liberado: mesma mensagem genérica.
@@ -73,6 +75,46 @@ export async function autenticar(emailRaw: string, senha: string, meta: Meta): P
     .set({ falhasLogin: 0, bloqueadoAte: null, ultimoLoginEm: new Date() })
     .where(eq(parceiroUsuarios.id, u.id));
   await criarSessao(u.id, meta);
+  return { ok: true };
+}
+
+/**
+ * Admin trocou o e-mail do parceiro: o login acompanha. Só o admin chega
+ * aqui (a rota barra os demais quando o acesso ao portal já existe).
+ */
+export async function sincronizarEmailDeLogin(
+  parceiroId: string,
+  novoEmail: string | null,
+): Promise<Resultado> {
+  const [u] = await db
+    .select({ id: parceiroUsuarios.id })
+    .from(parceiroUsuarios)
+    .where(eq(parceiroUsuarios.parceiroId, parceiroId))
+    .limit(1);
+  if (!u) return { ok: true };
+  if (!novoEmail) {
+    return { ok: false, erro: "Este parceiro tem login no portal — o e-mail não pode ficar vazio." };
+  }
+  const [dono] = await db
+    .select({ parceiroId: parceiroUsuarios.parceiroId })
+    .from(parceiroUsuarios)
+    .where(eq(parceiroUsuarios.email, novoEmail))
+    .limit(1);
+  if (dono && dono.parceiroId !== parceiroId) {
+    return { ok: false, erro: "Este e-mail já é o login de outro parceiro." };
+  }
+  await db
+    .update(parceiroUsuarios)
+    .set({
+      email: novoEmail,
+      conviteTokenHash: null,
+      conviteExpiraEm: null,
+      resetTokenHash: null,
+      resetExpiraEm: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(parceiroUsuarios.id, u.id));
+  await encerrarTodasAsSessoes(u.id);
   return { ok: true };
 }
 
@@ -99,6 +141,9 @@ export async function convidarParceiro(
   if (!p.email) return { ok: false, erro: "Cadastre o e-mail do parceiro antes de convidar." };
   const email = p.email.toLowerCase().trim();
 
+  if (p.portalAcesso === "suspenso") {
+    return { ok: false, erro: "O acesso deste parceiro está suspenso. Reative antes de convidar." };
+  }
   const [dono] = await db
     .select({ parceiroId: parceiroUsuarios.parceiroId })
     .from(parceiroUsuarios)
@@ -174,6 +219,10 @@ export async function aceitarConvite(
 ): Promise<Resultado> {
   const erroSenha = validarSenha(senha);
   if (erroSenha) return { ok: false, erro: erroSenha };
+  // Token inválido não custa scrypt (rota anônima).
+  if (!(await lerConvite(token))) {
+    return { ok: false, erro: "Este convite expirou ou já foi usado. Peça um novo à Credios." };
+  }
 
   const senhaHash = await hashSenha(senha);
   // UPDATE condicionado ao token: consome o convite de forma atômica (dois
@@ -257,12 +306,26 @@ export async function solicitarResetSenha(emailRaw: string): Promise<void> {
 export async function redefinirSenha(token: string, senha: string): Promise<Resultado> {
   const erroSenha = validarSenha(senha);
   if (erroSenha) return { ok: false, erro: erroSenha };
+  const [valido] = await db
+    .select({ id: parceiroUsuarios.id })
+    .from(parceiroUsuarios)
+    .where(
+      and(
+        eq(parceiroUsuarios.resetTokenHash, hashToken(token)),
+        gt(parceiroUsuarios.resetExpiraEm, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!valido) return { ok: false, erro: "Este link expirou ou já foi usado. Peça um novo." };
 
   const senhaHash = await hashSenha(senha);
   const [u] = await db
     .update(parceiroUsuarios)
     .set({
       senhaHash,
+      // Qualquer link de definir senha ainda em aberto morre junto.
+      conviteTokenHash: null,
+      conviteExpiraEm: null,
       resetTokenHash: null,
       resetExpiraEm: null,
       falhasLogin: 0,
@@ -302,7 +365,14 @@ export async function trocarSenha(
   }
   await db
     .update(parceiroUsuarios)
-    .set({ senhaHash: await hashSenha(novaSenha), updatedAt: new Date() })
+    .set({
+      senhaHash: await hashSenha(novaSenha),
+      conviteTokenHash: null,
+      conviteExpiraEm: null,
+      resetTokenHash: null,
+      resetExpiraEm: null,
+      updatedAt: new Date(),
+    })
     .where(eq(parceiroUsuarios.id, usuarioId));
   await encerrarTodasAsSessoes(usuarioId);
   await criarSessao(usuarioId, meta);
