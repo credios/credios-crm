@@ -5,6 +5,7 @@ import { cache } from "react";
 import { interacoes, leads, users as usersTable } from "../../../db/schema";
 import { mvFechadosDiarios, mvLeadsDiarios } from "../../../db/views";
 import { db } from "@/lib/db";
+import { PRODUTOS, type Produto } from "@/lib/produtos";
 import { listActiveStatuses } from "@/lib/status/queries";
 import {
   normalizeFilters,
@@ -140,6 +141,13 @@ function baseConds(rawFilters: ReportFilters) {
   }
   if (filters.produto) c.push(eq(leads.produto, filters.produto));
   return c;
+}
+
+// Filtro de produto pras queries em SQL cru (painel executivo, esfriando).
+// O valor vem de z.enum, mas confere de novo antes de interpolar.
+function produtoSqlRaw(produto: Produto | null | undefined, alias = ""): string {
+  if (!produto || !(PRODUTOS as readonly string[]).includes(produto)) return "";
+  return ` AND ${alias}produto = '${produto}'`;
 }
 
 // ============================================================================
@@ -1621,7 +1629,10 @@ export type ProjecaoMes = {
   emNegociacaoCount: number;
 };
 
-export async function fetchProjecaoMes(): Promise<ProjecaoMes> {
+export async function fetchProjecaoMes(
+  produto?: Produto | null,
+): Promise<ProjecaoMes> {
+  const p = produtoSqlRaw(produto);
   // Comissão já fechada no mês corrente
   const result = await db.execute<{
     comissao_fechada: string;
@@ -1637,14 +1648,14 @@ export async function fetchProjecaoMes(): Promise<ProjecaoMes> {
       FROM public.leads
       WHERE status = 'fechado'
         AND data_fechamento >= date_trunc('month', NOW())
-        AND data_fechamento < date_trunc('month', NOW()) + INTERVAL '1 month'
+        AND data_fechamento < date_trunc('month', NOW()) + INTERVAL '1 month'${p}
     ),
     pipeline AS (
       SELECT
         COALESCE(SUM(valor_credito_centavos), 0)::text AS pipeline_em_negociacao,
         COUNT(*)::text AS em_negociacao_count
       FROM public.leads
-      WHERE status = 'em_negociacao'
+      WHERE status = 'em_negociacao'${p}
     ),
     fechados_90d AS (
       SELECT
@@ -1653,13 +1664,13 @@ export async function fetchProjecaoMes(): Promise<ProjecaoMes> {
         COUNT(*)::int AS fechados_count
       FROM public.leads
       WHERE status = 'fechado'
-        AND created_at >= NOW() - INTERVAL '90 days'
+        AND created_at >= NOW() - INTERVAL '90 days'${p}
     ),
     resolvidos_90d AS (
       SELECT COUNT(*)::int AS total
       FROM public.leads
       WHERE status IN ('fechado', 'perdido', 'desqualificado')
-        AND created_at >= NOW() - INTERVAL '90 days'
+        AND created_at >= NOW() - INTERVAL '90 days'${p}
     )
     SELECT
       ma.comissao_fechada,
@@ -1713,7 +1724,9 @@ export type PipelineEmReaisRow = {
   totalCentavos: number;
 };
 
-export async function fetchPipelineEmReais(): Promise<PipelineEmReaisRow[]> {
+export async function fetchPipelineEmReais(
+  produto?: Produto | null,
+): Promise<PipelineEmReaisRow[]> {
   const rows = await db
     .select({
       status: leads.status,
@@ -1721,7 +1734,12 @@ export async function fetchPipelineEmReais(): Promise<PipelineEmReaisRow[]> {
       total: sql<string>`coalesce(sum(${leads.valorCreditoCentavos}), 0)::text`,
     })
     .from(leads)
-    .where(notInArray(leads.status, ["fechado", "perdido", "desqualificado"]))
+    .where(
+      and(
+        notInArray(leads.status, ["fechado", "perdido", "desqualificado"]),
+        produto ? eq(leads.produto, produto) : undefined,
+      ),
+    )
     .groupBy(leads.status);
   return rows.map((r) => ({
     status: String(r.status),
@@ -1745,15 +1763,17 @@ export type PercentilRow = {
 
 export async function fetchTempoPercentis(
   period: PeriodRange,
+  produto?: Produto | null,
 ): Promise<PercentilRow[]> {
   // Cacheado: 3 queries com percentile_cont. Pesado quando há muitos
   // fechados; resultado muda pouco em janelas de minutos.
   return unstable_cache(
-    () => fetchTempoPercentisUncached(period),
+    () => fetchTempoPercentisUncached(period, produto),
     [
       "reports:tempo-percentis",
       bucketHour(period.from),
       bucketHour(period.to),
+      produto ?? "",
     ],
     { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
   )();
@@ -1761,7 +1781,10 @@ export async function fetchTempoPercentis(
 
 async function fetchTempoPercentisUncached(
   period: PeriodRange,
+  produto?: Produto | null,
 ): Promise<PercentilRow[]> {
+  const p = produtoSqlRaw(produto);
+  const pl = produtoSqlRaw(produto, "l.");
   const fromIso = period.from.toISOString();
   const toIso = period.to.toISOString();
 
@@ -1780,7 +1803,7 @@ async function fetchTempoPercentisUncached(
         AND l.atribuido_em >= '${fromIso}'
         AND l.atribuido_em <= '${toIso}'
         AND i.criado_em >= l.atribuido_em
-        AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')
+        AND i.tipo NOT IN ('mudanca_status', 'mudanca_atribuicao', 'evento_sistema')${pl}
       GROUP BY l.id, l.atribuido_em
     )
     SELECT
@@ -1803,7 +1826,7 @@ async function fetchTempoPercentisUncached(
       FROM public.leads
       WHERE status = 'fechado'
         AND data_fechamento >= '${period.from.toISOString().slice(0, 10)}'::date
-        AND data_fechamento <= '${period.to.toISOString().slice(0, 10)}'::date
+        AND data_fechamento <= '${period.to.toISOString().slice(0, 10)}'::date${p}
     )
     SELECT
       COALESCE(percentile_cont(0.25) WITHIN GROUP (ORDER BY dias), 0)::text AS p25,
@@ -1826,7 +1849,7 @@ async function fetchTempoPercentisUncached(
       WHERE status = 'fechado'
         AND atribuido_em IS NOT NULL
         AND data_fechamento >= '${period.from.toISOString().slice(0, 10)}'::date
-        AND data_fechamento <= '${period.to.toISOString().slice(0, 10)}'::date
+        AND data_fechamento <= '${period.to.toISOString().slice(0, 10)}'::date${p}
     )
     SELECT
       COALESCE(percentile_cont(0.25) WITHIN GROUP (ORDER BY dias), 0)::text AS p25,
@@ -1884,14 +1907,16 @@ export type TopOrigemRow = {
 export async function fetchTopOrigensDetalhadas(
   period: PeriodRange,
   limit: number = 10,
+  produto?: Produto | null,
 ): Promise<TopOrigemRow[]> {
   return unstable_cache(
-    () => fetchTopOrigensDetalhadasUncached(period, limit),
+    () => fetchTopOrigensDetalhadasUncached(period, limit, produto),
     [
       "reports:top-origens",
       bucketHour(period.from),
       bucketHour(period.to),
       String(limit),
+      produto ?? "",
     ],
     { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
   )();
@@ -1900,6 +1925,7 @@ export async function fetchTopOrigensDetalhadas(
 async function fetchTopOrigensDetalhadasUncached(
   period: PeriodRange,
   limit: number = 10,
+  produto?: Produto | null,
 ): Promise<TopOrigemRow[]> {
   const rows = await db.execute<{
     origem: string;
@@ -1920,7 +1946,7 @@ async function fetchTopOrigensDetalhadasUncached(
       COUNT(*) FILTER (WHERE status IN ('fechado', 'perdido', 'desqualificado'))::text AS resolvidos
     FROM public.leads
     WHERE created_at >= '${period.from.toISOString()}'
-      AND created_at <= '${period.to.toISOString()}'
+      AND created_at <= '${period.to.toISOString()}'${produtoSqlRaw(produto)}
     GROUP BY COALESCE(origem, '—'), COALESCE(utm_source, '—'), COALESCE(utm_campaign, '—')
     ORDER BY SUM(valor_liberado_centavos) FILTER (WHERE status = 'fechado') DESC NULLS LAST,
              COUNT(*) DESC
@@ -2042,6 +2068,7 @@ export type SparklinePoint = { mes: string; valor: number };
 
 export async function fetchSparkRevenue(
   meses: number = 6,
+  produto?: Produto | null,
 ): Promise<{
   comissao: SparklinePoint[];
   liberado: SparklinePoint[];
@@ -2049,20 +2076,35 @@ export async function fetchSparkRevenue(
   cicloMedio: SparklinePoint[];
 }> {
   return unstable_cache(
-    () => fetchSparkRevenueUncached(meses),
-    ["reports:spark-revenue", String(meses)],
+    () => fetchSparkRevenueUncached(meses, produto),
+    ["reports:spark-revenue", String(meses), produto ?? ""],
     { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
   )();
 }
 
-async function fetchSparkRevenueUncached(meses: number): Promise<{
+async function fetchSparkRevenueUncached(
+  meses: number,
+  produto?: Produto | null,
+): Promise<{
   comissao: SparklinePoint[];
   liberado: SparklinePoint[];
   ticketMedio: SparklinePoint[];
   cicloMedio: SparklinePoint[];
 }> {
-  // Sempre lê da MV (não recebe filtros granulares). Ticket médio e ciclo
-  // médio são calculados como médias ponderadas: SUM(soma) / SUM(qtd).
+  // Lê da MV quando não há produto (a MV não tem a coluna); com produto,
+  // agrega direto de leads com a mesma fórmula da MV. Ticket médio e ciclo
+  // médio são médias ponderadas: SUM(soma) / SUM(qtd).
+  const fonte = produto
+    ? `(
+        SELECT data_fechamento AS dia_fechamento,
+          1 AS qtd,
+          COALESCE(valor_liberado_centavos, 0) AS soma_valor_liberado,
+          COALESCE(comissao_centavos, 0) AS soma_comissao,
+          EXTRACT(EPOCH FROM (data_fechamento::timestamp - created_at)) AS soma_segundos_ciclo
+        FROM public.leads
+        WHERE status = 'fechado' AND data_fechamento IS NOT NULL${produtoSqlRaw(produto)}
+      ) f`
+    : "public.mv_fechados_diarios";
   const rows = await db.execute<{
     mes: string;
     comissao: string;
@@ -2076,7 +2118,7 @@ async function fetchSparkRevenueUncached(meses: number): Promise<{
       COALESCE(SUM(soma_valor_liberado), 0)::text AS liberado,
       (COALESCE(SUM(soma_valor_liberado), 0)::numeric / NULLIF(SUM(qtd), 0))::text AS ticket,
       (SUM(soma_segundos_ciclo)::numeric / NULLIF(SUM(qtd) * 86400.0, 0))::text AS ciclo
-    FROM public.mv_fechados_diarios
+    FROM ${fonte}
     WHERE dia_fechamento >= date_trunc('month', NOW() - INTERVAL '${meses - 1} months')::date
     GROUP BY date_trunc('month', dia_fechamento)
     ORDER BY date_trunc('month', dia_fechamento)
@@ -2314,15 +2356,19 @@ async function distribOf(
  *
  * Usado pelo card "Pipeline esfriando" em /relatorios.
  */
-export function fetchEsfriandoGlobal(): Promise<{ count: number }> {
+export function fetchEsfriandoGlobal(
+  produto?: Produto | null,
+): Promise<{ count: number }> {
   return unstable_cache(
-    () => fetchEsfriandoGlobalUncached(),
-    ["reports:esfriando-global"],
+    () => fetchEsfriandoGlobalUncached(produto),
+    ["reports:esfriando-global", produto ?? ""],
     { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
   )();
 }
 
-async function fetchEsfriandoGlobalUncached(): Promise<{ count: number }> {
+async function fetchEsfriandoGlobalUncached(
+  produto?: Produto | null,
+): Promise<{ count: number }> {
   // Reescrita: antes usava subquery correlata em interacoes por linha de
   // leads — O(N) seeks. Agora: LEFT JOIN LATERAL com LIMIT 1 contra o índice
   // parcial idx_interacoes_manuais_lead (criado em 0008). Postgres consegue
@@ -2339,7 +2385,7 @@ async function fetchEsfriandoGlobalUncached(): Promise<{ count: number }> {
       ORDER BY i.criado_em DESC
       LIMIT 1
     ) ult ON true
-    WHERE l.status NOT IN ('fechado', 'perdido', 'desqualificado')
+    WHERE l.status NOT IN ('fechado', 'perdido', 'desqualificado')${produtoSqlRaw(produto, "l.")}
       AND (
         (ult.criado_em IS NULL AND l.atribuido_em < NOW() - INTERVAL '5 days')
         OR ult.criado_em < NOW() - INTERVAL '5 days'

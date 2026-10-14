@@ -12,6 +12,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  PRODUTO_LABEL_CURTO,
+  PRODUTOS_ATIVOS,
+  type Produto,
+} from "@/lib/produtos";
+import {
   COMPARACAO_LABEL,
   COMPARACAO_MODES,
   PERIODO_LABEL,
@@ -38,6 +43,7 @@ export function ExecFilters() {
   const periodo = (params.get("periodo") as PeriodoPreset) ?? "mes_atual";
   const comparar =
     (params.get("comparar") as ComparacaoMode) ?? "anterior_equivalente";
+  const produto = params.get("produto");
 
   function setParam(key: string, value: string | null) {
     const next = new URLSearchParams(params.toString());
@@ -94,6 +100,34 @@ export function ExecFilters() {
             {COMPARACAO_MODES.map((m) => (
               <SelectItem key={m} value={m}>
                 {COMPARACAO_LABEL[m]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Produto</Label>
+        <Select
+          value={produto ?? "__all__"}
+          onValueChange={(v) =>
+            setParam("produto", !v || v === "__all__" ? null : v)
+          }
+        >
+          <SelectTrigger className="min-w-[140px]">
+            <SelectValue>
+              {(v: unknown) =>
+                typeof v === "string" && v !== "__all__"
+                  ? PRODUTO_LABEL_CURTO[v as Produto] ?? v
+                  : "Todos"
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todos</SelectItem>
+            {PRODUTOS_ATIVOS.map((p) => (
+              <SelectItem key={p} value={p}>
+                {PRODUTO_LABEL_CURTO[p]}
               </SelectItem>
             ))}
           </SelectContent>

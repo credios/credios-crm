@@ -26,6 +26,7 @@ import { logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import { formatBrlShort } from "@/lib/formatters/currency";
+import type { Produto } from "@/lib/produtos";
 import {
   comparisonPeriod,
   isComparisonReliable,
@@ -138,11 +139,11 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton h={400} />}>
-        <PipelineProjecaoSection />
+        <PipelineProjecaoSection produto={filters.produto} />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton h={300} />}>
-        <PercentisSection period={period} />
+        <PercentisSection period={period} produto={filters.produto} />
       </Suspense>
 
       {compMode !== "sem" && compPeriod && (
@@ -161,7 +162,7 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton h={300} />}>
-        <TopOrigensSection period={period} />
+        <TopOrigensSection period={period} produto={filters.produto} />
       </Suspense>
     </div>
   );
@@ -269,7 +270,7 @@ async function KpisSection({
       compPeriod
         ? fetchSalesMetrics(filters, compPeriod)
         : Promise.resolve(null),
-      fetchSparkRevenue(6),
+      fetchSparkRevenue(6, filters.produto),
     ]);
 
     // Esconde deltas quando a janela de comparação não tem volume suficiente
@@ -363,11 +364,11 @@ async function ReceitaMensalSection({ filters }: { filters: RFilters }) {
   });
 }
 
-async function PipelineProjecaoSection() {
+async function PipelineProjecaoSection({ produto }: { produto?: Produto }) {
   return renderSection("Pipeline e projeção", async () => {
     const [pipelineR$, proj] = await Promise.all([
-      fetchPipelineEmReais(),
-      fetchProjecaoMes(),
+      fetchPipelineEmReais(produto),
+      fetchProjecaoMes(produto),
     ]);
     return (
       <div className="grid gap-4 lg:grid-cols-2 stagger [&>*]:animate-fade-up">
@@ -378,9 +379,15 @@ async function PipelineProjecaoSection() {
   });
 }
 
-async function PercentisSection({ period }: { period: PeriodRange }) {
+async function PercentisSection({
+  period,
+  produto,
+}: {
+  period: PeriodRange;
+  produto?: Produto;
+}) {
   return renderSection("Percentis de tempo", async () => {
-    const rows = await fetchTempoPercentis(period);
+    const rows = await fetchTempoPercentis(period, produto);
     return <PercentisTempo rows={rows} />;
   });
 }
@@ -421,9 +428,15 @@ async function DistribuicoesSection({
   });
 }
 
-async function TopOrigensSection({ period }: { period: PeriodRange }) {
+async function TopOrigensSection({
+  period,
+  produto,
+}: {
+  period: PeriodRange;
+  produto?: Produto;
+}) {
   return renderSection("Top origens", async () => {
-    const rows = await fetchTopOrigensDetalhadas(period, 10);
+    const rows = await fetchTopOrigensDetalhadas(period, 10, produto);
     return <TopOrigens rows={rows} />;
   });
 }

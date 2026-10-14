@@ -29,6 +29,12 @@ import { endOfDayBrt, startOfDayBrt, todayYmdBrt } from "@/lib/datetime/brt";
 import { cadenciaDoLead, listCadencias } from "@/lib/cadencia/config";
 import type { CadenciaStatus } from "@/lib/cadencia/tipos";
 import { NAO_CONTATO_TIPOS } from "@/lib/leads/interacao-tipos";
+import type { Produto } from "@/lib/produtos";
+
+// Filtro de produto da Mesa (?produto=). Ausente = todos os produtos.
+function doProduto(produto?: Produto | null) {
+  return produto ? eq(leadsTable.produto, produto) : undefined;
+}
 
 // Cadência é por (status, produto): um status pode ter cadência em CGI e não
 // em condomínio. Estes helpers levam o par pra dentro do SQL.
@@ -131,8 +137,17 @@ function brl(centavos: number | null): string | null {
 
 // Mensagens default dos cards fora da cadência (1º contato / reativação /
 // update). Sem emoji fora do BMP — pré-preenchidas via wa.me.
-function msgPrimeiroContato(nome: string, valorCentavos: number | null): string {
+function msgPrimeiroContato(
+  nome: string,
+  valorCentavos: number | null,
+  produto: string,
+): string {
   const v = brl(valorCentavos);
+  // Condomínio: `nome` é o do condomínio e o contato é o síndico — sem
+  // primeiro nome, e o produto é outro.
+  if (produto === "CONDOMINIO") {
+    return `Olá! Aqui é da Credios — sou o consultor responsável pela solicitação de crédito do ${nome.trim()}${v ? ` (${v})` : ""}. Posso te ligar rapidinho pra entender a necessidade do condomínio e já encaminhar a análise?`;
+  }
   return `Olá, ${primeiroNome(nome)}! Aqui é da Credios — sou o consultor responsável pela sua solicitação de crédito com garantia de imóvel${v ? ` de ${v}` : ""}. Posso te ligar rapidinho pra entender o seu caso e já acelerar a análise?`;
 }
 
@@ -149,7 +164,10 @@ function msgReativacao(nome: string, valorCentavos: number | null): string {
 // FILA "FAZER AGORA" — leads priorizados por urgência
 // ============================================================================
 
-export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]> {
+export async function getFilaFazerAgora(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<FilaItem[]> {
   // Buckets em paralelo. Mesclamos no JS escolhendo o motivo de maior
   // prioridade por lead — evita o mesmo lead aparecer duas vezes.
   // docs_paradas e esfriando foram substituídos pela CADÊNCIA (playbook
@@ -157,13 +175,13 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
   const comCadencia = paresComCadencia(await listCadencias());
   const [reunioesSemDesfecho, sla, docsNovos, cadencia, novosHoje, negociacaoParada, altoValorParado] =
     await Promise.all([
-      qReuniaoSemDesfecho(consultorId),
-      qSlaEstourado(consultorId),
-      qDocsNovos(consultorId),
-      qCadenciaDue(consultorId),
-      qNovosHoje(consultorId),
-      qNegociacaoParada(consultorId),
-      qAltoValorParado(consultorId, comCadencia),
+      qReuniaoSemDesfecho(consultorId, produto),
+      qSlaEstourado(consultorId, produto),
+      qDocsNovos(consultorId, produto),
+      qCadenciaDue(consultorId, produto),
+      qNovosHoje(consultorId, produto),
+      qNegociacaoParada(consultorId, produto),
+      qAltoValorParado(consultorId, comCadencia, produto),
     ]);
 
   const todos: FilaItem[] = [
@@ -187,7 +205,10 @@ export async function getFilaFazerAgora(consultorId: string): Promise<FilaItem[]
     .slice(0, 30);
 }
 
-async function qReuniaoSemDesfecho(consultorId: string): Promise<FilaItem[]> {
+async function qReuniaoSemDesfecho(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<FilaItem[]> {
   // Reunião que já passou (30min de folga) e ninguém registrou o desfecho —
   // o loop do ponto de inflexão nº 1 precisa fechar SEMPRE.
   const rows = await db
@@ -208,6 +229,7 @@ async function qReuniaoSemDesfecho(consultorId: string): Promise<FilaItem[]> {
     .where(
       and(
         eq(reunioes.consultorId, consultorId),
+        doProduto(produto),
         eq(reunioes.status, "agendada"),
         lt(reunioes.inicio, sql`now() - interval '30 minutes'`),
         // Lead já encerrado (desqualificado/perdido/fechado) não volta pra Mesa
@@ -252,7 +274,10 @@ async function qReuniaoSemDesfecho(consultorId: string): Promise<FilaItem[]> {
   }));
 }
 
-async function qDocsNovos(consultorId: string): Promise<FilaItem[]> {
+async function qDocsNovos(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<FilaItem[]> {
   // Cliente anexou documento(s) pelo portal e o consultor ainda não fez NADA
   // depois disso (nenhuma interação manual) → card cobrando revisão. Some
   // assim que o consultor age no lead (registrar contato, "Revisei", status…).
@@ -280,6 +305,7 @@ async function qDocsNovos(consultorId: string): Promise<FilaItem[]> {
     .where(
       and(
         eq(leadsTable.consultorId, consultorId),
+        doProduto(produto),
         notInArray(leadsTable.status, STATUS_TERMINAIS),
         // Pré-filtro BARATO (índice parcial de documento_recebido): a imensa
         // maioria dos leads não tem doc nenhum e sai aqui sem tocar no max().
@@ -310,7 +336,10 @@ async function qDocsNovos(consultorId: string): Promise<FilaItem[]> {
     }));
 }
 
-async function qCadenciaDue(consultorId: string): Promise<FilaItem[]> {
+async function qCadenciaDue(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<FilaItem[]> {
   // Passos da cadência vencendo HOJE (ou atrasados) — o coração da Mesa:
   // cada item já diz o que fazer, com que mensagem, e tem botão de 1 toque.
   const fimHoje = endOfDayBrt(todayYmdBrt());
@@ -332,6 +361,7 @@ async function qCadenciaDue(consultorId: string): Promise<FilaItem[]> {
     .where(
       and(
         eq(leadsTable.consultorId, consultorId),
+        doProduto(produto),
         notInArray(leadsTable.status, STATUS_TERMINAIS),
         sql`${leadsTable.cadenciaPasso} is not null`,
         lt(leadsTable.cadenciaProximaEm, fimHoje),
@@ -374,7 +404,10 @@ async function qCadenciaDue(consultorId: string): Promise<FilaItem[]> {
   return out;
 }
 
-async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
+async function qSlaEstourado(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<FilaItem[]> {
   const rows = await db
     .select({
       leadId: leadsTable.id,
@@ -386,12 +419,14 @@ async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
       estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       atribuidoEm: leadsTable.atribuidoEm,
+      produto: leadsTable.produto,
     })
     .from(slaAlertas)
     .innerJoin(leadsTable, eq(leadsTable.id, slaAlertas.leadId))
     .where(
       and(
         eq(leadsTable.consultorId, consultorId),
+        doProduto(produto),
         eq(slaAlertas.tipo, "primeiro_contato_atrasado"),
         isNull(slaAlertas.resolvidoEm),
         // SLA de 1º contato só faz sentido em 'novo' — lead encerrado (ou que
@@ -423,13 +458,16 @@ async function qSlaEstourado(consultorId: string): Promise<FilaItem[]> {
         tipo: "contato_direto" as const,
         canal: "whatsapp" as const,
         instrucao: "Faça o 1º contato AGORA — apresente-se como o consultor do caso.",
-        mensagem: msgPrimeiroContato(r.leadNome, r.valorCreditoCentavos),
+        mensagem: msgPrimeiroContato(r.leadNome, r.valorCreditoCentavos, r.produto),
       },
     };
   });
 }
 
-async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
+async function qNovosHoje(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<FilaItem[]> {
   const inicioDia = startOfDayBrt(todayYmdBrt());
   const rows = await db
     .select({
@@ -442,11 +480,13 @@ async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
       estado: leadsTable.estado,
       valorCreditoCentavos: leadsTable.valorCreditoCentavos,
       atribuidoEm: leadsTable.atribuidoEm,
+      produto: leadsTable.produto,
     })
     .from(leadsTable)
     .where(
       and(
         eq(leadsTable.consultorId, consultorId),
+        doProduto(produto),
         eq(leadsTable.status, "novo"),
         gte(leadsTable.atribuidoEm, inicioDia),
       ),
@@ -471,12 +511,15 @@ async function qNovosHoje(consultorId: string): Promise<FilaItem[]> {
       tipo: "contato_direto" as const,
       canal: "whatsapp" as const,
       instrucao: "Primeiro contato — quanto antes, maior a conversão.",
-      mensagem: msgPrimeiroContato(r.leadNome, r.valorCreditoCentavos),
+      mensagem: msgPrimeiroContato(r.leadNome, r.valorCreditoCentavos, r.produto),
     },
   }));
 }
 
-async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
+async function qNegociacaoParada(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<FilaItem[]> {
   const rows = await db
     .select({
       leadId: leadsTable.id,
@@ -494,6 +537,7 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
     .where(
       and(
         eq(leadsTable.consultorId, consultorId),
+        doProduto(produto),
         eq(leadsTable.status, "em_negociacao"),
         lt(leadsTable.updatedAt, sql`now() - interval '5 days'`),
       ),
@@ -528,6 +572,7 @@ async function qNegociacaoParada(consultorId: string): Promise<FilaItem[]> {
 async function qAltoValorParado(
   consultorId: string,
   comCadencia: ParCadencia[],
+  produto?: Produto | null,
 ): Promise<FilaItem[]> {
   const rows = await db
     .select({
@@ -546,6 +591,7 @@ async function qAltoValorParado(
     .where(
       and(
         eq(leadsTable.consultorId, consultorId),
+        doProduto(produto),
         gte(leadsTable.valorCreditoCentavos, ALTO_VALOR_CENTAVOS),
         // Estágios com cadência ficam de fora: quem tem cadência ativa aparece
         // no card de cadência; quem não tem, na FAXINA. Duplicar aqui só
@@ -609,6 +655,7 @@ export type NovoParaMim = {
 
 export async function getNovosParaMim(
   consultorId: string,
+  produto?: Produto | null,
 ): Promise<NovoParaMim[]> {
   const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const rows = await db
@@ -626,6 +673,7 @@ export async function getNovosParaMim(
     .where(
       and(
         eq(leadsTable.consultorId, consultorId),
+        doProduto(produto),
         eq(leadsTable.status, "novo"),
         gte(leadsTable.atribuidoEm, desde24h),
       ),
@@ -671,6 +719,7 @@ export type CarteiraEmRisco = {
 
 export async function getCarteiraEmRisco(
   consultorId: string,
+  produto?: Produto | null,
 ): Promise<CarteiraEmRisco[]> {
   // Status ativos sem contato há 7+ dias. Limita 30.
   const rows = await db
@@ -689,6 +738,7 @@ export async function getCarteiraEmRisco(
     .where(
       and(
         eq(leadsTable.consultorId, consultorId),
+        doProduto(produto),
         notInArray(leadsTable.status, STATUS_TERMINAIS),
         or(
           isNull(leadsTable.ultimoContato),
@@ -738,7 +788,10 @@ export type MiniPlacar = {
   pipelineAtivoCentavos: number;
 };
 
-export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
+export async function getMiniPlacar(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<MiniPlacar> {
   const inicioDia = startOfDayBrt(todayYmdBrt());
   const desde24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -750,6 +803,7 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
         .where(
           and(
             eq(leadsTable.consultorId, consultorId),
+            doProduto(produto),
             gte(leadsTable.atribuidoEm, desde24h),
           ),
         ),
@@ -762,6 +816,9 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
           and(
             eq(interacoes.autorId, consultorId),
             gte(interacoes.criadoEm, inicioDia),
+            produto
+              ? sql`exists (select 1 from ${leadsTable} l where l.id = ${interacoes.leadId} and l.produto = ${produto})`
+              : undefined,
             // Exclui eventos de sistema E acontecimentos da operação — só
             // contatos reais com o cliente contam como "contatado hoje".
             notInArray(interacoes.tipo, [...NAO_CONTATO_TIPOS]),
@@ -774,6 +831,7 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
         .where(
           and(
             eq(leadsTable.consultorId, consultorId),
+            doProduto(produto),
             eq(slaAlertas.tipo, "primeiro_contato_atrasado"),
             isNull(slaAlertas.resolvidoEm),
             eq(leadsTable.status, "novo"),
@@ -787,6 +845,7 @@ export async function getMiniPlacar(consultorId: string): Promise<MiniPlacar> {
         .where(
           and(
             eq(leadsTable.consultorId, consultorId),
+            doProduto(produto),
             notInArray(leadsTable.status, STATUS_TERMINAIS),
           ),
         ),
@@ -829,7 +888,10 @@ const FAXINA_QUOTA_DIA = 20;
  * playbook executável) e parados há 3+ dias. O consultor decide em 1 toque:
  * retomar cadência ou encerrar. Dosado em 20/dia pra não afogar a Mesa.
  */
-export async function getFaxina(consultorId: string): Promise<Faxina> {
+export async function getFaxina(
+  consultorId: string,
+  produto?: Produto | null,
+): Promise<Faxina> {
   const cadencias = await listCadencias();
   const comCadencia = paresComCadencia(cadencias);
   if (comCadencia.length === 0) {
@@ -852,6 +914,7 @@ export async function getFaxina(consultorId: string): Promise<Faxina> {
 
   const base = and(
     eq(leadsTable.consultorId, consultorId),
+    doProduto(produto),
     notInArray(leadsTable.status, STATUS_TERMINAIS),
     leadTemCadencia(comCadencia),
     sql`${leadsTable.cadenciaPasso} is null`,
@@ -961,6 +1024,7 @@ export type ProximaReuniao = {
  *  sem desfecho viram card de cobrança na fila, não entram aqui.) */
 export async function getProximasReunioes(
   consultorId: string,
+  produto?: Produto | null,
 ): Promise<ProximaReuniao[]> {
   const rows = await db
     .select({
@@ -977,6 +1041,7 @@ export async function getProximasReunioes(
     .where(
       and(
         eq(reunioes.consultorId, consultorId),
+        doProduto(produto),
         eq(reunioes.status, "agendada"),
         gte(reunioes.inicio, sql`now()`),
         notInArray(leadsTable.status, STATUS_TERMINAIS),

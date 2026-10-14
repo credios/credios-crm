@@ -522,7 +522,7 @@ async function SaudeOperacionalSection({
     // (em queries.ts) deduplica dentro do mesmo render request.
     const [slaComp, esfriandoGlobal, tempoMedio, kpis] = await Promise.all([
       fetchSlaCompliance(filters, period),
-      fetchEsfriandoGlobal(),
+      fetchEsfriandoGlobal(filters.produto),
       fetchTempoMedioPorStatus(filters, period),
       fetchKpis(filters, period),
     ]);

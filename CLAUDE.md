@@ -803,7 +803,7 @@ Documentado aqui apenas para garantir que o schema seja projetado com expansão 
   - Convite em lote (`/parceiros`, admin): convida quem tem contrato assinado e ainda não tem login.
   - A integração com o portal antigo (`notifyPartnerPortal`, card de handoff) é desligada removendo `PORTAL_WEBHOOK_URL` na Vercel; o código morto sai depois dos 30 dias.
   - **Pendente do owner:** (1) adicionar `parceiros.credios.com.br` ao projeto do CRM na Vercel e remover do projeto antigo; (2) setar `PORTAL_PARCEIRO_URL=https://parceiros.credios.com.br/portal-parceiro`; (3) remover `PORTAL_WEBHOOK_URL` e `PORTAL_WEBHOOK_SECRET`; (4) rodar o script de migração mais uma vez; (5) "Convidar todos"; (6) manter projeto e banco do portal antigo por 30 dias, depois arquivar.
-  - **Ainda não portado do portal antigo:** upload de nota fiscal (parceiro PJ) e de comprovante de pagamento, exportação de comissões, editor de modelo de contrato pelo admin.
+  - **Portado na consolidação:** nota fiscal (parceiro), comprovante de pagamento, exportação CSV de comissões. **Não portado de propósito:** editor de modelo de contrato pelo admin — o texto é versionado em código (`modelo.ts`) pra que nenhuma versão já assinada mude.
 
 **Decisões do owner (2026-10-13):**
 - Gestão da carteira do fundo **nunca** entra no CRM — o fundo é outra entidade, com ERP próprio. Não criar módulo de carteira, parcelas ou cobrança aqui.
@@ -822,5 +822,5 @@ Documentado aqui apenas para garantir que o schema seja projetado com expansão 
 - Templates de condomínio iniciais inseridos pela 0055 (5, editáveis em Configurações → Mensagens).
 
 **Pendências conhecidas:**
-- Minha Mesa não tem filtro de produto; os widgets fixos de relatório (projeção do mês, pipeline em reais, saúde por consultor) somam todos os produtos.
+- Filtro de produto (2026-10-14): Minha Mesa (`?produto=`), Painel executivo (todas as seções, inclusive projeção, pipeline em R$, percentis, top origens e sparklines) e "Pipeline esfriando" em Relatórios. Sem produto = soma de todos. Saúde por consultor (`/admin/consultores`, `/meu-desempenho`) continua somando.
 - Integração com o portal antigo (`notifyPartnerPortal` → webhook, card de handoff) só sai depois da virada do domínio.
