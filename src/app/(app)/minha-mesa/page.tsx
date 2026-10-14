@@ -8,10 +8,12 @@ import { BlocoNovosParaMim } from "@/components/minha-mesa/bloco-novos-para-mim"
 import { BlocoProximasReunioes } from "@/components/minha-mesa/bloco-proximas-reunioes";
 import { BlocoSolicitacoesScore } from "@/components/minha-mesa/bloco-solicitacoes-score";
 import { FilaFazerAgora } from "@/components/minha-mesa/fila-fazer-agora";
+import { FiltroProdutoMesa } from "@/components/minha-mesa/filtro-produto";
 import { MiniPlacar } from "@/components/minha-mesa/mini-placar";
 import { ConsultorPicker } from "@/components/relatorios/consultor-picker";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdminOrGerente } from "@/lib/auth/permissions";
+import { PRODUTOS_ATIVOS, type Produto } from "@/lib/produtos";
 import { fetchConsultoresAtivos } from "@/lib/reports/queries";
 import {
   getCarteiraEmRisco,
@@ -48,6 +50,11 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
   const consultorVisualizadoId =
     podeVerOutros && requestedId ? requestedId : user.id;
   const somenteLeitura = consultorVisualizadoId !== user.id;
+  const produto: Produto | null =
+    typeof raw.produto === "string" &&
+    (PRODUTOS_ATIVOS as readonly string[]).includes(raw.produto)
+      ? (raw.produto as Produto)
+      : null;
   const consultores = podeVerOutros ? await fetchConsultoresAtivos() : [];
   const visualizado =
     consultores.find((c) => c.id === consultorVisualizadoId) ?? {
@@ -61,12 +68,12 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
   // é urgente no funil de cliente.
   const [placar, fila, novos, risco, faxina, reunioes, solicitacoesScore, duplicidades] =
     await Promise.all([
-      getMiniPlacar(consultorVisualizadoId),
-      getFilaFazerAgora(consultorVisualizadoId),
-      getNovosParaMim(consultorVisualizadoId),
-      getCarteiraEmRisco(consultorVisualizadoId),
-      getFaxina(consultorVisualizadoId),
-      getProximasReunioes(consultorVisualizadoId),
+      getMiniPlacar(consultorVisualizadoId, produto),
+      getFilaFazerAgora(consultorVisualizadoId, produto),
+      getNovosParaMim(consultorVisualizadoId, produto),
+      getCarteiraEmRisco(consultorVisualizadoId, produto),
+      getFaxina(consultorVisualizadoId, produto),
+      getProximasReunioes(consultorVisualizadoId, produto),
       // Fila de aprovação do admin — global, independe da mesa visualizada.
       user.perfil === "admin" ? getSolicitacoesScorePendentes() : Promise.resolve([]),
       user.perfil === "admin" ? getDuplicidadesPendentesCount() : Promise.resolve(0),
@@ -100,13 +107,19 @@ export default async function MinhaMesaPage({ searchParams }: Props) {
             )}
           </p>
         </div>
-        {podeVerOutros && consultores.length > 0 && (
-          <ConsultorPicker
-            consultores={consultores}
-            currentId={consultorVisualizadoId}
-            selfId={user.id}
+        <div className="flex items-center gap-2 flex-wrap">
+          <FiltroProdutoMesa
+            atual={produto}
+            consultorParam={somenteLeitura ? consultorVisualizadoId : null}
           />
-        )}
+          {podeVerOutros && consultores.length > 0 && (
+            <ConsultorPicker
+              consultores={consultores}
+              currentId={consultorVisualizadoId}
+              selfId={user.id}
+            />
+          )}
+        </div>
       </div>
 
       <MiniPlacar data={placar} />
