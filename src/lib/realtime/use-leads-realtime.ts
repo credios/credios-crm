@@ -3,14 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { createClient } from "@/lib/supabase/client";
+import { assinarCanalCrm } from "./canal-crm";
 
 /**
- * Inscreve em mudanças nas tabelas leads + interacoes via Supabase Realtime
- * e dispara router.refresh() (debounced) quando algo muda.
- *
- * Pré-requisito: Replication habilitada nas tabelas no Supabase Dashboard
- * (Database → Replication). Sem isso o canal conecta mas nunca recebe events.
+ * Ouve o canal privado `crm:leads` (lead criado/alterado/excluído ou
+ * interação nova — ver migration 0056) e dispara router.refresh()
+ * (debounced) quando algo muda.
  */
 export function useLeadsRealtime() {
   const router = useRouter();
@@ -18,22 +16,11 @@ export function useLeadsRealtime() {
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel("realtime-leads")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "leads" },
-        () => scheduleRefresh(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "interacoes" },
-        () => scheduleRefresh(),
-      )
-      .subscribe((status) => {
-        setConnected(status === "SUBSCRIBED");
-      });
+    const cancelar = assinarCanalCrm(
+      "crm:leads",
+      () => scheduleRefresh(),
+      setConnected,
+    );
 
     function scheduleRefresh() {
       if (debounce.current) clearTimeout(debounce.current);
@@ -42,7 +29,7 @@ export function useLeadsRealtime() {
 
     return () => {
       if (debounce.current) clearTimeout(debounce.current);
-      supabase.removeChannel(channel);
+      cancelar();
     };
   }, [router]);
 

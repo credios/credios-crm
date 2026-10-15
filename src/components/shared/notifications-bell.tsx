@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatBrlShort } from "@/lib/formatters/currency";
 import { formatRelative } from "@/lib/formatters/date";
-import { createClient } from "@/lib/supabase/client";
+import { assinarCanalCrm } from "@/lib/realtime/canal-crm";
 import { cn } from "@/lib/utils";
 
 type LeadNovo = {
@@ -42,16 +42,14 @@ export function NotificationsBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const seenIds = useRef<Set<string>>(new Set());
-  // Lazy init: client Supabase só roda no browser, evita problema de SSR.
-  const [supabase] = useState(() => createClient());
   // Timeout pra auto-mark-as-read após dropdown ficar aberto X segundos.
   const autoMarkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const refetch = useCallback(async () => {
+  const refetch = useCallback(async (): Promise<LeadNovo[]> => {
     const res = await fetch("/api/notifications/leads-novos", {
       cache: "no-store",
     });
-    if (!res.ok) return;
+    if (!res.ok) return [];
     const json = (await res.json()) as {
       data: LeadNovo[];
       perfil: Perfil;
@@ -61,6 +59,7 @@ export function NotificationsBell() {
     setPerfil(json.perfil);
     setUnreadCount(json.unreadCount ?? 0);
     seenIds.current = new Set((json.data ?? []).map((l) => l.id));
+    return json.data ?? [];
   }, []);
 
   const markAsRead = useCallback(async () => {
@@ -76,28 +75,20 @@ export function NotificationsBell() {
 
   useEffect(() => {
     void refetch();
-    // Realtime em `leads`: refetch quando um lead novo for inserido.
-    const channel = supabase
-      .channel("realtime-leads-novos")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "leads" },
-        async (payload) => {
-          await refetch();
-          const row = payload.new as { id?: string; nome?: string };
-          if (row?.id && !seenIds.current.has(row.id)) {
-            seenIds.current.add(row.id);
-            toast("Novo lead chegou", {
-              description: row.nome ?? "Veja na lista de leads.",
-            });
-          }
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [refetch, supabase]);
+    // Canal privado `crm:leads` (migration 0056): o payload traz só o id do
+    // lead. O refetch passa pelas permissões da API — o toast só aparece se o
+    // lead novo estiver na lista que este usuário pode ver.
+    return assinarCanalCrm("crm:leads", async (evento, payload) => {
+      if (evento !== "lead" || payload.op !== "INSERT") return;
+      const id = typeof payload.id === "string" ? payload.id : null;
+      if (!id || seenIds.current.has(id)) return;
+      const visiveis = await refetch();
+      const novo = visiveis.find((l) => l.id === id);
+      if (novo) {
+        toast("Novo lead chegou", { description: novo.nome });
+      }
+    });
+  }, [refetch]);
 
   // Auto-mark-as-read 2.5s após abrir dropdown — UX comum (Twitter/YouTube):
   // user vê os badges destacados, depois eles silenciam.

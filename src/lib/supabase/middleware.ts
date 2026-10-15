@@ -64,12 +64,15 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // IMPORTANTE: getUser() é a única chamada entre createServerClient e o return.
-  // Inserir lógica entre eles pode silenciosamente deslogar usuários (ver docs do
-  // @supabase/ssr).
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // IMPORTANTE: getClaims() é a única chamada entre createServerClient e o
+  // return. Inserir lógica entre eles pode silenciosamente deslogar usuários
+  // (ver docs do @supabase/ssr). Ela também renova a sessão vencida.
+  //
+  // getClaims (era getUser): com as chaves de assinatura assimétricas do
+  // Supabase Auth, valida o JWT localmente — zero ida ao servidor do Auth por
+  // navegação. Sem elas, cai sozinha no getUser (mesmo custo de antes).
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const user = claimsData?.claims?.sub ? { id: claimsData.claims.sub } : null;
 
   const path = request.nextUrl.pathname;
 

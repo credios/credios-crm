@@ -25,11 +25,83 @@ const isDev = process.env.NODE_ENV !== "production";
 
 type PgClient = ReturnType<typeof postgres>;
 
+const MAX_CONEXOES = 15;
+
+// ---------------------------------------------------------------------------
+// Limite de consultas em voo.
+//
+// O pooler em modo transaction (porta 6543) TRAVA quando o postgres-js empilha
+// 4+ consultas na mesma conexão (pipelining). Medido em 2026-10-15 contra
+// produção: max=15 com 15 consultas paralelas → 0,3 s; com 40 → travado por
+// 10 s+. No modo session (5432) as mesmas consultas passam — o problema é o
+// pooler, e a opção `max_pipeline` do postgres-js não resolve.
+//
+// Quando todas as conexões estão ocupadas o postgres-js empilha a consulta
+// numa conexão já ocupada em vez de esperar. Um relatório com cache frio
+// dispara ~40 consultas de uma vez → seções presas até o timeout de 25 s.
+// Este limitador segura as consultas excedentes numa fila do app até uma
+// conexão liberar: nunca mais consultas em voo do que conexões.
+//
+// Só `unsafe` passa por aqui — é por onde o Drizzle executa tudo. Transações
+// (`begin`) usam a própria conexão reservada e não são contadas.
+// ---------------------------------------------------------------------------
+function limitarConsultasEmVoo(client: PgClient, limite: number): PgClient {
+  let emVoo = 0;
+  const fila: Array<() => void> = [];
+
+  function adquirir(): Promise<void> {
+    if (emVoo < limite) {
+      emVoo++;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => fila.push(resolve));
+  }
+
+  function liberar() {
+    const proxima = fila.shift();
+    // Passa a vaga direto pra próxima da fila (emVoo não muda).
+    if (proxima) proxima();
+    else emVoo--;
+  }
+
+  async function comVaga<T>(executar: () => PromiseLike<T>): Promise<T> {
+    await adquirir();
+    try {
+      return await executar();
+    } finally {
+      liberar();
+    }
+  }
+
+  return new Proxy(client, {
+    get(alvo, prop, receiver) {
+      if (prop !== "unsafe") return Reflect.get(alvo, prop, receiver);
+      // A consulta do postgres-js é preguiçosa: só executa no `then` ou no
+      // `.values()`. O substituto mantém isso — sem executar duas vezes.
+      return (...args: Parameters<PgClient["unsafe"]>) => ({
+        then<A, B>(
+          ok?: ((v: unknown) => A | PromiseLike<A>) | null,
+          erro?: ((e: unknown) => B | PromiseLike<B>) | null,
+        ) {
+          return comVaga(() => alvo.unsafe(...args)).then(ok, erro);
+        },
+        values() {
+          return comVaga(() => alvo.unsafe(...args).values());
+        },
+      });
+    },
+  });
+}
+
 function makeClient(): PgClient {
   const baseOptions = {
     prepare: false,
-    max: isDev ? 1 : 15,
-    idle_timeout: isDev ? 5 : 30,
+    max: isDev ? 1 : MAX_CONEXOES,
+    // 240s (era 30): conexão nova com o pooler custa ~0,3–0,4 s (TLS + auth +
+    // busca de tipos do postgres-js). Com Fluid compute a instância vive entre
+    // requests; fechar a conexão após 30s parada fazia quem voltava à tela
+    // logo depois pagar tudo de novo.
+    idle_timeout: isDev ? 5 : 240,
     connect_timeout: 10,
     max_lifetime: isDev ? 60 : 60 * 30,
   } as const;
@@ -80,7 +152,9 @@ const globalForDb = globalThis as unknown as {
   __credios_db__?: ReturnType<typeof drizzle<typeof schema>>;
 };
 
-const client = globalForDb.__credios_pg__ ?? makeClient();
+const client =
+  globalForDb.__credios_pg__ ??
+  limitarConsultasEmVoo(makeClient(), isDev ? 1 : MAX_CONEXOES);
 
 export const db = globalForDb.__credios_db__ ?? drizzle(client, { schema });
 

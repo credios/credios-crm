@@ -1,7 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { Loader2 } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
 import {
@@ -24,6 +23,8 @@ import {
   type PeriodoPreset,
 } from "@/lib/validators/report";
 
+import { useFiltrosRelatorio } from "./transicao-filtros";
+
 // Subset de presets focados em comparação executiva
 const PRESETS_EXEC: PeriodoPreset[] = [
   "mes_atual",
@@ -35,10 +36,7 @@ const PRESETS_EXEC: PeriodoPreset[] = [
 ];
 
 export function ExecFilters() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const [, startTransition] = useTransition();
+  const { query: params, pendente, navegar } = useFiltrosRelatorio();
 
   const periodo = (params.get("periodo") as PeriodoPreset) ?? "mes_atual";
   const comparar =
@@ -49,7 +47,7 @@ export function ExecFilters() {
     const next = new URLSearchParams(params.toString());
     if (value && value !== "") next.set(key, value);
     else next.delete(key);
-    startTransition(() => router.replace(`${pathname}?${next.toString()}`));
+    navegar(next);
   }
 
   return (
@@ -133,6 +131,15 @@ export function ExecFilters() {
           </SelectContent>
         </Select>
       </div>
+
+      {pendente && (
+        <span
+          role="status"
+          className="flex items-center gap-1.5 self-end pb-1.5 text-xs text-muted-foreground"
+        >
+          <Loader2 className="size-3.5 animate-spin" /> Atualizando…
+        </span>
+      )}
     </div>
   );
 }

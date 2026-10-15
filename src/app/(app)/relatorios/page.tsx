@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ArrowDownUp,
   CheckCircle2,
   Clock,
@@ -12,7 +11,6 @@ import { after } from "next/server";
 import { Suspense } from "react";
 
 import { QualidadeDadosBanner } from "@/components/relatorios/qualidade-dados";
-import type { ReactNode } from "react";
 
 import { ConversionFunnel } from "@/components/relatorios/charts/conversion-funnel";
 import { LossReasonsChart } from "@/components/relatorios/charts/loss-reasons";
@@ -26,6 +24,11 @@ import { DistribuicaoCards } from "@/components/relatorios/distribuicao-cards";
 import { KpiCard } from "@/components/relatorios/kpi-card";
 import { MqlSqlFunil } from "@/components/relatorios/mql-sql-funil";
 import { ReportFilters } from "@/components/relatorios/report-filters";
+import {
+  AreaRelatorio,
+  TransicaoFiltros,
+} from "@/components/relatorios/transicao-filtros";
+import { renderSection } from "@/components/relatorios/render-section";
 import { Badge } from "@/components/ui/badge";
 import { logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
@@ -71,6 +74,8 @@ export const revalidate = 60;
 // quando o cache estiver frio. Suspenses individuais cortam em 25s próprio.
 export const maxDuration = 90;
 
+const ROTA = "/relatorios";
+
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -93,6 +98,10 @@ export default async function RelatoriosPage({ searchParams }: Props) {
   const filters = reportFiltersSchema.parse(flat);
   const period = periodFromFilters(filters);
   const compPeriod = comparisonPeriod(period, "anterior_equivalente");
+  // Cada seção é um Suspense com `key` dos filtros: trocar um filtro remonta
+  // as seções, que mostram o próprio skeleton e aparecem conforme ficam
+  // prontas — em vez da página inteira esperar a seção mais lenta.
+  const chave = JSON.stringify(filters);
 
   const isMarketing = user.perfil === "marketing";
   // R$ liberado: admin e marketing (marketing atribui ticket fechado à campanha
@@ -116,6 +125,7 @@ export default async function RelatoriosPage({ searchParams }: Props) {
   );
 
   return (
+    <TransicaoFiltros>
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -138,72 +148,76 @@ export default async function RelatoriosPage({ searchParams }: Props) {
         <FiltersSection />
       </Suspense>
 
-      {isAdminGerente && (
-        <Suspense fallback={null}>
-          <QualidadeDadosSection period={period} />
+      <AreaRelatorio>
+
+        {isAdminGerente && (
+          <Suspense key={`${chave}:1`} fallback={null}>
+            <QualidadeDadosSection period={period} />
+          </Suspense>
+        )}
+
+        <Suspense key={`${chave}:2`} fallback={<KpisSkeleton />}>
+          <KpisSection
+            filters={filters}
+            period={period}
+            compPeriod={compPeriod}
+            canSeeLiberado={canSeeLiberado}
+          />
         </Suspense>
-      )}
 
-      <Suspense fallback={<KpisSkeleton />}>
-        <KpisSection
-          filters={filters}
-          period={period}
-          compPeriod={compPeriod}
-          canSeeLiberado={canSeeLiberado}
-        />
-      </Suspense>
+        {/* === Tier 2 (streaming) — cada Suspense renderiza independente. ===
+            Uma query lenta/falha numa seção não derruba a página inteira;
+            enquanto resolve, o usuário vê o skeleton da seção e o resto da
+            página já interativa. */}
 
-      {/* === Tier 2 (streaming) — cada Suspense renderiza independente. ===
-          Uma query lenta/falha numa seção não derruba a página inteira;
-          enquanto resolve, o usuário vê o skeleton da seção e o resto da
-          página já interativa. */}
-
-      <Suspense fallback={<SectionSkeleton h={320} />}>
-        <FunilSection filters={filters} period={period} />
-      </Suspense>
-
-      <Suspense fallback={<SectionSkeleton h={460} />}>
-        <MqlSqlSection
-          filters={filters}
-          period={period}
-          compPeriod={compPeriod}
-        />
-      </Suspense>
-
-      <Suspense fallback={<SectionSkeleton h={320} />}>
-        <VolumeSection filters={filters} period={period} />
-      </Suspense>
-
-      <Suspense fallback={<SectionSkeleton h={400} />}>
-        <PipelineOrigemSection
-          filters={filters}
-          period={period}
-          hideFinancial={hideFinancial}
-        />
-      </Suspense>
-
-      <Suspense fallback={<SectionSkeleton h={300} />}>
-        <DistribuicoesSection filters={filters} period={period} />
-      </Suspense>
-
-      {isAdminGerente && (
-        <Suspense fallback={<SectionSkeleton h={280} />}>
-          <PerformanceConsultoresSection filters={filters} period={period} />
+        <Suspense key={`${chave}:3`} fallback={<SectionSkeleton h={320} />}>
+          <FunilSection filters={filters} period={period} />
         </Suspense>
-      )}
 
-      <Suspense fallback={<SectionSkeleton h={300} />}>
-        <UfLossSection
-          filters={filters}
-          period={period}
-          hideFinancial={hideFinancial}
-        />
-      </Suspense>
+        <Suspense key={`${chave}:4`} fallback={<SectionSkeleton h={460} />}>
+          <MqlSqlSection
+            filters={filters}
+            period={period}
+            compPeriod={compPeriod}
+          />
+        </Suspense>
 
-      <Suspense fallback={<SectionSkeleton h={400} />}>
-        <SaudeOperacionalSection filters={filters} period={period} />
-      </Suspense>
+        <Suspense key={`${chave}:5`} fallback={<SectionSkeleton h={320} />}>
+          <VolumeSection filters={filters} period={period} />
+        </Suspense>
+
+        <Suspense key={`${chave}:6`} fallback={<SectionSkeleton h={400} />}>
+          <PipelineOrigemSection
+            filters={filters}
+            period={period}
+            hideFinancial={hideFinancial}
+          />
+        </Suspense>
+
+        <Suspense key={`${chave}:7`} fallback={<SectionSkeleton h={300} />}>
+          <DistribuicoesSection filters={filters} period={period} />
+        </Suspense>
+
+        {isAdminGerente && (
+          <Suspense key={`${chave}:8`} fallback={<SectionSkeleton h={280} />}>
+            <PerformanceConsultoresSection filters={filters} period={period} />
+          </Suspense>
+        )}
+
+        <Suspense key={`${chave}:9`} fallback={<SectionSkeleton h={300} />}>
+          <UfLossSection
+            filters={filters}
+            period={period}
+            hideFinancial={hideFinancial}
+          />
+        </Suspense>
+
+        <Suspense key={`${chave}:10`} fallback={<SectionSkeleton h={400} />}>
+          <SaudeOperacionalSection filters={filters} period={period} />
+        </Suspense>
+      </AreaRelatorio>
     </div>
+    </TransicaoFiltros>
   );
 }
 
@@ -222,61 +236,6 @@ function SectionSkeleton({ h }: { h: number }) {
   );
 }
 
-// Timeout por seção: evita que uma query lenta deixe o Suspense pendurado
-// até o maxDuration da função (60s) e o user veja skeleton infinito sem
-// feedback. 25s é generoso pra qualquer query honesta — acima disso é falha.
-const SECTION_TIMEOUT_MS = 25_000;
-
-async function renderSection(
-  name: string,
-  fn: () => Promise<ReactNode>,
-): Promise<ReactNode> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const result = await Promise.race([
-      fn(),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(
-          () =>
-            reject(
-              new Error(
-                `section "${name}" timed out after ${SECTION_TIMEOUT_MS}ms`,
-              ),
-            ),
-          SECTION_TIMEOUT_MS,
-        );
-      }),
-    ]);
-    return result;
-  } catch (error) {
-    console.error(`[/relatorios:${name}]`, error);
-    return <SectionError title={name} />;
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
-}
-
-function SectionError({ title }: { title: string }) {
-  return (
-    <div className="surface-solid rounded-xl border-destructive/25 p-4">
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 rounded-full bg-destructive/10 p-2">
-          <AlertTriangle className="size-4 text-destructive" />
-        </div>
-        <div className="space-y-1">
-          <h2 className="font-display text-sm font-semibold">
-            {title} indisponível
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Esta seção falhou ao carregar, mas o restante do relatório continua
-            disponível. Recarregue a página para tentar novamente.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function FiltersSkeleton() {
   return (
     <div className="surface-solid rounded-xl animate-pulse h-24" aria-hidden />
@@ -284,7 +243,7 @@ function FiltersSkeleton() {
 }
 
 async function FiltersSection() {
-  return renderSection("Filtros", async () => {
+  return renderSection(ROTA, "Filtros", async () => {
     // 3 listas pequenas em paralelo (cacheadas via unstable_cache nas queries).
     const [consultores, origens, ufs] = await Promise.all([
       fetchConsultoresAtivos(),
@@ -322,7 +281,7 @@ async function KpisSection({
   compPeriod: PeriodRange | null;
   canSeeLiberado: boolean;
 }) {
-  return renderSection("KPIs principais", async () => {
+  return renderSection(ROTA, "KPIs principais", async () => {
     const [kpisCurr, kpisPrev] = await Promise.all([
       fetchKpis(filters, period),
       compPeriod ? fetchKpis(filters, compPeriod) : Promise.resolve(null),
@@ -385,7 +344,7 @@ async function FunilSection({
   filters: RFilters;
   period: PeriodRange;
 }) {
-  return renderSection("Funil de conversão", async () => {
+  return renderSection(ROTA, "Funil de conversão", async () => {
     const stages = await fetchConversionRates(filters, period);
     return <ConversionFunnel stages={stages} />;
   });
@@ -400,7 +359,7 @@ async function MqlSqlSection({
   period: PeriodRange;
   compPeriod: PeriodRange | null;
 }) {
-  return renderSection("MQL / SQL", async () => {
+  return renderSection(ROTA, "MQL / SQL", async () => {
     const [resumo, resumoPrev, porOrigem] = await Promise.all([
       fetchMqlSql(filters, period),
       compPeriod ? fetchMqlSql(filters, compPeriod) : Promise.resolve(null),
@@ -423,7 +382,7 @@ async function VolumeSection({
   filters: RFilters;
   period: PeriodRange;
 }) {
-  return renderSection("Volume por dia", async () => {
+  return renderSection(ROTA, "Volume por dia", async () => {
     const rows = await fetchVolumePorDia(filters, period);
     return (
       <VolumePorDiaChart
@@ -444,7 +403,7 @@ async function PipelineOrigemSection({
   period: PeriodRange;
   hideFinancial: boolean;
 }) {
-  return renderSection("Pipeline e origens", async () => {
+  return renderSection(ROTA, "Pipeline e origens", async () => {
     const [pipeline, origemRoi] = await Promise.all([
       fetchPipelineAtivoPorStatus(filters),
       fetchOrigemROI(filters, period),
@@ -467,7 +426,7 @@ async function DistribuicoesSection({
   filters: RFilters;
   period: PeriodRange;
 }) {
-  return renderSection("Distribuições", async () => {
+  return renderSection(ROTA, "Distribuições", async () => {
     const distrib = await fetchDistribuicoes(filters, period);
     return <DistribuicaoCards data={distrib} />;
   });
@@ -480,7 +439,7 @@ async function PerformanceConsultoresSection({
   filters: RFilters;
   period: PeriodRange;
 }) {
-  return renderSection("Performance dos consultores", async () => {
+  return renderSection(ROTA, "Performance dos consultores", async () => {
     const rows = await fetchPerformanceConsultores(filters, period);
     if (rows.length === 0) return null;
     return <PerformanceConsultoresTable rows={rows} />;
@@ -496,7 +455,7 @@ async function UfLossSection({
   period: PeriodRange;
   hideFinancial: boolean;
 }) {
-  return renderSection("UF e perdas", async () => {
+  return renderSection(ROTA, "UF e perdas", async () => {
     const [perfUf, lossReasons] = await Promise.all([
       fetchPerformancePorUf(filters, period),
       fetchLossReasons(filters, period),
@@ -517,7 +476,7 @@ async function SaudeOperacionalSection({
   filters: RFilters;
   period: PeriodRange;
 }) {
-  return renderSection("Saúde operacional", async () => {
+  return renderSection(ROTA, "Saúde operacional", async () => {
     // fetchKpis aqui é o MESMO chamado por KpisSection — React.cache
     // (em queries.ts) deduplica dentro do mesmo render request.
     const [slaComp, esfriandoGlobal, tempoMedio, kpis] = await Promise.all([

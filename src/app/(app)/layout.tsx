@@ -1,3 +1,4 @@
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { redirect } from "next/navigation";
 
 import { BottomNav } from "@/components/shared/bottom-nav";
@@ -24,13 +25,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (shouldEnforceMfa(appUser)) {
     const supabase = await createClient();
-    const { data: factors } = await supabase.auth.mfa.listFactors();
-    const hasVerifiedFactor =
-      factors?.totp?.some((f) => f.status === "verified") ?? false;
-    if (!hasVerifiedFactor) {
-      redirect("/primeiro-acesso");
-    }
+    // getAuthenticatorAssuranceLevel lê a sessão local (sem rede). nextLevel
+    // "aal2" = já tem fator TOTP verificado. Só quando ele diz que NÃO tem é
+    // que confirmamos no servidor (listFactors faz uma ida ao Auth) — antes
+    // essa ida acontecia em toda navegação de admin.
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.nextLevel !== "aal2") {
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      const hasVerifiedFactor =
+        factors?.totp?.some((f) => f.status === "verified") ?? false;
+      if (!hasVerifiedFactor) {
+        redirect("/primeiro-acesso");
+      }
+    }
     if (aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2") {
       redirect("/desafio-mfa");
     }
@@ -75,6 +82,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           já foi feito deploy (gerou bug das mensagens com {{saudacao}}
           literal pro Rodrigo em 2026-05). */}
       <StaleVersionDetector />
+      {/* Web Vitals reais (INP do clique em filtro, LCP) — só na área logada:
+          páginas públicas com token na URL ficam de fora. */}
+      <SpeedInsights />
     </div>
   );
 }
