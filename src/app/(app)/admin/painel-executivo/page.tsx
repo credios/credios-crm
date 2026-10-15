@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   Banknote,
   Crown,
   DollarSign,
@@ -9,13 +8,17 @@ import {
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { Suspense } from "react";
-import type { ReactNode } from "react";
 
 import { ReceitaMensalExec } from "@/components/relatorios/charts/receita-mensal-exec";
 import { ComparativoPeriodos } from "@/components/relatorios/comparativo-periodos";
 import { DistribuicaoCards } from "@/components/relatorios/distribuicao-cards";
 import { ExecFilters } from "@/components/relatorios/exec-filters";
 import { KpiExecutive } from "@/components/relatorios/kpi-executive";
+import { renderSection } from "@/components/relatorios/render-section";
+import {
+  AreaRelatorio,
+  TransicaoFiltros,
+} from "@/components/relatorios/transicao-filtros";
 import { PercentisTempo } from "@/components/relatorios/percentis-tempo";
 import { PipelineEmReais } from "@/components/relatorios/pipeline-em-reais";
 import { ProjecaoMesCard } from "@/components/relatorios/projecao-mes";
@@ -58,6 +61,8 @@ export const revalidate = 60;
 // 90s — ver comentário equivalente em /relatorios.
 export const maxDuration = 90;
 
+const ROTA = "/admin/painel-executivo";
+
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
@@ -80,6 +85,10 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
   const period = periodFromFilters(filters);
   const compMode: ComparacaoMode = filters.comparar;
   const compPeriod = comparisonPeriod(period, compMode);
+  // Cada seção é um Suspense com `key` dos filtros: trocar um filtro remonta
+  // as seções, que mostram o próprio skeleton e aparecem conforme ficam
+  // prontas — em vez da página inteira esperar a seção mais lenta.
+  const chave = JSON.stringify(filters);
 
   // Tier 1 vazio: só auth + parse de filtros (rápidos). TUDO que vem do banco
   // sobe em Suspense abaixo, inclusive os KPIs do topo. Antes, 5 queries
@@ -95,6 +104,7 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
   );
 
   return (
+    <TransicaoFiltros>
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
@@ -122,49 +132,53 @@ export default async function PainelExecutivoPage({ searchParams }: Props) {
 
       <ExecFilters />
 
-      {/* KPIs estratégicos com sparklines — Suspense próprio pra não travar
-          o resto da página caso alguma das queries internas demore. */}
-      <Suspense fallback={<KpisSkeleton />}>
-        <KpisSection
-          filters={filters}
-          period={period}
-          compPeriod={compPeriod}
-        />
-      </Suspense>
+      <AreaRelatorio>
 
-      {/* === Tier 2 (streaming) — cada seção pesada em Suspense isolado. === */}
-
-      <Suspense fallback={<SectionSkeleton h={360} />}>
-        <ReceitaMensalSection filters={filters} />
-      </Suspense>
-
-      <Suspense fallback={<SectionSkeleton h={400} />}>
-        <PipelineProjecaoSection produto={filters.produto} />
-      </Suspense>
-
-      <Suspense fallback={<SectionSkeleton h={300} />}>
-        <PercentisSection period={period} produto={filters.produto} />
-      </Suspense>
-
-      {compMode !== "sem" && compPeriod && (
-        <Suspense fallback={<SectionSkeleton h={280} />}>
-          <ComparativoSection
+        {/* KPIs estratégicos com sparklines — Suspense próprio pra não travar
+            o resto da página caso alguma das queries internas demore. */}
+        <Suspense key={`${chave}:1`} fallback={<KpisSkeleton />}>
+          <KpisSection
             filters={filters}
             period={period}
             compPeriod={compPeriod}
-            compMode={compMode}
           />
         </Suspense>
-      )}
 
-      <Suspense fallback={<SectionSkeleton h={300} />}>
-        <DistribuicoesSection filters={filters} period={period} />
-      </Suspense>
+        {/* === Tier 2 (streaming) — cada seção pesada em Suspense isolado. === */}
 
-      <Suspense fallback={<SectionSkeleton h={300} />}>
-        <TopOrigensSection period={period} produto={filters.produto} />
-      </Suspense>
+        <Suspense key={`${chave}:2`} fallback={<SectionSkeleton h={360} />}>
+          <ReceitaMensalSection filters={filters} />
+        </Suspense>
+
+        <Suspense key={`${chave}:3`} fallback={<SectionSkeleton h={400} />}>
+          <PipelineProjecaoSection produto={filters.produto} />
+        </Suspense>
+
+        <Suspense key={`${chave}:4`} fallback={<SectionSkeleton h={300} />}>
+          <PercentisSection period={period} produto={filters.produto} />
+        </Suspense>
+
+        {compMode !== "sem" && compPeriod && (
+          <Suspense key={`${chave}:5`} fallback={<SectionSkeleton h={280} />}>
+            <ComparativoSection
+              filters={filters}
+              period={period}
+              compPeriod={compPeriod}
+              compMode={compMode}
+            />
+          </Suspense>
+        )}
+
+        <Suspense key={`${chave}:6`} fallback={<SectionSkeleton h={300} />}>
+          <DistribuicoesSection filters={filters} period={period} />
+        </Suspense>
+
+        <Suspense key={`${chave}:7`} fallback={<SectionSkeleton h={300} />}>
+          <TopOrigensSection period={period} produto={filters.produto} />
+        </Suspense>
+      </AreaRelatorio>
     </div>
+    </TransicaoFiltros>
   );
 }
 
@@ -180,59 +194,6 @@ function SectionSkeleton({ h }: { h: number }) {
       style={{ height: h }}
       aria-hidden
     />
-  );
-}
-
-// Timeout por seção: ver comentário equivalente em /relatorios.
-const SECTION_TIMEOUT_MS = 25_000;
-
-async function renderSection(
-  name: string,
-  fn: () => Promise<ReactNode>,
-): Promise<ReactNode> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const result = await Promise.race([
-      fn(),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(
-          () =>
-            reject(
-              new Error(
-                `section "${name}" timed out after ${SECTION_TIMEOUT_MS}ms`,
-              ),
-            ),
-          SECTION_TIMEOUT_MS,
-        );
-      }),
-    ]);
-    return result;
-  } catch (error) {
-    console.error(`[/admin/painel-executivo:${name}]`, error);
-    return <SectionError title={name} />;
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
-}
-
-function SectionError({ title }: { title: string }) {
-  return (
-    <div className="surface-solid rounded-xl border-destructive/25 p-4">
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 rounded-full bg-destructive/10 p-2">
-          <AlertTriangle className="size-4 text-destructive" />
-        </div>
-        <div className="space-y-1">
-          <h2 className="font-display text-sm font-semibold">
-            {title} indisponível
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Esta seção falhou ao carregar, mas o restante do painel continua
-            disponível. Recarregue a página para tentar novamente.
-          </p>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -259,7 +220,7 @@ async function KpisSection({
   period: PeriodRange;
   compPeriod: PeriodRange | null;
 }) {
-  return renderSection("KPIs executivos", async () => {
+  return renderSection(ROTA, "KPIs executivos", async () => {
     // Tudo que os 4 KPI cards do topo precisam, em paralelo. Com fetchKpis
     // e fetchSalesMetrics agora paralelizadas internamente, esta seção
     // termina rápido mesmo em pico.
@@ -358,14 +319,14 @@ async function KpisSection({
 }
 
 async function ReceitaMensalSection({ filters }: { filters: RFilters }) {
-  return renderSection("Receita mensal", async () => {
+  return renderSection(ROTA, "Receita mensal", async () => {
     const rows = await fetchReceitaMensal(filters);
     return <ReceitaMensalExec rows={rows} />;
   });
 }
 
 async function PipelineProjecaoSection({ produto }: { produto?: Produto }) {
-  return renderSection("Pipeline e projeção", async () => {
+  return renderSection(ROTA, "Pipeline e projeção", async () => {
     const [pipelineR$, proj] = await Promise.all([
       fetchPipelineEmReais(produto),
       fetchProjecaoMes(produto),
@@ -386,7 +347,7 @@ async function PercentisSection({
   period: PeriodRange;
   produto?: Produto;
 }) {
-  return renderSection("Percentis de tempo", async () => {
+  return renderSection(ROTA, "Percentis de tempo", async () => {
     const rows = await fetchTempoPercentis(period, produto);
     return <PercentisTempo rows={rows} />;
   });
@@ -403,7 +364,7 @@ async function ComparativoSection({
   compPeriod: PeriodRange;
   compMode: ComparacaoMode;
 }) {
-  return renderSection("Comparativo de períodos", async () => {
+  return renderSection(ROTA, "Comparativo de períodos", async () => {
     const rows = await fetchComparativoPeriodos(filters, period, compPeriod);
     if (rows.length === 0) return null;
     return (
@@ -422,7 +383,7 @@ async function DistribuicoesSection({
   filters: RFilters;
   period: PeriodRange;
 }) {
-  return renderSection("Distribuições", async () => {
+  return renderSection(ROTA, "Distribuições", async () => {
     const distrib = await fetchDistribuicoes(filters, period);
     return <DistribuicaoCards data={distrib} />;
   });
@@ -435,7 +396,7 @@ async function TopOrigensSection({
   period: PeriodRange;
   produto?: Produto;
 }) {
-  return renderSection("Top origens", async () => {
+  return renderSection(ROTA, "Top origens", async () => {
     const rows = await fetchTopOrigensDetalhadas(period, 10, produto);
     return <TopOrigens rows={rows} />;
   });

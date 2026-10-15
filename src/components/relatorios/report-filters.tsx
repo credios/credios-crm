@@ -1,8 +1,7 @@
 "use client";
 
-import { ChevronDown, X } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useTransition } from "react";
+import { ChevronDown, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   DropdownMenu,
@@ -33,6 +32,8 @@ import {
   type PeriodoPreset,
 } from "@/lib/validators/report";
 
+import { useFiltrosRelatorio } from "./transicao-filtros";
+
 type Props = {
   consultores: { id: string; nome: string }[];
   origens: string[];
@@ -47,10 +48,9 @@ export function ReportFilters({
   ufs = [],
   hideConsultor,
 }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const [, startTransition] = useTransition();
+  // `params` é otimista: reflete o filtro escolhido no mesmo frame, antes da
+  // página nova chegar do servidor (ver transicao-filtros.tsx).
+  const { query: params, pendente, navegar } = useFiltrosRelatorio();
 
   const periodo = (params.get("periodo") as PeriodoPreset) ?? "30d";
   const dataDe = params.get("dataDe") ?? "";
@@ -67,7 +67,7 @@ export function ReportFilters({
     const next = new URLSearchParams(params.toString());
     if (value && value !== "") next.set(key, value);
     else next.delete(key);
-    startTransition(() => router.replace(`${pathname}?${next.toString()}`));
+    navegar(next);
   }
 
   function toggleInList(key: string, current: string[], item: string) {
@@ -94,7 +94,7 @@ export function ReportFilters({
     !!valorMax;
 
   function clearAll() {
-    startTransition(() => router.replace(pathname));
+    navegar(new URLSearchParams());
   }
 
   return (
@@ -256,41 +256,28 @@ export function ReportFilters({
 
       <FilterField label="Valor R$ (mín / máx)">
         <div className="flex items-center gap-1.5">
-            <Input
-              type="text"
-              inputMode="numeric"
+            <MoneyInput
               placeholder="Min"
-              value={
-                valorMin
-                  ? Number(Math.round(Number(valorMin) / 100)).toLocaleString(
-                      "pt-BR",
-                    )
-                  : ""
-              }
-              onChange={(e) =>
-                setMoneyInput("valorMinCentavos", e.currentTarget.value)
-              }
-              className="min-w-[100px] font-mono"
+              centavos={valorMin}
+              onCommit={(raw) => setMoneyInput("valorMinCentavos", raw)}
             />
             <span className="text-muted-foreground">–</span>
-            <Input
-              type="text"
-              inputMode="numeric"
+            <MoneyInput
               placeholder="Max"
-              value={
-                valorMax
-                  ? Number(Math.round(Number(valorMax) / 100)).toLocaleString(
-                      "pt-BR",
-                    )
-                  : ""
-              }
-              onChange={(e) =>
-                setMoneyInput("valorMaxCentavos", e.currentTarget.value)
-              }
-              className="min-w-[100px] font-mono"
+              centavos={valorMax}
+              onCommit={(raw) => setMoneyInput("valorMaxCentavos", raw)}
             />
         </div>
       </FilterField>
+
+      {pendente && (
+        <span
+          role="status"
+          className="flex items-center gap-1.5 self-end pb-1.5 text-xs text-muted-foreground"
+        >
+          <Loader2 className="size-3.5 animate-spin" /> Atualizando…
+        </span>
+      )}
 
       {hasAnyFilter && (
         <Button variant="ghost" size="sm" onClick={clearAll} className="self-end">
@@ -333,6 +320,65 @@ function MultiSelectButton({
         {children}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+// Antes, cada tecla digitada no valor navegava e recalculava o relatório
+// inteiro no servidor. Agora o campo é local e só aplica 600 ms depois da
+// última tecla (ou ao sair do campo / Enter).
+function MoneyInput({
+  placeholder,
+  centavos,
+  onCommit,
+}: {
+  placeholder: string;
+  centavos: string;
+  onCommit: (raw: string) => void;
+}) {
+  const formatado = centavos
+    ? Number(Math.round(Number(centavos) / 100)).toLocaleString("pt-BR")
+    : "";
+  const [texto, setTexto] = useState(formatado);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aplicado = useRef(formatado);
+
+  // Filtro mudou por fora (ex.: "Limpar") → acompanha.
+  useEffect(() => {
+    aplicado.current = formatado;
+    setTexto(formatado); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [formatado]);
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  function aplicar(valor: string) {
+    if (timer.current) clearTimeout(timer.current);
+    const digitos = valor.replace(/\D/g, "");
+    const atual = aplicado.current.replace(/\D/g, "");
+    if (digitos === atual) return;
+    aplicado.current = valor;
+    onCommit(valor);
+  }
+
+  return (
+    <Input
+      type="text"
+      inputMode="numeric"
+      placeholder={placeholder}
+      value={texto}
+      onChange={(e) => {
+        const v = e.currentTarget.value;
+        setTexto(v);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => aplicar(v), 600);
+      }}
+      onBlur={(e) => aplicar(e.currentTarget.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") aplicar(e.currentTarget.value);
+      }}
+      className="min-w-[100px] font-mono"
+    />
   );
 }
 

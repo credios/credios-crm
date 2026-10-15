@@ -171,7 +171,7 @@ e-mail** (`sendWhatsappHealthEmail` → `WHATSAPP_ALERT_EMAIL`, default
 | `/api/cron/proativo-whatsapp` | `*/5 * * * *` | Fallback de 15 min do proativo. |
 | `/api/cron/whatsapp-health` | `0 */2 * * *` | Health-check → e-mail. |
 
-(Há também `sla-check` e `refresh-mvs`, não relacionados ao WhatsApp.)
+(Há também `sla-check` e `aquecer-relatorios`, não relacionados ao WhatsApp.)
 
 ---
 

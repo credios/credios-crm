@@ -2,13 +2,13 @@
 
 import { useEffect } from "react";
 
-import { createClient } from "@/lib/supabase/client";
+import { assinarCanalCrm } from "./canal-crm";
 
 /**
- * Inscreve em INSERT/UPDATE/DELETE em public.lead_anotacoes pra um lead.
+ * Anotações de um lead, ao vivo (canal privado `crm:lead:<id>`).
  * Diferente de interações (só INSERT, imutáveis), anotações podem ser
  * editadas (UPDATE) e excluídas (DELETE). Callback recebe o tipo de evento
- * + a row.
+ * + a linha (no DELETE, a linha que foi apagada).
  */
 export function useAnotacoesRealtime(
   leadId: string,
@@ -17,32 +17,15 @@ export function useAnotacoesRealtime(
     row: Record<string, unknown>,
   ) => void,
 ) {
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`realtime-anotacoes-${leadId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "lead_anotacoes",
-          filter: `lead_id=eq.${leadId}`,
-        },
-        (payload) => {
-          const event = payload.eventType as "INSERT" | "UPDATE" | "DELETE";
-          // DELETE traz `old` em vez de `new` (sem nova row).
-          const row =
-            event === "DELETE"
-              ? (payload.old as Record<string, unknown>)
-              : (payload.new as Record<string, unknown>);
-          onChange(event, row);
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [leadId, onChange]);
+  useEffect(
+    () =>
+      assinarCanalCrm(`crm:lead:${leadId}`, (evento, payload) => {
+        if (evento !== "anotacao") return;
+        onChange(
+          payload.op as "INSERT" | "UPDATE" | "DELETE",
+          (payload.row ?? {}) as Record<string, unknown>,
+        );
+      }),
+    [leadId, onChange],
+  );
 }
