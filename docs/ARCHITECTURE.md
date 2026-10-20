@@ -76,8 +76,8 @@ Fonte única: `src/lib/produtos.ts`. `leads.produto` ∈ `CGI` | `CONDOMINIO` |
 
 | Produto | Situação | Particularidades |
 |---|---|---|
-| **CGI** (crédito com garantia de imóvel) | Produto principal | Todo o funil automatizado de pessoa física |
-| **CONDOMINIO** (crédito para condomínios) | Ativo desde 2026-10-13 | Atendimento pelo consultor; dados próprios em `lead_condominio`; comissão automática de 3% pro parceiro |
+| **CGI** (crédito com garantia de imóvel) | Produto principal | **Intermediação**: a Credios leva o caso a bancos e outros financiadores e negocia. Todo o funil automatizado de pessoa física |
+| **CONDOMINIO** (crédito para condomínios) | Ativo desde 2026-10-13 | **Crédito próprio**: concedido pelo FIDC da Credios — não é intermediação. Atendimento pelo consultor; dados próprios em `lead_condominio`; comissão automática de 3% pro parceiro |
 | **FINANCIAMENTO** | Só aceito (o portal antigo enviava) | Sem fluxo próprio |
 
 **Regra central (CLAUDE.md §14):** as automações do funil PF rodam **só para
@@ -94,6 +94,11 @@ Toda automação nova precisa decidir explicitamente qual dos dois vale.
 
 ### 4.1 Condomínio no CRM
 
+- **Quem financia:** o fundo de investimento em direitos creditórios (FIDC)
+  próprio da Credios. Nenhum texto de condomínio (mensagens, PDF, portal) pode
+  falar em "levar a financiadores", "buscar a melhor proposta" ou
+  "negociar com bancos". No fechamento, o FIDC entra como financiador na lista
+  de bancos. A gestão da carteira do fundo **não** fica no CRM (ERP próprio).
 - **Modelo:** o lead continua em `leads` (status, atribuição, timeline,
   cadência). Em `leads`: `nome` = condomínio, `whatsapp`/`email` = síndico,
   `objetivo_credito` = finalidade (lista em `src/lib/condominio/constants.ts`),

@@ -45,7 +45,7 @@ export default function PrivacidadePortalPage() {
         <p>
           Quando você indica um cliente, a Credios recebe os dados que você informa — como
           nome, CPF ou CNPJ, contato, dados do imóvel ou do condomínio, renda e valor de
-          crédito desejado — para analisar e intermediar a operação de crédito.
+          crédito desejado — para analisar, intermediar ou originar e formalizar a operação de crédito.
         </p>
         <p>
           Você, parceiro, é responsável por informar o cliente e obter a autorização dele

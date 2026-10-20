@@ -34,7 +34,7 @@ export const ETAPA_META: Record<
   },
   em_credito: {
     label: "Análise de crédito",
-    descricao: "A proposta está em análise de crédito. Negociamos as melhores condições para o cliente.",
+    descricao: "A operação está em análise de crédito, para definir as condições do cliente.",
     tom: "alerta",
   },
   liberada: {
