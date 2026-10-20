@@ -807,6 +807,7 @@ Documentado aqui apenas para garantir que o schema seja projetado com expansão 
   - **Portado na consolidação:** nota fiscal (parceiro), comprovante de pagamento, exportação CSV de comissões. **Não portado de propósito:** editor de modelo de contrato pelo admin — o texto é versionado em código (`modelo.ts`) pra que nenhuma versão já assinada mude.
 
 **Decisões do owner (2026-10-13):**
+- **Crédito para condomínio é crédito próprio, não intermediação** (2026-10-20): quem concede é o FIDC da Credios. Textos de condomínio (mensagens, PDF da simulação, portal) nunca falam em levar o caso a financiadores, buscar a melhor proposta ou negociar com bancos — isso é do CGI.
 - Gestão da carteira do fundo **nunca** entra no CRM — o fundo é outra entidade, com ERP próprio. Não criar módulo de carteira, parcelas ou cobrança aqui.
 - Comissão de parceiro: percentuais ficam para depois; no início é **caso a caso** (valor/percentual informado por operação). A estrutura deve aceitar uma regra padrão no futuro, sem exigi-la.
 - `/parceiros`: cadastrar e gerenciar é admin; o consultor **continua vendo os parceiros que ele atende** (comportamento atual).

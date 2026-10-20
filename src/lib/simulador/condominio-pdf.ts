@@ -540,8 +540,8 @@ export async function renderSimulacaoCondominioPdf(sim: SimulacaoCondominioResul
   y = itemInfo(
     ctx,
     4,
-    "Análise de crédito",
-    "O financiador avalia a saúde financeira do condomínio: arrecadação mensal, inadimplência, fundo de reserva e histórico. A taxa, o prazo e o valor finais são definidos nessa análise.",
+    "Crédito direto da Credios",
+    "O crédito é concedido pelo fundo de investimento em direitos creditórios (FIDC) próprio da Credios. A nossa equipe analisa a saúde financeira do condomínio — arrecadação mensal, inadimplência, fundo de reserva e histórico — e define a taxa, o prazo e o valor finais.",
     y,
   );
   y = itemInfo(
@@ -566,7 +566,7 @@ export async function renderSimulacaoCondominioPdf(sim: SimulacaoCondominioResul
   const passos = [
     ["Apresente", "Leve esta simulação ao síndico e ao conselho."],
     ["Encaminhe", `${sim.parceiro.nome} envia o caso para a Credios.`],
-    ["Analise", "A Credios estrutura a operação e busca a melhor proposta."],
+    ["Analise", "A Credios analisa o condomínio e apresenta a proposta do seu fundo."],
     ["Aprove", "A assembleia aprova e o crédito é contratado."],
   ] as const;
   const pw = (CW - 3 * 8) / 4;
@@ -584,7 +584,7 @@ export async function renderSimulacaoCondominioPdf(sim: SimulacaoCondominioResul
 
   // Bloco institucional
   const instTxt =
-    "Há mais de 7 anos a Credios estrutura operações de crédito: já são mais de R$ 100 milhões originados para mais de 500 clientes, com 90% de taxa de aprovação. Para o condomínio, levamos o caso a financiadores parceiros, negociamos condições e acompanhamos cada etapa — documentos, análise, assembleia e contratação — até o recurso estar disponível.";
+    "Há mais de 7 anos a Credios estrutura operações de crédito: já são mais de R$ 100 milhões originados para mais de 500 clientes, com 90% de taxa de aprovação. No crédito para condomínios, quem financia é o fundo próprio da Credios (FIDC): a mesma equipe cuida da análise, da proposta, do apoio na assembleia e da contratação, até o recurso estar disponível.";
   const instLinhas = quebra(ctx, instTxt, 8.3, CW - 32);
   const instH = 16 + 14 + instLinhas.length * 12.4 + 12 + 30 + 12;
   caixa(ctx, MX, y, CW, instH, { r: 8, fill: C.lightBlue });

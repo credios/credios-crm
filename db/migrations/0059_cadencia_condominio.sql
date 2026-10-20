@@ -7,14 +7,14 @@ INSERT INTO "mensagens_template" ("nome", "ordem", "status_aplicavel", "produto"
 SELECT v.nome, v.ordem, v.status_aplicavel, 'CONDOMINIO', v.conteudo, true
 FROM (VALUES
   ('Condomínio — 1. Apresentação da Credios', 90, ARRAY['novo'],
-   '{{saudacao}}, {{sindico}}! Aqui é {{primeiro_nome_consultor}}, da Credios. Recebemos o pedido de crédito do {{nome}} e sou eu quem vai cuidar do caso. A Credios estrutura crédito para condomínios: levamos a operação a financiadores parceiros, negociamos taxa e prazo e acompanhamos tudo, da documentação à assembleia e à contratação.'),
+   '{{saudacao}}, {{sindico}}! Aqui é {{primeiro_nome_consultor}}, da Credios. Recebemos o pedido de crédito do {{nome}} e sou eu quem vai cuidar do caso. O crédito para condomínios é concedido pelo nosso próprio fundo (FIDC): a mesma equipe cuida da análise, da proposta, do apoio na assembleia e da contratação.'),
   ('Condomínio — 2. Como podemos ajudar', 91, ARRAY['novo','conversa_inicial'],
    '{{sindico}}, para já adiantar a análise: qual é a obra ou a necessidade do condomínio, e vocês já têm orçamento? Se preferir, te ligo em 10 minutos e resolvemos por telefone. Como posso ajudar?'),
   ('Condomínio — 3. Passo a passo da contratação', 92, ARRAY['novo','conversa_inicial','aguardando_resposta','aguardando_documentacao'],
    '{{sindico}}, a contratação do crédito para o {{nome}} funciona assim:
 1. Conversamos sobre a necessidade e o valor.
 2. Você envia convenção, ata de eleição do síndico, últimos 3 balancetes e relação de inadimplência.
-3. Levamos o caso aos financiadores e trazemos a proposta.
+3. Analisamos o condomínio e apresentamos a proposta do nosso fundo.
 4. A assembleia aprova a contratação.
 5. Contrato assinado, recurso liberado para a obra.
 Vamos começar pelo passo 1?')
