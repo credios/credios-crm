@@ -2,8 +2,12 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
-import { simulacaoConfig } from "../../../db/schema";
+import { simulacaoCondominioConfig, simulacaoConfig } from "../../../db/schema";
 import { db } from "@/lib/db";
+import {
+  saneSimulacaoCondominioConfig,
+  type SimulacaoCondominioConfig,
+} from "./condominio-config";
 import {
   saneSimulacaoConfig,
   type SimulacaoFaixaConfig,
@@ -30,5 +34,29 @@ export async function getSimulacaoConfig(): Promise<SimulacaoFaixaConfig> {
     })();
   } catch {
     return fetchConfig();
+  }
+}
+
+// ── Simulação de crédito para condomínio (portal do parceiro) ──
+
+export const SIMULACAO_CONDOMINIO_CACHE_TAG = "simulacao:condominio";
+
+async function fetchCondominioConfig(): Promise<SimulacaoCondominioConfig> {
+  const [row] = await db
+    .select({ config: simulacaoCondominioConfig.config })
+    .from(simulacaoCondominioConfig)
+    .limit(1);
+  return saneSimulacaoCondominioConfig(row?.config);
+}
+
+/** Taxa por prazo e parâmetros vigentes (cache 5 min, invalidado no PUT). */
+export async function getSimulacaoCondominioConfig(): Promise<SimulacaoCondominioConfig> {
+  try {
+    return await unstable_cache(fetchCondominioConfig, ["simulacao:condominio"], {
+      revalidate: 300,
+      tags: [SIMULACAO_CONDOMINIO_CACHE_TAG],
+    })();
+  } catch {
+    return fetchCondominioConfig();
   }
 }

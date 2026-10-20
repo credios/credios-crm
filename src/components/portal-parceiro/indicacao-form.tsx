@@ -65,17 +65,36 @@ function Campo({
   );
 }
 
-export function IndicacaoForm({ produtos }: { produtos: string[] }) {
+/** Pré-preenchimento (ex.: vindo de uma simulação de condomínio). */
+export type IndicacaoInicial = {
+  produto?: string;
+  nome?: string;
+  documento?: string;
+  /** Reais inteiros, só dígitos. */
+  valorCredito?: string;
+  numUnidades?: string;
+  finalidade?: string;
+};
+
+export function IndicacaoForm({
+  produtos,
+  inicial,
+}: {
+  produtos: string[];
+  inicial?: IndicacaoInicial;
+}) {
   const router = useRouter();
-  const [produto, setProduto] = useState(produtos[0] ?? "CGI");
+  const [produto, setProduto] = useState(
+    inicial?.produto && produtos.includes(inicial.produto) ? inicial.produto : (produtos[0] ?? "CGI"),
+  );
   const [f, setF] = useState({
-    nome: "",
-    documento: "",
+    nome: inicial?.nome ?? "",
+    documento: inicial?.documento ?? "",
     whatsapp: "",
     email: "",
     cidade: "",
     estado: "",
-    valorCredito: "",
+    valorCredito: inicial?.valorCredito ?? "",
     observacoes: "",
     // CGI
     tipoImovel: "",
@@ -85,8 +104,8 @@ export function IndicacaoForm({ produtos }: { produtos: string[] }) {
     saldoDevedor: "",
     // Condomínio
     sindicoNome: "",
-    finalidade: "",
-    numUnidades: "",
+    finalidade: inicial?.finalidade ?? "",
+    numUnidades: inicial?.numUnidades ?? "",
     administradora: "",
   });
   const [consentimento, setConsentimento] = useState(false);

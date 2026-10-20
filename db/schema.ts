@@ -1355,3 +1355,40 @@ export const parceiroContratoEventos = pgTable(
   },
   (table) => [index("idx_parceiro_contrato_eventos").on(table.contratoId, table.criadoEm)],
 );
+
+// ═══════════════════════════════════════════════════════════
+// Simulação de crédito para condomínio (0058) — o parceiro gera o PDF no
+// portal; o admin define taxa por prazo em /configuracoes/simulacao-condominio.
+// ═══════════════════════════════════════════════════════════
+
+/** Linha única. { prazos: [{meses, taxaAm}], validadeDias, iofAdicionalPct,
+ *  iofDiarioPct, valorMinimo, valorMaximo } — ver src/lib/simulador/condominio-config.ts */
+export const simulacaoCondominioConfig = pgTable("simulacao_condominio_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  config: jsonb("config").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+/** Simulações geradas pelo parceiro. `parametros` congela taxas/prazos do
+ *  momento: baixar de novo o PDF sai igual, mesmo que o admin mude a config. */
+export const parceiroSimulacoes = pgTable(
+  "parceiro_simulacoes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    codigo: text("codigo").notNull().unique(),
+    parceiroId: uuid("parceiro_id")
+      .notNull()
+      .references(() => parceiros.id, { onDelete: "cascade" }),
+    usuarioId: uuid("usuario_id").references(() => parceiroUsuarios.id, { onDelete: "set null" }),
+    produto: text("produto").notNull().default("CONDOMINIO"),
+    condominioNome: text("condominio_nome").notNull(),
+    cnpj: text("cnpj").notNull(),
+    valorCreditoCentavos: bigint("valor_credito_centavos", { mode: "number" }).notNull(),
+    numUnidades: integer("num_unidades"),
+    finalidade: text("finalidade"),
+    parametros: jsonb("parametros").notNull(),
+    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("idx_parceiro_simulacoes").on(table.parceiroId, sql`${table.criadoEm} DESC`)],
+);
