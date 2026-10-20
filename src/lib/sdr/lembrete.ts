@@ -4,6 +4,7 @@ import { and, desc, eq, gte, lte, notInArray } from "drizzle-orm";
 
 import { interacoes, leads, reunioes, users as usersTable } from "../../../db/schema";
 import { db } from "@/lib/db";
+import { aceitaContatoAutomatizado } from "@/lib/produtos";
 import {
   sendReuniaoLembreteConsultorEmail,
   sendReuniaoLembreteEmail,
@@ -72,6 +73,10 @@ export async function processarLembretesReuniao(): Promise<ResultadoLembretes> {
       nome: leads.nome,
       whatsapp: leads.whatsapp,
       email: leads.email,
+      produto: leads.produto,
+      parceiroId: leads.parceiroId,
+      parceiroPortalId: leads.parceiroPortalId,
+      source: leads.source,
     })
     .from(reunioes)
     .innerJoin(leads, eq(leads.id, reunioes.leadId))
@@ -88,6 +93,16 @@ export async function processarLembretesReuniao(): Promise<ResultadoLembretes> {
 
   let enviados = 0;
   for (const r of pendentes) {
+    // Lembrete ao cliente sai pelo WhatsApp da Credios/e-mail automático:
+    // mesma régua do resto do contato automatizado (CGI sem parceiro). Para
+    // os demais, quem lembra é o consultor (o lembrete DELE segue abaixo).
+    if (!aceitaContatoAutomatizado(r)) {
+      await db
+        .update(reunioes)
+        .set({ lembreteEnviado: true, updatedAt: new Date() })
+        .where(eq(reunioes.id, r.reuniaoId));
+      continue;
+    }
     if (!r.whatsapp) continue;
     const to = r.whatsapp.replace(/\D/g, "");
     const nome = r.nome ? r.nome.split(/\s+/)[0] : "";

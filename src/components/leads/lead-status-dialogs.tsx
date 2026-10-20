@@ -43,9 +43,13 @@ export function FechamentoDialog({
   onOpenChange,
   leadId,
   leadNome,
+  produto,
   onSuccess,
   onCancel,
-}: CommonProps) {
+}: CommonProps & { produto?: string }) {
+  // Condomínio: a comissão do parceiro (3%) é sobre o TOTAL contratado e o
+  // prazo conta da assinatura do contrato de crédito (contrato de parceria v4).
+  const cond = produto === "CONDOMINIO";
   const [banco, setBanco] = useState("");
   const [valorLiberado, setValorLiberado] = useState("");
   const [comissao, setComissao] = useState("");
@@ -123,7 +127,7 @@ export function FechamentoDialog({
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="fech-banco">Banco aprovador</Label>
+            <Label htmlFor="fech-banco">{cond ? "Financiador" : "Banco aprovador"}</Label>
             <Input
               id="fech-banco"
               value={banco}
@@ -134,7 +138,9 @@ export function FechamentoDialog({
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="fech-vl">Valor liberado (R$)</Label>
+              <Label htmlFor="fech-vl">
+                {cond ? "Valor líquido contratado (R$)" : "Valor liberado (R$)"}
+              </Label>
               <Input
                 id="fech-vl"
                 type="number"
@@ -159,7 +165,9 @@ export function FechamentoDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="fech-data">Data do fechamento</Label>
+            <Label htmlFor="fech-data">
+              {cond ? "Data de assinatura do contrato de crédito" : "Data do fechamento"}
+            </Label>
             <Input
               id="fech-data"
               type="date"
@@ -167,6 +175,12 @@ export function FechamentoDialog({
               onChange={(e) => setData(e.currentTarget.value)}
               disabled={pending}
             />
+            {cond && (
+              <p className="text-[11px] text-muted-foreground">
+                Total do contrato, mesmo com liberação em parcelas. É a base dos 3% do
+                parceiro, a pagar em até 10 dias corridos desta data.
+              </p>
+            )}
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>

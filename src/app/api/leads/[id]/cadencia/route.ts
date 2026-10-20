@@ -21,6 +21,7 @@ import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
 import { aoEncerrarLead } from "@/lib/leads/encerramento";
+import { aoReabrirLeadDeParceiro } from "@/lib/parceiros/comissoes";
 import { cederVezAoHumano } from "@/lib/whatsapp/handoff";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -213,6 +214,13 @@ export async function POST(request: NextRequest, { params }: Ctx) {
           faxina: !!body.faxina,
         } as never,
       });
+      // Saiu de `fechado` → cancela a comissão de parceiro ainda não paga
+      // (mesma regra da rota de status).
+      if (lead.status === "fechado") {
+        await aoReabrirLeadDeParceiro(id).catch((e) =>
+          console.error("[cadencia] cancelamento de comissão falhou:", e),
+        );
+      }
       await encerrarCadencia(id);
       await resolveSlaAlertsForLead(id); // lead encerrado → some dos alertas
       // Decisão manual do consultor → o bot cede a vez (lead perdido não pode

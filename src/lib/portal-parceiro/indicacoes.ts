@@ -118,70 +118,75 @@ export async function criarIndicacao(
 
   const { consentimento: _consentimento, ...semConsentimento } = input;
   void _consentimento;
-  const [novo] = await db
-    .insert(leads)
-    .values({
-      nome: formatProperName(input.nome),
-      cpf: cgi && input.documento.length === 11 ? input.documento : null,
-      whatsapp: normalizarWhatsapp(input.whatsapp),
-      email: input.email,
-      cidade: input.cidade,
-      estado: input.estado,
-      produto: input.produto,
-      tipoPessoa: input.documento.length === 14 ? "Pessoa Jurídica" : "Pessoa Física",
-      valorCreditoCentavos: input.valorCreditoCentavos,
-      ...(cgi
-        ? {
-            tipoImovel: cgi.tipoImovel,
-            valorImovelCentavos: cgi.valorImovelCentavos,
-            rendaMensalCentavos: cgi.rendaTitularCentavos,
-            saldoDevedorCentavos: cgi.saldoDevedorCentavos > 0 ? cgi.saldoDevedorCentavos : null,
-            situacaoImovel: cgi.saldoDevedorCentavos > 0 ? "Financiado" : "Quitado",
-            conjugeCompoeRenda: cgi.rendaConjugeCentavos > 0 ? true : null,
-            conjugeRendaCentavos: cgi.rendaConjugeCentavos > 0 ? cgi.rendaConjugeCentavos : null,
-          }
-        : {}),
-      ...(input.produto === "CONDOMINIO" ? { objetivoCredito: input.finalidade } : {}),
-      parceiroId: sessao.parceiroId,
-      parceiroNome: sessao.parceiroNome,
-      observacoesParceiro: input.observacoes,
-      consultorId: routing.consultorId,
-      atribuidoEm: routing.consultorId ? new Date() : null,
-      channel: "Referral",
-      source: SOURCE,
-      paid: false,
-      origem: SOURCE,
-      rawPayload: {
-        via: "portal_parceiro",
-        consentimentoEm: new Date().toISOString(),
-        indicadoPor: sessao.usuarioId,
-        ...semConsentimento,
-      } as never,
-    })
-    .returning();
-  const lead = novo!;
+  // Lead + tabela-irmã do condomínio + evento numa transação só: falha no
+  // meio não deixa lead de condomínio sem CNPJ/síndico.
+  return db.transaction(async (tx) => {
+    const [novo] = await tx
+      .insert(leads)
+      .values({
+        nome: formatProperName(input.nome),
+        cpf: cgi && input.documento.length === 11 ? input.documento : null,
+        whatsapp: normalizarWhatsapp(input.whatsapp),
+        email: input.email,
+        cidade: input.cidade,
+        estado: input.estado,
+        produto: input.produto,
+        tipoPessoa: input.documento.length === 14 ? "Pessoa Jurídica" : "Pessoa Física",
+        valorCreditoCentavos: input.valorCreditoCentavos,
+        ...(cgi
+          ? {
+              tipoImovel: cgi.tipoImovel,
+              valorImovelCentavos: cgi.valorImovelCentavos,
+              rendaMensalCentavos: cgi.rendaTitularCentavos,
+              saldoDevedorCentavos: cgi.saldoDevedorCentavos > 0 ? cgi.saldoDevedorCentavos : null,
+              situacaoImovel: cgi.saldoDevedorCentavos > 0 ? "Financiado" : "Quitado",
+              conjugeCompoeRenda: cgi.rendaConjugeCentavos > 0 ? true : null,
+              conjugeRendaCentavos: cgi.rendaConjugeCentavos > 0 ? cgi.rendaConjugeCentavos : null,
+            }
+          : {}),
+        ...(input.produto === "CONDOMINIO" ? { objetivoCredito: input.finalidade } : {}),
+        parceiroId: sessao.parceiroId,
+        parceiroNome: sessao.parceiroNome,
+        observacoesParceiro: input.observacoes,
+        consultorId: routing.consultorId,
+        atribuidoEm: routing.consultorId ? new Date() : null,
+        channel: "Referral",
+        source: SOURCE,
+        paid: false,
+        origem: SOURCE,
+        rawPayload: {
+          via: "portal_parceiro",
+          consentimentoEm: new Date().toISOString(),
+          indicadoPor: sessao.usuarioId,
+          ...semConsentimento,
+        } as never,
+      })
+      .returning();
+    const lead = novo!;
 
-  if (input.produto === "CONDOMINIO") {
-    await salvarCondominio(
-      lead.id,
-      condominioSchema.parse({
-        cnpj: input.documento,
-        sindicoNome: input.sindicoNome,
-        numUnidades: input.numUnidades ?? null,
-        administradora: input.administradora,
-      }),
-    );
-  }
+    if (input.produto === "CONDOMINIO") {
+      await salvarCondominio(
+        lead.id,
+        condominioSchema.parse({
+          cnpj: input.documento,
+          sindicoNome: input.sindicoNome,
+          numUnidades: input.numUnidades ?? null,
+          administradora: input.administradora,
+        }),
+        tx,
+      );
+    }
 
-  await db.insert(interacoes).values({
-    leadId: lead.id,
-    autorId: null,
-    tipo: "evento_sistema",
-    conteudo: `Indicação de ${sessao.parceiroNome} pelo portal de parceiros (${routing.regraAplicada})`,
-    metadata: { source: SOURCE, parceiroId: sessao.parceiroId, routing } as never,
+    await tx.insert(interacoes).values({
+      leadId: lead.id,
+      autorId: null,
+      tipo: "evento_sistema",
+      conteudo: `Indicação de ${sessao.parceiroNome} pelo portal de parceiros (${routing.regraAplicada})`,
+      metadata: { source: SOURCE, parceiroId: sessao.parceiroId, routing } as never,
+    });
+
+    return { ok: true as const, leadId: lead.id };
   });
-
-  return { ok: true, leadId: lead.id };
 }
 
 /**

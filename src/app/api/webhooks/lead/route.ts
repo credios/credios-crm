@@ -46,7 +46,11 @@ import { encerrarCadencia } from "@/lib/cadencia/engine";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
-import { registrarDuplicidadeCnpj, salvarCondominio } from "@/lib/condominio/persist";
+import {
+  buscarCondominio,
+  registrarDuplicidadeCnpj,
+  salvarCondominio,
+} from "@/lib/condominio/persist";
 import { condominioDoWebhook } from "@/lib/validators/condominio";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { resolveSource } from "@/lib/tracking/resolver";
@@ -311,12 +315,15 @@ export async function POST(request: NextRequest) {
 
       const cpfClean = normalizarCpf(emptyToNull(payload.cpf ?? null));
       const whatsappClean = normalizarWhatsapp(emptyToNull(payload.whatsapp));
-      const valoresSuspeitos = detectarValoresSuspeitos({
-        rendaMensal: payload.renda_mensal ?? null,
-        valorImovel: payload.valor_imovel ?? null,
-        saldoDevedor: payload.saldo_devedor ?? null,
-        valorCredito: payload.valor_credito ?? null,
-      });
+      // Faixas de valor são do CGI (mesma regra da criação, passo 7b).
+      const valoresSuspeitos = ehCgi(existing)
+        ? detectarValoresSuspeitos({
+            rendaMensal: payload.renda_mensal ?? null,
+            valorImovel: payload.valor_imovel ?? null,
+            saldoDevedor: payload.saldo_devedor ?? null,
+            valorCredito: payload.valor_credito ?? null,
+          })
+        : null;
 
       await db
         .update(leads)
@@ -363,6 +370,20 @@ export async function POST(request: NextRequest) {
           updatedAt: new Date(),
         })
         .where(eq(leads.id, existing.id));
+
+      // Condomínio: a 2ª etapa pode trazer o bloco `condominio`. Só grava os
+      // campos presentes (não apaga o que a 1ª etapa salvou) e confere
+      // duplicidade se o CNPJ é novo.
+      if (existing.produto === "CONDOMINIO" && payload.condominio) {
+        const cond = Object.fromEntries(
+          Object.entries(condominioDoWebhook(payload.condominio)).filter(([, v]) => v != null),
+        ) as ReturnType<typeof condominioDoWebhook>;
+        const antes = cond.cnpj ? await buscarCondominio(existing.id) : null;
+        await salvarCondominio(existing.id, cond);
+        if (cond.cnpj && antes?.cnpj !== cond.cnpj) {
+          await registrarDuplicidadeCnpj(existing.id, cond.cnpj);
+        }
+      }
 
       await db.insert(interacoes).values({
         leadId: existing.id,
@@ -721,11 +742,20 @@ export async function POST(request: NextRequest) {
     let parceiroId: string | null = null;
     if (portalPartnerId) {
       const [p] = await db
-        .select({ id: parceiros.id })
+        .select({ id: parceiros.id, produtosHabilitados: parceiros.produtosHabilitados })
         .from(parceiros)
         .where(eq(parceiros.portalPartnerId, portalPartnerId))
         .limit(1);
-      parceiroId = p?.id ?? null;
+      // Condomínio gera comissão automática de 3% no fechamento — só liga ao
+      // parceiro habilitado no produto (mesma regra do portal novo e do
+      // cadastro manual). Senão o vínculo fica no parceiro_portal_id e o lead
+      // continua sem contato automatizado. CGI/financiamento do portal antigo
+      // seguem ligando como antes (comissão caso a caso).
+      if (p && (payload.produto !== "CONDOMINIO" || p.produtosHabilitados.includes("CONDOMINIO"))) {
+        parceiroId = p.id;
+      } else if (p) {
+        console.warn(`[webhook] parceiro ${p.id} não habilitado em CONDOMINIO — lead sem parceiro_id`);
+      }
     }
 
     // 8. Insere lead.
@@ -750,7 +780,10 @@ export async function POST(request: NextRequest) {
       tipoImovel: emptyToNull(payload.tipo_imovel ?? null),
       tipoImovelDetalhes: emptyToNull(payload.tipo_imovel_detalhes ?? null),
       situacaoImovel: emptyToNull(payload.situacao_imovel ?? null),
-      tipoPessoa: emptyToNull(payload.tipo_pessoa ?? null),
+      // Condomínio é sempre PJ (igual ao portal do parceiro).
+      tipoPessoa:
+        emptyToNull(payload.tipo_pessoa ?? null) ??
+        (payload.produto === "CONDOMINIO" ? "Pessoa Jurídica" : null),
       valorImovelCentavos: reaisParaCentavos(payload.valor_imovel),
       saldoDevedorCentavos: reaisParaCentavos(payload.saldo_devedor),
       valorCreditoCentavos: reaisParaCentavos(payload.valor_credito),
