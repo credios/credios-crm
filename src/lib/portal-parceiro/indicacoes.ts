@@ -10,6 +10,7 @@ import {
   users as usersTable,
 } from "../../../db/schema";
 import { logAction } from "@/lib/audit";
+import { aoCriarLeadCadencia } from "@/lib/cadencia/engine";
 import { salvarCondominio } from "@/lib/condominio/persist";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
@@ -120,7 +121,7 @@ export async function criarIndicacao(
   void _consentimento;
   // Lead + tabela-irmã do condomínio + evento numa transação só: falha no
   // meio não deixa lead de condomínio sem CNPJ/síndico.
-  return db.transaction(async (tx) => {
+  const criado = await db.transaction(async (tx) => {
     const [novo] = await tx
       .insert(leads)
       .values({
@@ -187,6 +188,8 @@ export async function criarIndicacao(
 
     return { ok: true as const, leadId: lead.id };
   });
+  await aoCriarLeadCadencia({ id: criado.leadId, status: "novo" });
+  return criado;
 }
 
 /**

@@ -11,10 +11,12 @@ type Props = {
   atual: Produto | null;
   /** Consultor visualizado (?consultor=) — preservado ao trocar o produto. */
   consultorParam: string | null;
+  /** Página que recebe o filtro (default: Minha Mesa). */
+  base?: string;
 };
 
-/** Abas de produto da Mesa. Links simples: a página é server-rendered. */
-export function FiltroProdutoMesa({ atual, consultorParam }: Props) {
+/** Abas de produto (Mesa, Negociações). Links simples: a página é server-rendered. */
+export function FiltroProdutoMesa({ atual, consultorParam, base = "/minha-mesa" }: Props) {
   const opcoes: { valor: Produto | null; label: string }[] = [
     { valor: null, label: "Todos" },
     ...PRODUTOS_ATIVOS.map((p) => ({ valor: p, label: PRODUTO_LABEL_CURTO[p] })),
@@ -32,7 +34,7 @@ export function FiltroProdutoMesa({ atual, consultorParam }: Props) {
         return (
           <Link
             key={o.label}
-            href={`/minha-mesa${q.size ? `?${q.toString()}` : ""}`}
+            href={`${base}${q.size ? `?${q.toString()}` : ""}`}
             prefetch={false}
             aria-current={ativo ? "page" : undefined}
             className={cn(

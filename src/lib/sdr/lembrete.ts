@@ -4,7 +4,7 @@ import { and, desc, eq, gte, lte, notInArray } from "drizzle-orm";
 
 import { interacoes, leads, reunioes, users as usersTable } from "../../../db/schema";
 import { db } from "@/lib/db";
-import { aceitaContatoAutomatizado } from "@/lib/produtos";
+import { aceitaContatoAutomatizado, ehCgi } from "@/lib/produtos";
 import {
   sendReuniaoLembreteConsultorEmail,
   sendReuniaoLembreteEmail,
@@ -199,6 +199,14 @@ export async function processarLembretesConsultor(): Promise<ResultadoLembretes>
 
   let enviados = 0;
   for (const r of pendentes) {
+    // Condomínio não tem fluxo de reunião (decisão do owner, 2026-10-20).
+    if (!ehCgi(r.lead)) {
+      await db
+        .update(reunioes)
+        .set({ lembreteConsultorEnviado: true, updatedAt: new Date() })
+        .where(eq(reunioes.id, r.reuniaoId));
+      continue;
+    }
     if (!r.consultorEmail) continue;
     const em = await sendReuniaoLembreteConsultorEmail({
       to: r.consultorEmail,

@@ -42,7 +42,7 @@ import {
 import { contextFromWebhook } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
 import { aplicarRoteamento } from "@/lib/routing/engine";
-import { encerrarCadencia } from "@/lib/cadencia/engine";
+import { aoCriarLeadCadencia, encerrarCadencia } from "@/lib/cadencia/engine";
 import { onLeadStageChange } from "@/lib/google-ads/dispatcher";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { resolveSlaAlertsForLead } from "@/lib/sla/check";
@@ -51,6 +51,7 @@ import {
   registrarDuplicidadeCnpj,
   salvarCondominio,
 } from "@/lib/condominio/persist";
+import { normalizarFinalidadeCondominio } from "@/lib/condominio/constants";
 import { condominioDoWebhook } from "@/lib/validators/condominio";
 import { isSystemTerminal } from "@/lib/status/canonical";
 import { resolveSource } from "@/lib/tracking/resolver";
@@ -315,6 +316,10 @@ export async function POST(request: NextRequest) {
 
       const cpfClean = normalizarCpf(emptyToNull(payload.cpf ?? null));
       const whatsappClean = normalizarWhatsapp(emptyToNull(payload.whatsapp));
+      const finCond =
+        existing.produto === "CONDOMINIO"
+          ? normalizarFinalidadeCondominio(payload.objetivo_credito)
+          : null;
       // Faixas de valor são do CGI (mesma regra da criação, passo 7b).
       const valoresSuspeitos = ehCgi(existing)
         ? detectarValoresSuspeitos({
@@ -337,7 +342,10 @@ export async function POST(request: NextRequest) {
           email: setIf(emptyToNull(payload.email ?? null), existing.email),
           cidade: setIf(emptyToNull(payload.cidade ?? null), existing.cidade),
           estado: setIf(emptyToNull(payload.estado ?? null)?.toUpperCase() ?? null, existing.estado),
-          objetivoCredito: setIf(emptyToNull(payload.objetivo_credito ?? null), existing.objetivoCredito),
+          objetivoCredito: setIf(
+            finCond ? finCond.finalidade : emptyToNull(payload.objetivo_credito ?? null),
+            existing.objetivoCredito,
+          ),
           tipoImovel: setIf(emptyToNull(payload.tipo_imovel ?? null), existing.tipoImovel),
           tipoImovelDetalhes: setIf(emptyToNull(payload.tipo_imovel_detalhes ?? null), existing.tipoImovelDetalhes),
           situacaoImovel: setIf(emptyToNull(payload.situacao_imovel ?? null), existing.situacaoImovel),
@@ -374,10 +382,11 @@ export async function POST(request: NextRequest) {
       // Condomínio: a 2ª etapa pode trazer o bloco `condominio`. Só grava os
       // campos presentes (não apaga o que a 1ª etapa salvou) e confere
       // duplicidade se o CNPJ é novo.
-      if (existing.produto === "CONDOMINIO" && payload.condominio) {
+      if (existing.produto === "CONDOMINIO" && (payload.condominio || finCond?.detalhe)) {
         const cond = Object.fromEntries(
-          Object.entries(condominioDoWebhook(payload.condominio)).filter(([, v]) => v != null),
+          Object.entries(condominioDoWebhook(payload.condominio ?? {})).filter(([, v]) => v != null),
         ) as ReturnType<typeof condominioDoWebhook>;
+        if (finCond?.detalhe && !cond.finalidadeDetalhes) cond.finalidadeDetalhes = finCond.detalhe;
         const antes = cond.cnpj ? await buscarCondominio(existing.id) : null;
         await salvarCondominio(existing.id, cond);
         if (cond.cnpj && antes?.cnpj !== cond.cnpj) {
@@ -758,6 +767,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const finalidadeCondominio =
+      payload.produto === "CONDOMINIO"
+        ? normalizarFinalidadeCondominio(payload.objetivo_credito)
+        : null;
+
     // 8. Insere lead.
     const inserted = await db
       .insert(leads)
@@ -776,7 +790,10 @@ export async function POST(request: NextRequest) {
       cidade: emptyToNull(payload.cidade ?? null),
       estado: estadoClean,
       produto: payload.produto ?? "CGI",
-      objetivoCredito: emptyToNull(payload.objetivo_credito ?? null),
+      // Condomínio: finalidade normalizada pra lista do CRM (texto livre → "Outro").
+      objetivoCredito: finalidadeCondominio
+        ? finalidadeCondominio.finalidade
+        : emptyToNull(payload.objetivo_credito ?? null),
       tipoImovel: emptyToNull(payload.tipo_imovel ?? null),
       tipoImovelDetalhes: emptyToNull(payload.tipo_imovel_detalhes ?? null),
       situacaoImovel: emptyToNull(payload.situacao_imovel ?? null),
@@ -905,10 +922,16 @@ export async function POST(request: NextRequest) {
     // 10b. Condomínio: dados próprios na tabela-irmã + duplicidade por CNPJ.
     if (newLead.produto === "CONDOMINIO") {
       const cond = condominioDoWebhook(payload.condominio ?? {});
+      if (finalidadeCondominio?.detalhe && !cond.finalidadeDetalhes) {
+        cond.finalidadeDetalhes = finalidadeCondominio.detalhe;
+      }
       await salvarCondominio(newLead.id, cond);
       leadExistenteId =
         (await registrarDuplicidadeCnpj(newLead.id, cond.cnpj)) ?? leadExistenteId;
     }
+
+    // 10c. Cadência do status "novo" (condomínio) começa na criação.
+    await aoCriarLeadCadencia(newLead);
 
     // 11. Interação automática.
     await db.insert(interacoes).values({

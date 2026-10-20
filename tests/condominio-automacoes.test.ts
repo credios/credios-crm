@@ -40,11 +40,13 @@ vi.mock("@/lib/whatsapp/meta", () => ({ enviarTextoWhatsApp, enviarTemplateWhats
 
 const sendNaoSeguiremosEmail = vi.fn(async () => ({ ok: true }));
 const sendReuniaoLembreteEmail = vi.fn(async () => ({ ok: true }));
+const sendReuniaoLembreteConsultorEmail = vi.fn(async () => ({ ok: true }));
 vi.mock("@/lib/notifications/email", () => ({
   sendNaoSeguiremosEmail,
   sendReuniaoLembreteEmail,
-  sendReuniaoLembreteConsultorEmail: vi.fn(async () => ({ ok: true })),
+  sendReuniaoLembreteConsultorEmail,
 }));
+vi.mock("next/cache", () => ({ unstable_cache: () => () => Promise.reject(new Error("fora do Next")) }));
 vi.mock("@/lib/sdr/agendar", () => ({ cancelarReuniao: vi.fn(async () => {}) }));
 
 const gerarAgendaToken = vi.fn(() => "tok");
@@ -60,6 +62,9 @@ vi.mock("@/lib/condominio/persist", () => ({ buscarCondominio }));
 const { aoEncerrarLead } = await import("@/lib/leads/encerramento");
 const { processarLembretesReuniao } = await import("@/lib/sdr/lembrete");
 const { prepararMensagemPasso } = await import("@/lib/cadencia/render");
+const { processarLembretesConsultor } = await import("@/lib/sdr/lembrete");
+const { avancarPasso } = await import("@/lib/cadencia/engine");
+const { normalizarFinalidadeCondominio } = await import("@/lib/condominio/constants");
 
 type LeadEncerrado = Parameters<typeof aoEncerrarLead>[0];
 const leadBase = {
@@ -164,5 +169,62 @@ describe("mensagem da cadência", () => {
     expect(gerarAgendaToken).toHaveBeenCalledTimes(1);
     expect(msg).toContain("/agendar/tok");
     expect(buscarCondominio).not.toHaveBeenCalled();
+  });
+});
+
+describe("lembrete de reunião ao consultor", () => {
+  it("condomínio: sem lembrete (não há fluxo de reunião)", async () => {
+    selects.push([
+      {
+        reuniaoId: "r1",
+        inicio: new Date(Date.now() + 10 * 60_000),
+        meetLink: null,
+        lead: { ...leadBase },
+        consultorNome: "Rodrigo",
+        consultorEmail: "rodrigo@credios.com.br",
+      },
+    ]);
+    await processarLembretesConsultor();
+    expect(sendReuniaoLembreteConsultorEmail).not.toHaveBeenCalled();
+    expect(updates).toHaveLength(1);
+  });
+});
+
+describe("cadência sem passo de decisão", () => {
+  it("executar a última mensagem encerra a cadência", async () => {
+    selects.push([
+      {
+        id: "c1",
+        statusKey: "novo",
+        produto: "CONDOMINIO",
+        ativa: true,
+        passos: [
+          { titulo: "a", deltaDias: 0, tipo: "mensagem", templateId: "t1", energia: null },
+          { titulo: "b", deltaDias: 1, tipo: "mensagem", templateId: "t2", energia: null },
+        ],
+      },
+    ]);
+    await avancarPasso({ id: "l1", status: "novo", produto: "CONDOMINIO", cadenciaPasso: 1 }, "executou");
+    expect(updates).toHaveLength(1); // encerrarCadencia
+  });
+});
+
+describe("finalidade do condomínio vinda do site", () => {
+  it("casa sem diferenciar acento/caixa", () => {
+    expect(normalizarFinalidadeCondominio("fachada E PINTURA")).toEqual({
+      finalidade: "Fachada e pintura",
+      detalhe: null,
+    });
+    expect(normalizarFinalidadeCondominio("Impermeabilizacao / telhado").finalidade).toBe(
+      "Impermeabilização / Telhado",
+    );
+  });
+
+  it("texto livre vira Outro e guarda o original", () => {
+    expect(normalizarFinalidadeCondominio("Troca do portão")).toEqual({
+      finalidade: "Outro",
+      detalhe: "Troca do portão",
+    });
+    expect(normalizarFinalidadeCondominio("  ")).toEqual({ finalidade: null, detalhe: null });
   });
 });

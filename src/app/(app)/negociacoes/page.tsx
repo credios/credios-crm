@@ -1,12 +1,14 @@
 import { Handshake } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { FiltroProdutoMesa } from "@/components/minha-mesa/filtro-produto";
 import { ConsultorFilter } from "@/components/negociacoes/consultor-filter";
 import { NegociacoesBoard } from "@/components/negociacoes/negociacoes-board";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { isAdmin } from "@/lib/auth/permissions";
 import { listConsultoresAtivos } from "@/lib/leads/list-leads";
 import { getNegociacoesAbertas } from "@/lib/negociacoes/queries";
+import { PRODUTOS_ATIVOS, type Produto } from "@/lib/produtos";
 
 export const revalidate = 30;
 export const maxDuration = 30;
@@ -25,6 +27,10 @@ export default async function NegociacoesPage({ searchParams }: Props) {
   const raw = await searchParams;
   const consultorParam =
     typeof raw.consultor === "string" ? raw.consultor : undefined;
+  const produto =
+    typeof raw.produto === "string" && (PRODUTOS_ATIVOS as readonly string[]).includes(raw.produto)
+      ? (raw.produto as Produto)
+      : null;
 
   // Escopo: só admin pode ver outros consultores. Demais perfis SEMPRE veem
   // apenas as próprias negociações (enforced aqui no servidor, não dá pra
@@ -38,7 +44,7 @@ export default async function NegociacoesPage({ searchParams }: Props) {
   }
 
   const [items, consultores] = await Promise.all([
-    getNegociacoesAbertas(scopeConsultorId),
+    getNegociacoesAbertas(scopeConsultorId, produto),
     admin ? listConsultoresAtivos().catch(() => []) : Promise.resolve([]),
   ]);
 
@@ -62,9 +68,16 @@ export default async function NegociacoesPage({ searchParams }: Props) {
               : "Seus leads na reta final — os de maior chance de fechar. Mantenha o contato diário e acompanhe o andamento com o cliente e com os bancos."}
           </p>
         </div>
-        {admin && (
-          <ConsultorFilter consultores={consultores} value={selecionado} />
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <FiltroProdutoMesa
+            atual={produto}
+            consultorParam={admin && consultorParam ? consultorParam : null}
+            base="/negociacoes"
+          />
+          {admin && (
+            <ConsultorFilter consultores={consultores} value={selecionado} />
+          )}
+        </div>
       </div>
 
       <NegociacoesBoard items={items} mostrarConsultor={mostrarConsultor} />
