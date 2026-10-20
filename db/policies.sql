@@ -712,3 +712,8 @@ ALTER TABLE public.parceiro_sessoes ENABLE ROW LEVEL SECURITY;
 -- Contratos de parceria (0053) — RLS sem policy = deny total.
 ALTER TABLE public.parceiro_contratos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.parceiro_contrato_eventos ENABLE ROW LEVEL SECURITY;
+
+-- Simulação de condomínio (0058) — config admin e simulações do parceiro:
+-- RLS sem policy = deny total (server-side).
+ALTER TABLE public.simulacao_condominio_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parceiro_simulacoes ENABLE ROW LEVEL SECURITY;

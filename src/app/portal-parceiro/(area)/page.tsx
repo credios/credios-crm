@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Calculator, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { EtapaBadge } from "@/components/portal-parceiro/etapa";
@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { listarIndicacoes, resumoDoParceiro } from "@/lib/portal-parceiro/indicacoes";
 import { exigirParceiroComContrato } from "@/lib/portal-parceiro/acesso";
+import { podeSimularCondominio } from "@/lib/portal-parceiro/simulacoes";
 
 export const dynamic = "force-dynamic";
 
@@ -35,9 +36,19 @@ export default async function InicioPage() {
             Acompanhe suas indicações e comissões.
           </p>
         </div>
-        <Link href="/portal-parceiro/clientes/novo" className={buttonVariants({ className: "gap-1.5" })}>
-          <Plus className="size-4" /> Indicar cliente
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {podeSimularCondominio(sessao) && (
+            <Link
+              href="/portal-parceiro/simulacoes"
+              className={buttonVariants({ variant: "outline", className: "gap-1.5" })}
+            >
+              <Calculator className="size-4" /> Simular condomínio
+            </Link>
+          )}
+          <Link href="/portal-parceiro/clientes/novo" className={buttonVariants({ className: "gap-1.5" })}>
+            <Plus className="size-4" /> Indicar cliente
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -11,6 +11,8 @@ import { SairButton } from "./auth-forms";
 const NAV = [
   { href: "/portal-parceiro", label: "Início", exato: true },
   { href: "/portal-parceiro/clientes", label: "Meus clientes" },
+  // Só pra quem é habilitado em condomínio.
+  { href: "/portal-parceiro/simulacoes", label: "Simular", condominio: true },
   { href: "/portal-parceiro/comissoes", label: "Comissões" },
   { href: "/portal-parceiro/contrato", label: "Contrato" },
   { href: "/portal-parceiro/perfil", label: "Perfil" },
@@ -31,7 +33,13 @@ export function LogoCredios({ className }: { className?: string }) {
 
 /** Cabeçalho da área logada: marca + conta em cima, navegação em abas embaixo
  *  (rola na horizontal no celular, em vez de quebrar em coluna). */
-export function CabecalhoPortal({ parceiroNome }: { parceiroNome: string }) {
+export function CabecalhoPortal({
+  parceiroNome,
+  simular = false,
+}: {
+  parceiroNome: string;
+  simular?: boolean;
+}) {
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur">
@@ -49,7 +57,7 @@ export function CabecalhoPortal({ parceiroNome }: { parceiroNome: string }) {
         aria-label="Portal"
         className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-2 [scrollbar-width:none] sm:px-3"
       >
-        {NAV.map((n) => {
+        {NAV.filter((n) => !n.condominio || simular).map((n) => {
           const ativo = n.exato ? pathname === n.href : pathname.startsWith(n.href);
           return (
             <Link

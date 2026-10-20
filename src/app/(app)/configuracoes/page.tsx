@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Calculator, Compass, ListChecks, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
+import { Activity, ArrowRight, Building2, Calculator, Compass, ListChecks, MessageSquare, Route, Target, Users, Workflow } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -43,6 +43,13 @@ const SECTIONS = [
     description:
       "Faixas de taxa (pós e pré), prazos e parâmetros do PDF de proposta gerado com 1 clique no lead.",
     icon: Calculator,
+  },
+  {
+    href: "/configuracoes/simulacao-condominio",
+    title: "Simulação — condomínios",
+    description:
+      "Taxa por prazo, IOF, validade e faixa de valor da simulação em PDF que os parceiros geram no portal.",
+    icon: Building2,
   },
   {
     href: "/configuracoes/status",
