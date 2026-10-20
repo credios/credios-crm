@@ -97,6 +97,15 @@ export async function aoMudarStatusCadencia(
 }
 
 /**
+ * Lead recém-criado: a cadência do status "novo" (se o produto tiver uma)
+ * começa já. Hoje só condomínio tem — no CGI o 1º contato é da Heloísa/SLA.
+ */
+export async function aoCriarLeadCadencia(lead: { id: string; status: string }): Promise<void> {
+  if (lead.status !== "novo") return;
+  await aoMudarStatusCadencia(lead.id, "novo");
+}
+
+/**
  * Interação real aconteceu (cliente respondeu no bot, consultor registrou
  * contato fora da Mesa) → conversa viva: empurra o próximo lembrete pra
  * +2 dias (se estava mais perto), sem mudar de passo. A cadência se adapta
@@ -132,6 +141,12 @@ export async function avancarPasso(
   const cad = await cadenciaDoStatus(lead.status, lead.produto);
   if (!cad || lead.cadenciaPasso == null) return;
   const prox = proximaDataAposExecutar(cad.passos, lead.cadenciaPasso);
+  if (!prox && cad.passos[lead.cadenciaPasso]?.tipo !== "decisao") {
+    // Cadência sem passo de decisão no fim (admin pode montar assim): o
+    // último passo executado encerra — senão ele voltaria pra Mesa todo dia.
+    await encerrarCadencia(lead.id);
+    return;
+  }
   const patch: Record<string, unknown> = prox
     ? { cadenciaPasso: prox.proximoPasso, cadenciaProximaEm: prox.proximaEm }
     : // executou o penúltimo e não há próximo — mantém no passo (decisão é o último)

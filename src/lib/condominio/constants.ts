@@ -25,3 +25,24 @@ export const ASSEMBLEIA_STATUS_LABEL: Record<AssembleiaStatus, string> = {
   aprovada: "Crédito aprovado em assembleia",
   reprovada: "Reprovado em assembleia",
 };
+
+const chave = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase();
+
+/**
+ * Finalidade que chega de fora (site) → uma das FINALIDADES_CONDOMINIO, sem
+ * diferenciar caixa/acento/pontuação. Texto que não bate vira "Outro" e o
+ * original volta em `detalhe` (vai pra lead_condominio.finalidade_detalhes).
+ */
+export function normalizarFinalidadeCondominio(
+  raw: string | null | undefined,
+): { finalidade: string | null; detalhe: string | null } {
+  const t = raw?.trim();
+  if (!t) return { finalidade: null, detalhe: null };
+  const achada = FINALIDADES_CONDOMINIO.find((f) => chave(f) === chave(t));
+  return achada ? { finalidade: achada, detalhe: null } : { finalidade: "Outro", detalhe: t };
+}

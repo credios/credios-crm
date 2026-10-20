@@ -297,6 +297,7 @@ export default async function LeadDetailPage({ params }: Props) {
           valorCreditoCentavos={lead.valorCreditoCentavos}
           whatsapp={lead.whatsapp}
           email={lead.email}
+          produto={row.produto}
           consultorId={row.consultorId}
           canEdit={canEdit}
           canAssign={canAssign}
@@ -483,6 +484,7 @@ async function HeaderBlock(props: {
   valorCreditoCentavos: number | null;
   whatsapp: string | null;
   email: string | null;
+  produto: string;
   consultorId: string | null;
   canEdit: boolean;
   canAssign: boolean;
@@ -513,6 +515,7 @@ async function HeaderBlock(props: {
           valorCreditoCentavos: props.valorCreditoCentavos,
           whatsapp: props.whatsapp,
           email: props.email,
+          produto: props.produto,
         }}
         canEdit={props.canEdit}
         canAssign={props.canAssign}

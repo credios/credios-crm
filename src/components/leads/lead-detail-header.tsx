@@ -53,6 +53,7 @@ type LeadHeaderData = {
   valorCreditoCentavos: number | null;
   whatsapp: string | null;
   email: string | null;
+  produto?: string;
 };
 
 type StatusMeta = { key: string; label: string; eTerminal: boolean };
@@ -295,6 +296,7 @@ export function LeadDetailHeader({
         onOpenChange={setOpenFechar}
         leadId={lead.id}
         leadNome={lead.nome}
+        produto={lead.produto}
         onSuccess={() => {
           setOpenFechar(false);
           startTransition(() => router.refresh());

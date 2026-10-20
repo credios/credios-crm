@@ -11,6 +11,7 @@ import {
   registrarDuplicidadeCnpj,
   salvarCondominio,
 } from "@/lib/condominio/persist";
+import { aoCriarLeadCadencia } from "@/lib/cadencia/engine";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import { contextFromCreateLead } from "@/lib/routing/context";
@@ -209,6 +210,7 @@ export async function POST(request: NextRequest) {
     await salvarCondominio(newLead.id, cond);
     duplicidadeCnpj = await registrarDuplicidadeCnpj(newLead.id, cond.cnpj);
   }
+  await aoCriarLeadCadencia(newLead);
 
   await db.insert(interacoes).values({
     leadId: newLead.id,

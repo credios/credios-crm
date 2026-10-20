@@ -20,8 +20,10 @@ type CamposCondominio = Partial<
 export async function salvarCondominio(
   leadId: string,
   campos: CamposCondominio,
+  /** Transação em curso, quando o chamador grava o lead junto. */
+  executor: Pick<typeof db, "insert"> = db,
 ): Promise<void> {
-  await db
+  await executor
     .insert(leadCondominio)
     .values({ leadId, ...campos })
     .onConflictDoUpdate({

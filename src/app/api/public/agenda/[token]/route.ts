@@ -8,6 +8,7 @@ import { validarAgendaToken } from "@/lib/agenda/token";
 import { aoMudarStatusCadencia } from "@/lib/cadencia/engine";
 import { desfechoReuniaoMoveLead } from "@/lib/cadencia/tipos";
 import { db } from "@/lib/db";
+import { ehCgi } from "@/lib/produtos";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import {
   sendReuniaoConfirmadaEmail,
@@ -75,7 +76,12 @@ type LeadRow = { consultorId: string | null; valorCreditoCentavos: number | null
  * que JÁ TEM consultor (o link veio da cadência de follow-up — o consultor
  * decidiu convidar; a régua determinística não se aplica).
  */
-function podeAgendar(lead: LeadRow & Parameters<typeof elegivelAgendaPublica>[0]): boolean {
+function podeAgendar(
+  lead: LeadRow & Parameters<typeof elegivelAgendaPublica>[0] & { produto: string | null },
+): boolean {
+  // Agenda pública é do funil de CGI (CLAUDE.md §14) — token antigo de lead
+  // que virou outro produto não agenda.
+  if (!ehCgi(lead)) return false;
   return !!lead.consultorId || elegivelAgendaPublica(lead);
 }
 

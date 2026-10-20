@@ -5,6 +5,7 @@ import { and, desc, eq, gt } from "drizzle-orm";
 import { interacoes, leads as leadsTable, reunioes } from "../../../db/schema";
 import { db } from "@/lib/db";
 import { sendNaoSeguiremosEmail } from "@/lib/notifications/email";
+import { aceitaContatoAutomatizado } from "@/lib/produtos";
 import { cancelarReuniao } from "@/lib/sdr/agendar";
 import { enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
 
@@ -17,6 +18,9 @@ import { enviarTextoWhatsApp } from "@/lib/whatsapp/meta";
 //     Heloísa (se a janela de 24h estiver aberta) E e-mail (backup, layout
 //     de cliente). A mensagem é marcada como aviso de desqualificação, o que
 //     SILENCIA o bot dali em diante (padrão jaAvisouDesqualificado).
+//     O texto fala de garantia de imóvel e vem da Heloísa: vale só pra lead
+//     que aceita contato automatizado (CGI sem parceiro). Condomínio e
+//     cliente de parceiro são avisados pelo consultor.
 
 const JANELA_24H_MS = 24 * 60 * 60 * 1000;
 
@@ -82,6 +86,7 @@ export async function aoEncerrarLead(
   }
 
   if (novoStatus !== "desqualificado") return;
+  if (!aceitaContatoAutomatizado(lead)) return;
 
   // 2) WhatsApp educado pela Heloísa — só com a janela de 24h aberta (texto
   //    livre fora da janela é rejeitado pela Meta). Marcado como aviso de

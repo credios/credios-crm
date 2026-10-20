@@ -138,6 +138,7 @@ export function LeadKanban({
   const [pendingTerminal, setPendingTerminal] = useState<{
     leadId: string;
     leadNome: string;
+    produto: string;
     status: "fechado" | "desqualificado" | "perdido";
     /** Cols snapshot pra restaurar se user cancelar dialog. */
     snapshot: Cols;
@@ -322,6 +323,7 @@ export function LeadKanban({
       setPendingTerminal({
         leadId,
         leadNome: original.nome,
+        produto: original.produto,
         status: targetStatus,
         snapshot: snap,
       });
@@ -461,6 +463,7 @@ export function LeadKanban({
           }}
           leadId={pendingTerminal.leadId}
           leadNome={pendingTerminal.leadNome}
+          produto={pendingTerminal.produto}
           onSuccess={() => {
             setPendingTerminal(null);
             router.refresh();

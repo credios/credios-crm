@@ -73,9 +73,12 @@ const RANK: Record<CadenciaNivel, number> = {
  */
 export async function getNegociacoesAbertas(
   consultorId: string | null,
+  /** null/omitido = todos os produtos. */
+  produto?: string | null,
 ): Promise<NegociacaoAberta[]> {
   const conds = [eq(leadsTable.status, "em_negociacao")];
   if (consultorId) conds.push(eq(leadsTable.consultorId, consultorId));
+  if (produto) conds.push(eq(leadsTable.produto, produto));
 
   const rows = await db
     .select({

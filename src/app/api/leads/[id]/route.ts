@@ -10,7 +10,12 @@ import { extractRequestMeta, logAction } from "@/lib/audit";
 import { getAppUser } from "@/lib/auth/get-app-user";
 import { maskLeadForPerfil } from "@/lib/auth/mascaramento";
 import { checkPermission } from "@/lib/auth/permissions";
-import { nomeDoParceiro, salvarCondominio } from "@/lib/condominio/persist";
+import {
+  buscarCondominio,
+  nomeDoParceiro,
+  registrarDuplicidadeCnpj,
+  salvarCondominio,
+} from "@/lib/condominio/persist";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
@@ -212,7 +217,17 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "no fields to update" }, { status: 400 });
   }
 
-  if (temCondominio) await salvarCondominio(id, condominio);
+  if (temCondominio) {
+    // CNPJ trocado → confere duplicidade (igual à criação); mesmo CNPJ não repete.
+    const novoCnpj = "cnpj" in condominio ? (condominio.cnpj as string | null) : null;
+    const antes = novoCnpj ? await buscarCondominio(id) : null;
+    await salvarCondominio(id, condominio);
+    if (novoCnpj && antes?.cnpj !== novoCnpj) {
+      await registrarDuplicidadeCnpj(id, novoCnpj).catch((e) =>
+        console.error("[leads PATCH] duplicidade por CNPJ falhou:", e),
+      );
+    }
+  }
 
   // Só condomínio mudou: ainda assim marca o lead como atualizado.
   if (Object.keys(updates).length === 0) updates.updatedAt = new Date();
