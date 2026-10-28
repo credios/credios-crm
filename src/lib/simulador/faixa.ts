@@ -15,7 +15,7 @@
 
 import type { SimulacaoFaixaConfig } from "./faixa-config";
 import { calculateIRR, calculatePricePMT } from "./financial";
-import { IOF_RATE } from "./simple-simulator";
+import { iofRatePorTipoPessoa } from "./simple-simulator";
 
 export type Range = { min: number; max: number };
 
@@ -115,7 +115,7 @@ export function buildPropostaFaixa(
   const faixa = input.indexation === "pos" ? config.pos : config.pre;
   const taxaAmRange: Range = { min: faixa.taxaMinAm, max: faixa.taxaMaxAm };
 
-  const iof = input.creditAmount * IOF_RATE;
+  const iof = input.creditAmount * iofRatePorTipoPessoa(input.tipoPessoa);
   const totalTomado = input.creditAmount + iof;
   const ltv =
     input.propertyValue > 0 ? (input.creditAmount / input.propertyValue) * 100 : 0;

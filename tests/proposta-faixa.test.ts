@@ -28,6 +28,14 @@ describe("buildProposta (faixa)", () => {
     expect(r.totalTomado).toBeCloseTo(465_210, 0);
   });
 
+  it("pessoa jurídica: IOF no teto de PJ (3,95%, Decreto 12.499/2025)", () => {
+    const pj = buildProposta({ ...INPUT, tipoPessoa: "Pessoa Jurídica" }, SIMULACAO_FAIXA_DEFAULTS, {
+      simulationId: "HE-2026-0002",
+      generatedAt: new Date("2026-06-23T12:00:00Z"),
+    });
+    expect(pj.iof).toBeCloseTo(450_000 * 0.0395, 2);
+  });
+
   it("PRICE 240m: faixa de parcela 5.122,36–7.568,54", () => {
     const l240 = r.linhas.find((l) => l.prazo === 240)!;
     expect(l240.price.min).toBeCloseTo(5122.36, 0);

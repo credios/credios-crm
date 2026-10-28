@@ -268,7 +268,7 @@ export function SimulacaoCondominioEditor({ initial }: { initial: SimulacaoCondo
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            IOF padrão de pessoa jurídica: 0,38% + 0,0041% ao dia sobre cada amortização
+            IOF de pessoa jurídica (Decreto 12.499/2025): 0,95% + 0,0082% ao dia sobre cada amortização
             (teto de 365 dias), financiado junto com o crédito. Zere os dois campos para
             simular sem IOF — o PDF passa a dizer que as parcelas não incluem IOF.
           </p>

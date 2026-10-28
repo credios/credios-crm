@@ -15,9 +15,9 @@ export type SimulacaoCondominioConfig = {
   prazos: PrazoTaxa[];
   /** Validade da simulação, em dias. */
   validadeDias: number;
-  /** IOF: alíquota adicional sobre o valor do crédito, em % (0,38%). */
+  /** IOF: alíquota adicional sobre o valor do crédito, em % (PJ: 0,95% — Decreto 12.499/2025). */
   iofAdicionalPct: number;
-  /** IOF: alíquota diária sobre cada amortização, em % a.d. (PJ: 0,0041%). */
+  /** IOF: alíquota diária sobre cada amortização, em % a.d. (PJ: 0,0082% — Decreto 12.499/2025). */
   iofDiarioPct: number;
   /** Faixa de valor que o parceiro pode simular, em reais. */
   valorMinimo: number;
@@ -32,8 +32,8 @@ export const MAX_PRAZOS = 12;
 export const SIMULACAO_CONDOMINIO_DEFAULTS: SimulacaoCondominioConfig = {
   prazos: [6, 12, 18, 24, 36, 48, 60].map((meses) => ({ meses, taxaAm: 2.5 })),
   validadeDias: 15,
-  iofAdicionalPct: 0.38,
-  iofDiarioPct: 0.0041,
+  iofAdicionalPct: 0.95,
+  iofDiarioPct: 0.0082,
   valorMinimo: 20_000,
   valorMaximo: 20_000_000,
 };

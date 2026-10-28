@@ -63,8 +63,8 @@ describe("motor da simulação de condomínio", () => {
   it("uma linha por prazo, com Price sobre crédito + IOF", () => {
     expect(sim.linhas).toHaveLength(7);
     const l60 = sim.linhas.at(-1)!;
-    // PMT(850.000 + IOF, 2,5%, 60) — conferido à mão: ≈ 27.998
-    expect(l60.parcela).toBeCloseTo(27_997.99, 1);
+    // PMT(850.000 + IOF PJ 0,95% + 0,0082% a.d., 2,5%, 60) — conferido à mão: ≈ 28.548
+    expect(l60.parcela).toBeCloseTo(28_547.85, 1);
     expect(l60.totalPago).toBeCloseTo(l60.parcela * 60, 6);
     expect(l60.porUnidade).toBeCloseTo(l60.parcela / 120, 6);
   });
@@ -73,12 +73,12 @@ describe("motor da simulação de condomínio", () => {
     for (const l of sim.linhas) expect(l.cetAm).toBeGreaterThan(l.taxaAm);
   });
 
-  it("IOF: 0,38% + diária com teto de 365 dias", () => {
-    const cfg = { iofAdicionalPct: 0.38, iofDiarioPct: 0.0041 };
-    // Prazo longo: diária quase toda no teto → perto de 0,38% + 1,4965%.
+  it("IOF PJ (Decreto 12.499/2025): 0,95% + diária com teto de 365 dias", () => {
+    const cfg = { iofAdicionalPct: 0.95, iofDiarioPct: 0.0082 };
+    // Prazo longo: diária quase toda no teto → perto de 0,95% + 2,993%.
     const iof = iofPrice(1_000_000, 2.5, 60, cfg);
-    expect(iof).toBeGreaterThan(3_800 + 10_000);
-    expect(iof).toBeLessThan(3_800 + 14_965);
+    expect(iof).toBeGreaterThan(9_500 + 20_000);
+    expect(iof).toBeLessThan(9_500 + 29_930);
     expect(iofPrice(1_000_000, 2.5, 60, { iofAdicionalPct: 0, iofDiarioPct: 0 })).toBe(0);
   });
 

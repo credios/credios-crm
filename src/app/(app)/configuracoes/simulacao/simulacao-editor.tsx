@@ -126,7 +126,7 @@ export function SimulacaoConfigEditor({ initial }: Props) {
           </div>
           <p className="text-xs text-muted-foreground">
             A renda mínima sugerida do PDF = menor parcela do prazo destaque ÷
-            comprometimento. IOF segue fixo em 3,38% (convenção de mercado).
+            comprometimento. IOF fixo no teto anual do Decreto 12.499/2025: 3,38% para pessoa física e 3,95% para pessoa jurídica.
           </p>
         </CardContent>
       </Card>
