@@ -25,15 +25,18 @@ import {
 } from "@/components/ui/select";
 import {
   buildSimulacaoFundo,
+  INDEXACAO_FUNDO_LABEL,
+  type IndexacaoFundo,
   IOF_FUNDO_LABEL,
   type IofFundo,
   MAX_PRAZOS_SIMULACAO_FUNDO,
+  PRAZO_MAX_SIMULACAO_FUNDO,
   VALIDADE_SIMULACAO_FUNDO_DIAS,
 } from "@/lib/simulador/fundo";
 
 // ═══════════════════════════════════════════════════════════
-// Simulação do fundo (Musashi Capital) — valor, um ou mais prazos com a
-// taxa de cada um e IOF; o servidor calcula e devolve o PDF pronto pra
+// Simulação do fundo (Musashi Capital) — valor, pré-fixada ou IPCA +, um ou
+// mais prazos (até 90 meses) com a taxa de cada um e IOF; o servidor calcula e devolve o PDF pronto pra
 // enviar ao cliente. A parcela de cada linha aparece aqui antes de gerar.
 // ═══════════════════════════════════════════════════════════
 
@@ -78,8 +81,13 @@ export function SimulacaoFundoDialog({
     defaults.valorCreditoCentavos ? Math.round(defaults.valorCreditoCentavos / 100) : 0,
   );
   const [iof, setIof] = useState<IofFundo>(defaults.iof);
+  const [indexacao, setIndexacao] = useState<IndexacaoFundo>("pre");
+  // Prazo desejado acima do teto do fundo entra já no teto.
+  const sugerido = defaults.prazoSugeridoMeses
+    ? Math.min(defaults.prazoSugeridoMeses, PRAZO_MAX_SIMULACAO_FUNDO)
+    : null;
   const [linhas, setLinhas] = useState<Linha[]>([
-    { key: 0, meses: defaults.prazoSugeridoMeses ? String(defaults.prazoSugeridoMeses) : "", taxa: "" },
+    { key: 0, meses: sugerido ? String(sugerido) : "", taxa: "" },
   ]);
 
   const prazos = useMemo(
@@ -87,7 +95,12 @@ export function SimulacaoFundoDialog({
       linhas.map((l) => {
         const meses = Number(l.meses);
         const taxaAm = parseTaxa(l.taxa);
-        const ok = Number.isInteger(meses) && meses >= 1 && meses <= 420 && taxaAm > 0 && taxaAm <= 20;
+        const ok =
+          Number.isInteger(meses) &&
+          meses >= 1 &&
+          meses <= PRAZO_MAX_SIMULACAO_FUNDO &&
+          taxaAm > 0 &&
+          taxaAm <= 20;
         return ok ? { meses, taxaAm } : null;
       }),
     [linhas],
@@ -102,6 +115,7 @@ export function SimulacaoFundoDialog({
         {
           valorCredito: valor,
           prazos: [p],
+          indexacao,
           iof,
           produto: "CGI",
           cliente: { nome: "" },
@@ -111,7 +125,7 @@ export function SimulacaoFundoDialog({
       );
       return sim.linhas[0]!.parcela;
     });
-  }, [valor, prazos, iof, linhas]);
+  }, [valor, prazos, indexacao, iof, linhas]);
 
   function atualizar(key: number, campo: "meses" | "taxa", v: string) {
     setLinhas((ls) => ls.map((l) => (l.key === key ? { ...l, [campo]: v } : l)));
@@ -130,7 +144,7 @@ export function SimulacaoFundoDialog({
     const idx = prazos.findIndex((p) => p === null);
     if (idx >= 0) {
       return toast.error(`Confira o prazo ${idx + 1}`, {
-        description: "Prazo de 1 a 420 meses e taxa maior que zero (até 20% a.m.).",
+        description: `Prazo de 1 a ${PRAZO_MAX_SIMULACAO_FUNDO} meses e taxa maior que zero (até 20% a.m.).`,
       });
     }
 
@@ -139,7 +153,7 @@ export function SimulacaoFundoDialog({
       const res = await fetch(`/api/leads/${leadId}/simulacao-fundo`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ valorCredito: valor, prazos, iof }),
+        body: JSON.stringify({ valorCredito: valor, prazos, indexacao, iof }),
       });
       if (!res.ok) {
         const json = (await res.json().catch(() => ({}))) as { error?: string };
@@ -178,7 +192,7 @@ export function SimulacaoFundoDialog({
           <DialogTitle>Simulação do fundo</DialogTitle>
           <DialogDescription>
             PDF com a marca da Musashi Capital para <strong>{leadNome}</strong>. Tabela Price,
-            válido por {VALIDADE_SIMULACAO_FUNDO_DIAS} dias.
+            prazo de até {PRAZO_MAX_SIMULACAO_FUNDO} meses, válido por {VALIDADE_SIMULACAO_FUNDO_DIAS} dias.
           </DialogDescription>
         </DialogHeader>
 
@@ -196,6 +210,26 @@ export function SimulacaoFundoDialog({
               />
             </div>
             <div className="space-y-1.5">
+              <Label>Taxa</Label>
+              <Select
+                value={indexacao}
+                onValueChange={(v) => setIndexacao((v ?? "pre") as IndexacaoFundo)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue>
+                    {(v: unknown) => INDEXACAO_FUNDO_LABEL[v as IndexacaoFundo]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(INDEXACAO_FUNDO_LABEL) as IndexacaoFundo[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {INDEXACAO_FUNDO_LABEL[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
               <Label>IOF</Label>
               <Select value={iof} onValueChange={(v) => setIof((v ?? "PF") as IofFundo)}>
                 <SelectTrigger className="w-full">
@@ -215,8 +249,8 @@ export function SimulacaoFundoDialog({
           <div className="space-y-2">
             <div className="grid grid-cols-[1fr_1fr_1.3fr_2rem] gap-2 text-xs font-medium text-muted-foreground">
               <span>Prazo (meses)</span>
-              <span>Juros (% a.m.)</span>
-              <span className="text-right">Parcela</span>
+              <span>{indexacao === "ipca" ? "IPCA + (% a.m.)" : "Juros (% a.m.)"}</span>
+              <span className="text-right">{indexacao === "ipca" ? "Parcela (hoje)" : "Parcela"}</span>
               <span />
             </div>
             {linhas.map((l, i) => (
@@ -226,7 +260,7 @@ export function SimulacaoFundoDialog({
                   inputMode="numeric"
                   value={l.meses}
                   onChange={(e) => atualizar(l.key, "meses", e.currentTarget.value.replace(/\D/g, ""))}
-                  placeholder="60"
+                  placeholder={String(PRAZO_MAX_SIMULACAO_FUNDO)}
                   disabled={pending}
                 />
                 <Input
@@ -260,8 +294,10 @@ export function SimulacaoFundoDialog({
               <Plus className="size-4" /> Adicionar prazo
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              Até {MAX_PRAZOS_SIMULACAO_FUNDO} prazos, cada um com a sua taxa.
+              Até {MAX_PRAZOS_SIMULACAO_FUNDO} prazos de no máximo {PRAZO_MAX_SIMULACAO_FUNDO} meses,
+              cada um com a sua taxa.
               {iof !== "nenhum" && " A parcela já inclui o IOF financiado."}
+              {indexacao === "ipca" && " No IPCA +, a parcela é corrigida mês a mês pela inflação."}
             </p>
           </div>
         </div>

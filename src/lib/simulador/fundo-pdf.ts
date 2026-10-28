@@ -15,6 +15,7 @@ import { maskCnpj } from "@/lib/formatters/cpf-cnpj";
 import { formatPhoneBr } from "@/lib/formatters/phone";
 
 import {
+  INDEXACAO_FUNDO_LABEL,
   IOF_FUNDO,
   type LinhaSimulacaoFundo,
   type SimulacaoFundoResult,
@@ -257,11 +258,19 @@ function fatos(ctx: Ctx, itens: Fato[], yTop: number): number {
 function destaque(ctx: Ctx, sim: SimulacaoFundoResult, yTop: number): number {
   const l = sim.menorParcela;
   const unica = sim.linhas.length === 1;
+  const ipca = sim.indexacao === "ipca";
   const h = 66;
   caixa(ctx, MX, yTop, CW, h, { r: 6, fill: C.noite });
   rotulo(ctx, unica ? "Parcela mensal" : "Parcela a partir de", MX + 20, yTop + 18, { color: C.ouroClaro, size: 6.4 });
-  text(ctx, `${l.meses} meses · juros de ${pct(l.taxaAm)} ao mês`, MX + 20, yTop + 33, { size: 8.6, color: C.apoioEscuro });
-  text(ctx, `Parcelas fixas · CET de ${pct(l.cetAa)} ao ano`, MX + 20, yTop + 45, { size: 8.6, color: C.apoioEscuro });
+  const juros = ipca ? `IPCA + ${pct(l.taxaAm)} ao mês` : `juros de ${pct(l.taxaAm)} ao mês`;
+  text(ctx, `${l.meses} meses · ${juros}`, MX + 20, yTop + 33, { size: 8.6, color: C.apoioEscuro });
+  text(
+    ctx,
+    ipca ? `Corrigida pelo IPCA · CET de IPCA + ${pct(l.cetAa)} ao ano` : `Parcelas fixas · CET de ${pct(l.cetAa)} ao ano`,
+    MX + 20,
+    yTop + 45,
+    { size: 8.6, color: C.apoioEscuro },
+  );
 
   const valor = brl(l.parcela);
   const sufixo = " / mês";
@@ -283,14 +292,15 @@ type Col = {
 
 function tabela(ctx: Ctx, sim: SimulacaoFundoResult, yTop: number): number {
   const comIof = sim.iof !== "nenhum";
+  const ipca = sim.indexacao === "ipca";
   const cols: Col[] = [
     { titulo: "Prazo", peso: 0.12, align: "left", val: (l) => `${l.meses} meses` },
-    { titulo: "Juros a.m.", peso: 0.12, align: "right", val: (l) => pct(l.taxaAm) },
-    { titulo: "Juros a.a.", peso: 0.12, align: "right", val: (l) => pct(l.taxaAa) },
+    { titulo: ipca ? "IPCA + a.m." : "Juros a.m.", peso: 0.12, align: "right", val: (l) => pct(l.taxaAm) },
+    { titulo: ipca ? "IPCA + a.a." : "Juros a.a.", peso: 0.12, align: "right", val: (l) => pct(l.taxaAa) },
     { titulo: "Parcela mensal", peso: 0.18, align: "right", val: (l) => brl(l.parcela), forte: true },
     ...(comIof ? [{ titulo: "IOF", peso: 0.13, align: "right" as const, val: (l: LinhaSimulacaoFundo) => brl(l.iof) }] : []),
     { titulo: "Total das parcelas", peso: 0.2, align: "right", val: (l) => brl(l.totalPago) },
-    { titulo: "CET a.a.", peso: 0.13, align: "right", val: (l) => pct(l.cetAa) },
+    { titulo: ipca ? "CET IPCA + a.a." : "CET a.a.", peso: ipca ? 0.15 : 0.13, align: "right", val: (l) => pct(l.cetAa) },
   ];
   const soma = cols.reduce((s, c) => s + c.peso, 0);
   const ws = cols.map((c) => (c.peso / soma) * CW);
@@ -339,7 +349,9 @@ function notas(ctx: Ctx, sim: SimulacaoFundoResult, yTop: number): number {
   const iof = IOF_FUNDO[sim.iof];
   const pctIof = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 4 }) + "%";
   const itens = [
-    "Tabela Price: as parcelas são fixas do primeiro ao último mês, sem correção monetária.",
+    sim.indexacao === "ipca"
+      ? "Taxa IPCA + juros, pela Tabela Price: parcelas e saldo devedor são corrigidos mensalmente pela variação do IPCA. Os valores estão em reais de hoje, sem projeção de inflação; juros e CET são acrescidos do IPCA."
+      : "Taxa pré-fixada, pela Tabela Price: as parcelas são fixas do primeiro ao último mês, sem correção monetária.",
     sim.iof === "nenhum"
       ? "As parcelas não incluem IOF."
       : `O IOF estimado (${pctIof(iof.iofAdicionalPct)} sobre o valor + ${pctIof(iof.iofDiarioPct)} ao dia, limitado a 365 dias) é financiado junto com o crédito e já está nas parcelas. O valor do crédito chega integral.`,
@@ -442,7 +454,7 @@ export async function renderSimulacaoFundoPdf(sim: SimulacaoFundoResult): Promis
           valor: sim.produto === "CONDOMINIO" ? "Crédito para condomínio" : "Crédito com garantia de imóvel",
           peso: 1.1,
         },
-        { label: "Amortização", valor: "Tabela Price", peso: 0.8 },
+        { label: "Taxa", valor: INDEXACAO_FUNDO_LABEL[sim.indexacao], peso: 0.8 },
         { label: `Válida até (${VALIDADE_SIMULACAO_FUNDO_DIAS} dias)`, valor: dataBr(sim.validaAte), peso: 0.9 },
       ],
       y,

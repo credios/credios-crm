@@ -16,9 +16,10 @@ import { simulacaoFundoSchema } from "@/lib/validators/simulacao-fundo";
 const base: SimulacaoFundoInput = {
   valorCredito: 500_000,
   prazos: [
-    { meses: 120, taxaAm: 1.59 },
+    { meses: 90, taxaAm: 1.59 },
     { meses: 36, taxaAm: 1.39 },
   ],
+  indexacao: "pre",
   iof: "PF",
   produto: "CGI",
   cliente: { nome: "João da Silva" },
@@ -28,7 +29,7 @@ const base: SimulacaoFundoInput = {
 describe("simulação do fundo — cálculo", () => {
   it("ordena por prazo e calcula a Price sobre crédito + IOF", () => {
     const sim = buildSimulacaoFundo(base, { codigo: "MC-2026-000001", geradaEm: "2026-10-28" });
-    expect(sim.linhas.map((l) => l.meses)).toEqual([36, 120]);
+    expect(sim.linhas.map((l) => l.meses)).toEqual([36, 90]);
     const l = sim.linhas[0]!;
     expect(l.parcela).toBeCloseTo(calculatePricePMT(500_000 + l.iof, 1.39, 36), 6);
     expect(l.totalPago).toBeCloseTo(l.parcela * 36, 6);
@@ -38,7 +39,7 @@ describe("simulação do fundo — cálculo", () => {
     // IOF financiado → CET acima da taxa de juros.
     expect(l.cetAm).toBeGreaterThan(1.39);
     expect(l.taxaAa).toBeCloseTo((Math.pow(1.0139, 12) - 1) * 100, 8);
-    expect(sim.menorParcela.meses).toBe(120);
+    expect(sim.menorParcela.meses).toBe(90);
   });
 
   it("sem IOF: CET igual à taxa e parcela da Price pura", () => {
@@ -72,21 +73,32 @@ describe("simulação do fundo — cálculo", () => {
 });
 
 describe("simulação do fundo — validação", () => {
+  const ok = (prazos: { meses: number; taxaAm: number }[], extra: Record<string, unknown> = {}) =>
+    simulacaoFundoSchema.safeParse({ valorCredito: 1, prazos, indexacao: "pre", iof: "PJ", ...extra }).success;
+
   it("aceita de 1 a 10 prazos e recusa repetidos", () => {
-    expect(simulacaoFundoSchema.safeParse({ valorCredito: 1, prazos: [{ meses: 12, taxaAm: 1 }], iof: "PJ" }).success).toBe(true);
-    expect(simulacaoFundoSchema.safeParse({ valorCredito: 1, prazos: [], iof: "PJ" }).success).toBe(false);
-    const onze = Array.from({ length: 11 }, (_, i) => ({ meses: 12 + i, taxaAm: 1 }));
-    expect(simulacaoFundoSchema.safeParse({ valorCredito: 1, prazos: onze, iof: "PJ" }).success).toBe(false);
-    const rep = [{ meses: 12, taxaAm: 1 }, { meses: 12, taxaAm: 1 }];
-    expect(simulacaoFundoSchema.safeParse({ valorCredito: 1, prazos: rep, iof: "PJ" }).success).toBe(false);
+    expect(ok([{ meses: 12, taxaAm: 1 }])).toBe(true);
+    expect(ok([])).toBe(false);
+    expect(ok(Array.from({ length: 11 }, (_, i) => ({ meses: 12 + i, taxaAm: 1 })))).toBe(false);
+    expect(ok([{ meses: 12, taxaAm: 1 }, { meses: 12, taxaAm: 1 }])).toBe(false);
     // Mesmo prazo com taxas diferentes é cenário válido.
-    const cenarios = [{ meses: 12, taxaAm: 1 }, { meses: 12, taxaAm: 1.5 }];
-    expect(simulacaoFundoSchema.safeParse({ valorCredito: 1, prazos: cenarios, iof: "PJ" }).success).toBe(true);
+    expect(ok([{ meses: 12, taxaAm: 1 }, { meses: 12, taxaAm: 1.5 }])).toBe(true);
+  });
+
+  it("prazo máximo do fundo: 90 meses", () => {
+    expect(ok([{ meses: 90, taxaAm: 1 }])).toBe(true);
+    expect(ok([{ meses: 91, taxaAm: 1 }])).toBe(false);
+  });
+
+  it("indexação pré ou IPCA +, obrigatória", () => {
+    expect(ok([{ meses: 60, taxaAm: 1 }], { indexacao: "ipca" })).toBe(true);
+    expect(ok([{ meses: 60, taxaAm: 1 }], { indexacao: "cdi" })).toBe(false);
+    expect(ok([{ meses: 60, taxaAm: 1 }], { indexacao: undefined })).toBe(false);
   });
 
   it("recusa taxa zero e prazo fracionado", () => {
-    expect(simulacaoFundoSchema.safeParse({ valorCredito: 1, prazos: [{ meses: 12, taxaAm: 0 }], iof: "PF" }).success).toBe(false);
-    expect(simulacaoFundoSchema.safeParse({ valorCredito: 1, prazos: [{ meses: 12.5, taxaAm: 1 }], iof: "PF" }).success).toBe(false);
+    expect(ok([{ meses: 12, taxaAm: 0 }])).toBe(false);
+    expect(ok([{ meses: 12.5, taxaAm: 1 }])).toBe(false);
   });
 });
 
@@ -97,8 +109,9 @@ describe("simulação do fundo — PDF", () => {
         ...base,
         produto: "CONDOMINIO",
         iof: "PJ",
+        indexacao: "ipca",
         cliente: { nome: "Condomínio Residencial Jardim das Acácias", cnpj: "11222333000181" },
-        prazos: [12, 24, 36, 48, 60].map((meses) => ({ meses, taxaAm: 2.5 })),
+        prazos: [12, 24, 36, 60, 90].map((meses) => ({ meses, taxaAm: 1.5 })),
       },
       { codigo: "MC-2026-004217", geradaEm: "2026-10-28" },
     );

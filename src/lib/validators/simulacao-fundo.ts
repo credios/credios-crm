@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MAX_PRAZOS_SIMULACAO_FUNDO } from "@/lib/simulador/fundo";
+import { MAX_PRAZOS_SIMULACAO_FUNDO, PRAZO_MAX_SIMULACAO_FUNDO } from "@/lib/simulador/fundo";
 
 /** Corpo do POST /api/leads/[id]/simulacao-fundo. Valores em reais. */
 export const simulacaoFundoSchema = z.object({
@@ -8,7 +8,11 @@ export const simulacaoFundoSchema = z.object({
   prazos: z
     .array(
       z.object({
-        meses: z.number().int().min(1, "Prazo mínimo de 1 mês").max(420, "Prazo máximo de 420 meses"),
+        meses: z
+          .number()
+          .int()
+          .min(1, "Prazo mínimo de 1 mês")
+          .max(PRAZO_MAX_SIMULACAO_FUNDO, `Prazo máximo de ${PRAZO_MAX_SIMULACAO_FUNDO} meses`),
         taxaAm: z.number().gt(0, "Informe a taxa").max(20, "Taxa acima de 20% a.m."),
       }),
     )
@@ -18,6 +22,7 @@ export const simulacaoFundoSchema = z.object({
       (ps) => new Set(ps.map((p) => `${p.meses}|${p.taxaAm}`)).size === ps.length,
       "Há prazos repetidos com a mesma taxa",
     ),
+  indexacao: z.enum(["pre", "ipca"]),
   iof: z.enum(["PF", "PJ", "nenhum"]),
 });
 

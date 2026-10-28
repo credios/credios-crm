@@ -76,6 +76,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     {
       valorCredito: data.valorCredito,
       prazos: data.prazos,
+      indexacao: data.indexacao,
       iof: data.iof,
       produto,
       cliente: { nome: lead.nome, cnpj },
@@ -87,7 +88,8 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
   const brl = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-  const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`;
+  const pct = (v: number) =>
+    `${data.indexacao === "ipca" ? "IPCA + " : ""}${v.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`;
 
   await db.insert(interacoes).values({
     leadId: id,
@@ -103,6 +105,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       gerada_em: sim.geradaEm,
       valida_ate: sim.validaAte,
       valor_credito: sim.valorCredito,
+      indexacao: sim.indexacao,
       iof: sim.iof,
       prazos: sim.linhas.map((l) => ({ meses: l.meses, taxa_am: l.taxaAm, parcela: Number(l.parcela.toFixed(2)) })),
     } as never,
@@ -115,7 +118,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       "simulacao_fundo_gerada",
       "lead",
       id,
-      { codigo, valor_credito: sim.valorCredito, prazos: data.prazos, iof: data.iof },
+      { codigo, valor_credito: sim.valorCredito, prazos: data.prazos, indexacao: data.indexacao, iof: data.iof },
       extractRequestMeta(request),
     ),
   );

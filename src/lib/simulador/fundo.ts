@@ -8,6 +8,10 @@
 // Por prazo: Tabela Price sobre crédito + IOF financiado (mesma conta da
 // simulação de condomínio do portal — `iofPrice`).
 //   CET = TIR do fluxo do cliente: recebe o crédito, paga as parcelas.
+//
+// IPCA +: mesma conta sobre a taxa real, sem projetar inflação (convenção da
+// proposta em faixa do CGI) — parcelas em valores de hoje; o PDF avisa que
+// parcelas e saldo são corrigidos pelo IPCA.
 // ═══════════════════════════════════════════════════════════
 
 import { anualiza, iofPrice } from "./condominio";
@@ -15,6 +19,15 @@ import { calculateIRR, calculatePricePMT } from "./financial";
 
 export const VALIDADE_SIMULACAO_FUNDO_DIAS = 30;
 export const MAX_PRAZOS_SIMULACAO_FUNDO = 10;
+/** Prazo máximo com que o fundo trabalha. */
+export const PRAZO_MAX_SIMULACAO_FUNDO = 90;
+
+export type IndexacaoFundo = "pre" | "ipca";
+
+export const INDEXACAO_FUNDO_LABEL: Record<IndexacaoFundo, string> = {
+  pre: "Pré-fixada",
+  ipca: "IPCA + juros",
+};
 
 /**
  * IOF-crédito (Decreto 6.306/2007, alíquotas do Decreto 12.499/2025):
@@ -41,6 +54,7 @@ export type SimulacaoFundoInput = {
   valorCredito: number;
   /** Na ordem em que foram informados; a saída ordena por prazo. */
   prazos: { meses: number; taxaAm: number }[];
+  indexacao: IndexacaoFundo;
   iof: IofFundo;
   produto: ProdutoSimulacaoFundo;
   cliente: {
