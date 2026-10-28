@@ -46,6 +46,7 @@ import { LeadTimelineTabs } from "@/components/leads/lead-timeline-tabs";
 import { LeadWhatsappConversa } from "@/components/leads/lead-whatsapp-conversa";
 import { MensagensSugeridas } from "@/components/leads/mensagens-sugeridas";
 import { ReuniaoDesfechoBanner } from "@/components/leads/reuniao-desfecho-banner";
+import type { SimulacaoFundoDefaults } from "@/components/leads/simulacao-fundo-dialog";
 import { ValoresSuspeitosBanner } from "@/components/leads/valores-suspeitos-banner";
 import {
   SkeletonLeadBancos,
@@ -302,6 +303,16 @@ export default async function LeadDetailPage({ params }: Props) {
           canEdit={canEdit}
           canAssign={canAssign}
           isAdmin={user.perfil === "admin"}
+          simulacaoFundo={
+            // Simulação do fundo: CGI e condomínio, quem opera o lead (não marketing).
+            !isMarketing && (cgi || condominio)
+              ? {
+                  valorCreditoCentavos: lead.valorCreditoCentavos,
+                  iof: condominio || row.tipoPessoa === "Pessoa Jurídica" ? "PJ" : "PF",
+                  prazoSugeridoMeses: condominio?.prazoDesejadoMeses ?? null,
+                }
+              : null
+          }
         />
       </Suspense>
 
@@ -489,6 +500,7 @@ async function HeaderBlock(props: {
   canEdit: boolean;
   canAssign: boolean;
   isAdmin: boolean;
+  simulacaoFundo: SimulacaoFundoDefaults | null;
 }) {
   // Statuses + consultor + nome do consultor atribuído. Paralelo.
   const [statuses, consultores, consultorRow] = await Promise.all([
@@ -520,6 +532,7 @@ async function HeaderBlock(props: {
         canEdit={props.canEdit}
         canAssign={props.canAssign}
         isAdmin={props.isAdmin}
+        simulacaoFundo={props.simulacaoFundo}
         consultores={consultores}
         statuses={statuses.map((s) => ({
           key: s.key,

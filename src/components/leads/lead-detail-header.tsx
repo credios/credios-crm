@@ -2,6 +2,7 @@
 
 import {
   Copy,
+  FileDown,
   Loader2,
   MessageCircle,
   MoreVertical,
@@ -43,6 +44,10 @@ import {
 } from "@/components/ui/select";
 import { STATUS_LEAD_LABEL } from "@/lib/constants";
 import { BancosPicker } from "@/components/leads/bancos-picker";
+import {
+  type SimulacaoFundoDefaults,
+  SimulacaoFundoDialog,
+} from "@/components/leads/simulacao-fundo-dialog";
 import { formatBrlFromCents } from "@/lib/formatters/currency";
 import { whatsappUrl } from "@/lib/formatters/phone";
 
@@ -66,6 +71,8 @@ type Props = {
   consultores: { id: string; nome: string }[];
   /** Status ATIVOS (vem do server). Usados pra montar o dropdown de mudança. */
   statuses: StatusMeta[];
+  /** Null = sem botão de simulação do fundo (perfil ou produto não se aplica). */
+  simulacaoFundo?: SimulacaoFundoDefaults | null;
 };
 
 export function LeadDetailHeader({
@@ -75,6 +82,7 @@ export function LeadDetailHeader({
   isAdmin,
   consultores,
   statuses,
+  simulacaoFundo = null,
 }: Props) {
   // Splita em terminais sistema (com tratamento especial) e o resto.
   // Custom statuses entram no bloco "não-terminais" automaticamente.
@@ -95,6 +103,7 @@ export function LeadDetailHeader({
     "documentacao_enviada" | "em_negociacao" | null
   >(null);
   const [openDelete, setOpenDelete] = useState(false);
+  const [openSimFundo, setOpenSimFundo] = useState(false);
   const [pendingMark, setPendingMark] = useState(false);
   const [pendingStatus, setPendingStatus] = useState(false);
 
@@ -212,6 +221,11 @@ export function LeadDetailHeader({
                 Último contato
               </Button>
             )}
+            {simulacaoFundo && (
+              <Button variant="outline" onClick={() => setOpenSimFundo(true)}>
+                <FileDown className="size-4" /> Simulação do fundo
+              </Button>
+            )}
             {canAssign && (
               <Button variant="outline" onClick={() => setOpenReassign(true)}>
                 <UserPlus className="size-4" /> Reatribuir
@@ -291,6 +305,15 @@ export function LeadDetailHeader({
         </div>
       </div>
 
+      {simulacaoFundo && openSimFundo && (
+        <SimulacaoFundoDialog
+          open
+          onOpenChange={setOpenSimFundo}
+          leadId={lead.id}
+          leadNome={lead.nome}
+          defaults={simulacaoFundo}
+        />
+      )}
       <FechamentoDialog
         open={openFechar}
         onOpenChange={setOpenFechar}
