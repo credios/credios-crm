@@ -107,7 +107,3 @@ export function dentroHorarioComercial(date: Date = new Date()): boolean {
   if (ehFeriadoNacional(date)) return false;
   return true;
 }
-
-export function foraHorarioComercial(date: Date = new Date()): boolean {
-  return !dentroHorarioComercial(date);
-}

@@ -34,13 +34,6 @@ export const SYSTEM_STATUS_KEYS = [
 
 export type SystemStatusKey = (typeof SYSTEM_STATUS_KEYS)[number];
 
-const SYSTEM_KEY_SET = new Set<string>(SYSTEM_STATUS_KEYS);
-
-/** True se a key é uma das originais. */
-export function isSystemStatus(key: string): key is SystemStatusKey {
-  return SYSTEM_KEY_SET.has(key);
-}
-
 /**
  * Statuses terminais sistema. SLA esfriando/criticamente parado e tarefas
  * diárias não se aplicam — lead já saiu do funil ativo.

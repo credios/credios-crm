@@ -356,11 +356,3 @@ export async function listConsultoresAtivos() {
     )
     .orderBy(usersTable.nome);
 }
-
-/** Origens distintas usadas em algum lead, pra alimentar filtro. */
-export async function listOrigensDistintas() {
-  const rows = await db
-    .selectDistinct({ origem: leadsTable.origem })
-    .from(leadsTable);
-  return rows.map((r) => r.origem).filter((o): o is string => Boolean(o)).sort();
-}

@@ -827,3 +827,15 @@ Documentado aqui apenas para garantir que o schema seja projetado com expansão 
 **Pendências conhecidas:**
 - Filtro de produto (2026-10-14): Minha Mesa (`?produto=`), Painel executivo (todas as seções, inclusive projeção, pipeline em R$, percentis, top origens e sparklines) e "Pipeline esfriando" em Relatórios. Sem produto = soma de todos. Saúde por consultor (`/admin/consultores`, `/meu-desempenho`) continua somando.
 - Integração com o portal antigo (`notifyPartnerPortal` → webhook, card de handoff) só sai depois da virada do domínio.
+
+---
+
+## 15. Enxugamento (decisões do owner, 2026-10-28)
+
+Plano e números em `docs/plano-enxugar-crm.md`.
+
+- **Relatórios atualizam às 9h e às 18h** (Brasília) e quando alguém clica em "Atualizar dados" em `/relatorios`. A janela vigente (`src/lib/reports/atualizacao.ts`) entra na chave de todo cache de relatório; o cron `aquecer-relatorios` roda nessas duas horas e o botão invalida a tag `reports:dashboards`. Vale também para o Painel executivo e para as seções cacheadas de Meu desempenho. Não voltar a aquecer de 10 em 10 minutos.
+- **LGPD:** o CRM é de uso interno exclusivo. O log de visualização de lead (`lead_visualizado`, §6.11) **não** será implementado.
+- **Saíram:** Portal VIP (`/vip/[token]` e a rota `complementos`), CAPI de LinkedIn e TikTok (só Meta), `/api/admin/restore-leads-from-payload`, o simulador simplificado antigo e o código morto apontado pelo knip.
+- **Duplicidade por CPF** roda em todo caminho que grava CPF (criação por webhook e manual, enriquecimento do simulador, edição): `src/lib/leads/duplicidade-cpf.ts`. Caminho novo que grave CPF tem que chamar `registrarDuplicidadeCpf`.
+- **Ficam como estão:** Painel executivo, visões salvas, solicitação de score, Direct Data, `test-emails`/`desqualificar-lead`, tipos de interação, Atividades/Consultores e o cron `google-ads-retry`.

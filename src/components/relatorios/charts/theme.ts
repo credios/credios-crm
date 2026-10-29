@@ -1,19 +1,6 @@
 // Paleta e estilos compartilhados pra Recharts — todos os charts consomem
 // daqui pra manter coerência visual com brand Credios.
 
-export const CHART_COLORS = [
-  "#4b7be5", // blue-500 (Credios)
-  "#d4a351", // gold-500 (Credios)
-  "#10b981", // emerald
-  "#8b5cf6", // violet
-  "#f43f5e", // rose
-  "#91b0f6", // blue-300
-  "#95702e", // gold-700
-  "#6366f1", // indigo
-  "#6e7891", // charcoal-300
-  "#2c4fa8", // blue-700
-] as const;
-
 // Cores fixas por canal — garantem consistência visual entre o gráfico
 // inteiro e qualquer filtro aplicado (AI Assistant sempre roxo, Paid Search
 // sempre azul, etc). Sem isso, o map de cor depende da ordem de aparição

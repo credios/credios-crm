@@ -14,6 +14,7 @@ import {
 import { aoCriarLeadCadencia } from "@/lib/cadencia/engine";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
+import { registrarDuplicidadeCpf } from "@/lib/leads/duplicidade-cpf";
 import { contextFromCreateLead } from "@/lib/routing/context";
 import { realRoutingDeps } from "@/lib/routing/db-deps";
 import { aplicarRoteamento } from "@/lib/routing/engine";
@@ -210,13 +211,14 @@ export async function POST(request: NextRequest) {
     await salvarCondominio(newLead.id, cond);
     duplicidadeCnpj = await registrarDuplicidadeCnpj(newLead.id, cond.cnpj);
   }
+  const duplicidadeCpf = await registrarDuplicidadeCpf(newLead.id, newLead.cpf);
   await aoCriarLeadCadencia(newLead);
 
   await db.insert(interacoes).values({
     leadId: newLead.id,
     autorId: user.id,
     tipo: "evento_sistema",
-    conteudo: `Lead criado manualmente por ${user.nome}${regraAplicada ? ` (engine: ${regraAplicada})` : ""}${duplicidadeCnpj ? " — possível duplicidade por CNPJ" : ""}`,
+    conteudo: `Lead criado manualmente por ${user.nome}${regraAplicada ? ` (engine: ${regraAplicada})` : ""}${duplicidadeCnpj ? " — possível duplicidade por CNPJ" : ""}${duplicidadeCpf ? " — possível duplicidade por CPF" : ""}`,
     metadata: {
       origem: data.origem ?? "Manual",
       consultorId,

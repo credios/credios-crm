@@ -36,7 +36,6 @@ const statusKeySchema = z
   .max(50)
   .regex(/^[a-z][a-z0-9_]*$/, "Use snake_case (a-z, 0-9, _, começando com letra)");
 
-export const statusLeadEnum = statusKeySchema;
 export const tipoInteracaoEnum = z.enum(TIPO_INTERACAO_VALUES);
 
 const cents = z.coerce.number().int().nonnegative();

@@ -60,38 +60,6 @@ export function button({ href, label, tone = "primary" }: ButtonProps): string {
   return `<a href="${href}" style="display:inline-block;background:${bg};color:${color};border:1px solid ${border};text-decoration:none;border-radius:8px;padding:11px 18px;font-weight:700;font-size:14px;font-family:Inter,Arial,sans-serif;line-height:1">${escape(label)}</a>`;
 }
 
-export function divider(): string {
-  return `<div style="height:1px;background:${COLORS.border};margin:20px 0"></div>`;
-}
-
-type LeadCardData = {
-  nome: string;
-  valor?: string | null;
-  rendaOuImovel?: string | null;
-  cidadeUf?: string | null;
-  origem?: string | null;
-  hint?: string | null;
-  href: string;
-};
-
-export function leadCard(d: LeadCardData): string {
-  const meta = [
-    d.valor ? `<strong style="color:${COLORS.charcoal}">${escape(d.valor)}</strong>` : null,
-    d.rendaOuImovel ? escape(d.rendaOuImovel) : null,
-    d.cidadeUf ? escape(d.cidadeUf) : null,
-    d.origem ? `<span style="color:${COLORS.blueDark}">${escape(d.origem)}</span>` : null,
-  ]
-    .filter(Boolean)
-    .join(` <span style="color:${COLORS.borderStrong}">·</span> `);
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 10px"><tr><td style="background:${COLORS.white};border:1px solid ${COLORS.border};border-radius:10px;padding:14px 16px">
-    <a href="${d.href}" style="text-decoration:none;color:${COLORS.charcoal};display:block">
-      <div style="font-size:15px;font-weight:700;font-family:'Plus Jakarta Sans',Inter,Arial,sans-serif;line-height:1.3;color:${COLORS.charcoal};margin:0 0 6px">${escape(d.nome)}</div>
-      <div style="font-size:13px;color:${COLORS.textMuted};font-family:Inter,Arial,sans-serif;line-height:1.5">${meta}</div>
-      ${d.hint ? `<div style="margin-top:8px">${pill(d.hint, "warning")}</div>` : ""}
-    </a>
-  </td></tr></table>`;
-}
-
 type KpiRowItem = { label: string; value: string; tone?: Tone };
 export function kpiRow(items: KpiRowItem[]): string {
   const cells = items

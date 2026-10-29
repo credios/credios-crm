@@ -156,21 +156,3 @@ export function matchClickId(
 
   return null;
 }
-
-/** Lista de todos os click IDs como tuplas pra iteração. */
-export const ALL_CLICK_IDS: readonly (keyof ClickIds)[] = [
-  "gclid",
-  "wbraid",
-  "gbraid",
-  "msclkid",
-  "fbclid",
-  "ttclid",
-  "li_fat_id",
-  "twclid",
-  "rdt_cid",
-  "sccid",
-  "pin_aid",
-  "epik",
-  "irclickid",
-  "cjevent",
-];

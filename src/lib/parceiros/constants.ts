@@ -23,19 +23,6 @@ export const PARCEIRO_STATUS_LABEL: Record<ParceiroStatus, string> = {
   perdido: "Perdido",
 };
 
-/** Tons pros badges (mapeados pra classes no componente). */
-export const PARCEIRO_STATUS_TONE: Record<ParceiroStatus, "neutral" | "blue" | "amber" | "violet" | "emerald" | "red"> = {
-  novo: "blue",
-  em_contato: "amber",
-  reuniao: "violet",
-  proposta_enviada: "violet",
-  convidado_portal: "emerald",
-  ativo: "emerald",
-  perdido: "red",
-};
-
-export const PARCEIRO_TERMINAIS: ParceiroStatus[] = ["ativo", "perdido"];
-
 // Os mesmos 6 perfis da página /parceiros do site (+ outro).
 export const PARCEIRO_SEGMENTOS = [
   "corretor",

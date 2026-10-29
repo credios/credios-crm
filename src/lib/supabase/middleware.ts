@@ -16,7 +16,6 @@ const PUBLIC_PATH_PREFIXES = [
   "/agendar", // página pública de agendamento (gate: token HMAC na URL)
   "/api/version", // só retorna o SHA do commit — info já pública no GitHub
   "/portal", // gate: token do portal de documentos (validado no handler)
-  "/vip", // gate: MESMO token do portal (página VIP curada — atendimento premium)
   "/api/portal", // gate: token do portal (upload/validação no handler)
   // Portal do PARCEIRO: login próprio (cookie cp_sessao), sem Supabase Auth.
   // Já casavam pelos prefixos /portal e /api/portal acima — explícitos aqui

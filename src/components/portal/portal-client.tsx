@@ -424,7 +424,7 @@ export function PortalClient({
   );
 }
 
-export function DocRow({
+function DocRow({
   item,
   enviados,
   busy,

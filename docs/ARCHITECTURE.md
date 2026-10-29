@@ -18,7 +18,7 @@ operações. Um único app Next.js serve três públicos:
 |---|---|---|
 | Equipe Credios (admin, gerente, consultor, marketing) | `crm.credios.com.br` | Supabase Auth (Google ou e-mail/senha; 2FA obrigatório pro admin) |
 | Parceiros indicadores | `parceiros.credios.com.br` → `/portal-parceiro/*` | Identidade própria do portal (nunca é usuário do CRM) |
-| Clientes finais | links por token: `/portal/[token]` (documentos), `/vip/[token]`, `/agendar/[token]` | Token assinado, sem login |
+| Clientes finais | links por token: `/portal/[token]` (documentos), `/agendar/[token]` | Token assinado, sem login |
 
 Entradas de leads: site (webhook), cadastro manual, portal do parceiro.
 Saídas: WhatsApp (Meta Cloud API), e-mail (Resend), Google Calendar (Meet),
@@ -49,7 +49,7 @@ paralelo porque o pooler trava com pipelining excessivo.
 | `/api/cron/proativo-whatsapp` | 5 min | Heloísa inicia conversa com lead CGI elegível |
 | `/api/cron/lembrete-reuniao` | 10 min | Lembrete ao cliente (~30 min antes) e ao consultor (~15 min) — só CGI |
 | `/api/cron/google-ads-retry` | 15 min | Reenvia conversões offline que falharam |
-| `/api/cron/aquecer-relatorios` | 10 min | Mantém o cache dos relatórios quente |
+| `/api/cron/aquecer-relatorios` | 9h e 18h (BRT) | Calcula a janela nova do cache dos relatórios (botão "Atualizar dados" força fora do horário) |
 | `/api/cron/whatsapp-health` | 2 h | Saúde do WhatsApp (entregas, falhas) |
 | `/api/cron/sdr-watchdog` | 1 h | Vigia o SDR da Heloísa |
 | `/api/cron/cadencia-gc` | diário | Decisão de fim de cadência ignorada 7+ dias → lead perdido + e-mail ao consultor |
@@ -187,7 +187,7 @@ resolve. `esfriando` = sem contato há 3+ dias (coluna calculada).
 | SDR / agendamento | `src/lib/sdr/` | Qualifica e marca reunião no Meet com o consultor certo por valor |
 | Agenda pública | `/agendar/[token]`, `src/lib/agenda/` | Lead pré-qualificado marca a conversa direto do site |
 | Score QUOD / cadastro PF | `src/lib/score/` | Consulta paga; manual só admin, automática ao agendar |
-| Portal de documentos | `/portal/[token]`, `/vip/[token]` | Cliente envia documentos pelo checklist |
+| Portal de documentos | `/portal/[token]` | Cliente envia documentos pelo checklist |
 | Proposta em faixa | `src/lib/simulador/faixa.ts` | PDF de 1 clique; faixas em `/configuracoes/simulacao` |
 | Conversões de mídia | `src/lib/google-ads/`, `src/lib/capi/` | Conversões offline no Google Ads e Meta CAPI por etapa |
 

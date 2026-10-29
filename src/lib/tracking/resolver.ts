@@ -15,7 +15,7 @@
 // dúvidas ou alias customizados.
 // ============================================================================
 
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { trackingSourceAliases, trackingSources } from "../../../db/schema";
 import { db } from "@/lib/db";
@@ -142,22 +142,4 @@ export async function listActiveSources(): Promise<
     .from(trackingSources)
     .where(eq(trackingSources.ativo, true))
     .orderBy(trackingSources.ordem, trackingSources.source);
-}
-
-/**
- * Lista channels distintos com contagem de sources ativos cada — pra UI
- * de filtro hierárquico (Channel → Source).
- */
-export async function listChannelsWithCounts(): Promise<
-  Array<{ channel: string; count: number }>
-> {
-  const rows = await db
-    .select({
-      channel: trackingSources.channel,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(trackingSources)
-    .where(eq(trackingSources.ativo, true))
-    .groupBy(trackingSources.channel);
-  return rows;
 }

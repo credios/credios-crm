@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 
 import { cadenciaConfig } from "../../../db/schema";
@@ -67,14 +67,4 @@ export function cadenciaDoLead(
   return cadencias.find(
     (c) => c.statusKey === lead.status && c.produto === (lead.produto ?? "CGI") && c.ativa,
   );
-}
-
-/** Lookup direto no banco (sem cache) — usado pelo editor do admin. */
-export async function cadenciaDoStatusFresh(statusKey: string, produto = "CGI") {
-  const [r] = await db
-    .select()
-    .from(cadenciaConfig)
-    .where(and(eq(cadenciaConfig.statusKey, statusKey), eq(cadenciaConfig.produto, produto)))
-    .limit(1);
-  return r ?? null;
 }

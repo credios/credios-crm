@@ -18,6 +18,7 @@ import {
 } from "@/lib/condominio/persist";
 import { db } from "@/lib/db";
 import { formatProperName } from "@/lib/formatters/proper-name";
+import { registrarDuplicidadeCpf } from "@/lib/leads/duplicidade-cpf";
 import { notifyPartnerPortal } from "@/lib/notifications/portal-webhook";
 import { condominioEnviado } from "@/lib/validators/condominio";
 import { updateLeadSchema } from "@/lib/validators/lead";
@@ -237,6 +238,13 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     .set(updates)
     .where(eq(leadsTable.id, id))
     .returning();
+
+  // CPF trocado → confere duplicidade (igual à criação); mesmo CPF não repete.
+  if (updated?.cpf && updated.cpf !== existing.cpf) {
+    await registrarDuplicidadeCpf(id, updated.cpf).catch((e) =>
+      console.error("[leads PATCH] duplicidade por CPF falhou:", e),
+    );
+  }
 
   // Não-crítico: edit comum vai pra after().
   after(() =>

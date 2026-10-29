@@ -12,6 +12,7 @@ import { Suspense } from "react";
 
 import { QualidadeDadosBanner } from "@/components/relatorios/qualidade-dados";
 
+import { AtualizarRelatorios } from "@/components/relatorios/atualizar-relatorios";
 import { ConversionFunnel } from "@/components/relatorios/charts/conversion-funnel";
 import { LossReasonsChart } from "@/components/relatorios/charts/loss-reasons";
 import { OrigemROITable } from "@/components/relatorios/charts/origem-roi";
@@ -55,6 +56,7 @@ import {
   fetchPerformanceConsultores,
   fetchPerformancePorUf,
   fetchPipelineAtivoPorStatus,
+  fetchRelatoriosAtualizadosEm,
   fetchSlaCompliance,
   fetchTempoMedioPorStatus,
   fetchUfsDistintas,
@@ -139,9 +141,14 @@ export default async function RelatoriosPage({ searchParams }: Props) {
             </span>
           </p>
         </div>
-        <Badge variant={canSeeLiberado ? "soft-gold" : "soft"}>
-          {isMarketing ? "Visão de marketing" : "Acesso completo"}
-        </Badge>
+        <div className="flex flex-col items-end gap-2">
+          <Badge variant={canSeeLiberado ? "soft-gold" : "soft"}>
+            {isMarketing ? "Visão de marketing" : "Acesso completo"}
+          </Badge>
+          <Suspense fallback={null}>
+            <AtualizacaoSection />
+          </Suspense>
+        </div>
       </div>
 
       <Suspense fallback={<FiltersSkeleton />}>
@@ -240,6 +247,10 @@ function FiltersSkeleton() {
   return (
     <div className="surface-solid rounded-xl animate-pulse h-24" aria-hidden />
   );
+}
+
+async function AtualizacaoSection() {
+  return <AtualizarRelatorios atualizadoEm={await fetchRelatoriosAtualizadosEm()} />;
 }
 
 async function FiltersSection() {

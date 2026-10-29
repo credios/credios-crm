@@ -179,48 +179,6 @@ export function SkeletonLeadBancos() {
 }
 
 // ============================================================================
-// Tarefas — toolbar + cards
-// ============================================================================
-
-export function SkeletonTarefas({ rows = 6 }: { rows?: number }) {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-8 w-40" />
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-32" />
-          <Skeleton className="h-9 w-32" />
-        </div>
-      </div>
-
-      {/* stats cards */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 rounded-xl" />
-        ))}
-      </div>
-
-      {/* lista */}
-      <div className="space-y-2">
-        {Array.from({ length: rows }).map((_, i) => (
-          <div
-            key={i}
-            className="surface-solid flex items-center gap-3 rounded-lg p-3"
-          >
-            <Skeleton className="size-5 rounded" />
-            <div className="flex-1 space-y-1.5">
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-3 w-1/3" />
-            </div>
-            <Skeleton className="h-5 w-20 rounded-full" />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
 // Relatórios — KPIs + charts
 // ============================================================================
 

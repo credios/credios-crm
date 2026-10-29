@@ -144,10 +144,3 @@ export type WithDelta<T extends number> = {
   prev: T;
   deltaPct: number | null;
 };
-
-export function withDelta<T extends number>(
-  curr: T,
-  prev: T,
-): WithDelta<T> {
-  return { curr, prev, deltaPct: pctDelta(curr, prev) };
-}

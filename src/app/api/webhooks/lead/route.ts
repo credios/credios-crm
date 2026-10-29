@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import { after, NextResponse, type NextRequest } from "next/server";
 
 import {
-  duplicidadesPendentes,
   interacoes,
   leadPortalTokens,
   leads,
@@ -28,6 +27,7 @@ import {
 } from "@/lib/score/gate";
 import { formatProperName } from "@/lib/formatters/proper-name";
 import { aceitaContatoAutomatizado, ehCgi } from "@/lib/produtos";
+import { registrarDuplicidadeCpf } from "@/lib/leads/duplicidade-cpf";
 import { detectarValoresSuspeitos } from "@/lib/leads/valores-suspeitos";
 import { sendPortalEmail } from "@/lib/portal/email";
 import { generatePortalToken, portalUrl } from "@/lib/portal/token";
@@ -379,6 +379,13 @@ export async function POST(request: NextRequest) {
         })
         .where(eq(leads.id, existing.id));
 
+      // CPF costuma chegar só nesta 2ª etapa — é aqui que a duplicidade
+      // aparece. CPF que não mudou já foi conferido antes.
+      const duplicidadeCpf =
+        cpfClean && cpfClean !== existing.cpf
+          ? await registrarDuplicidadeCpf(existing.id, cpfClean)
+          : null;
+
       // Condomínio: a 2ª etapa pode trazer o bloco `condominio`. Só grava os
       // campos presentes (não apaga o que a 1ª etapa salvou) e confere
       // duplicidade se o CNPJ é novo.
@@ -398,8 +405,10 @@ export async function POST(request: NextRequest) {
         leadId: existing.id,
         autorId: null,
         tipo: "evento_sistema",
-        conteudo: "Lead enriquecido com dados completos do simulador",
-        metadata: {} as never,
+        conteudo: `Lead enriquecido com dados completos do simulador${
+          duplicidadeCpf ? " — possível duplicidade por CPF" : ""
+        }`,
+        metadata: (duplicidadeCpf ? { duplicidade_lead_existente_id: duplicidadeCpf } : {}) as never,
       });
 
       // ── Pré-qualificação automática do site ──────────────────────────
@@ -720,15 +729,7 @@ export async function POST(request: NextRequest) {
   let leadExistenteId: string | null = null;
   let routing: Awaited<ReturnType<typeof aplicarRoteamento>>;
   try {
-    // 6. Detecção de CPF duplicado (não bloqueia).
-    if (cpfClean) {
-      const [exist] = await db
-        .select({ id: leads.id })
-        .from(leads)
-        .where(eq(leads.cpf, cpfClean))
-        .limit(1);
-      if (exist) leadExistenteId = exist.id;
-    }
+    // 6. Detecção de CPF duplicado: passo 10, depois do insert.
 
     // 7. Engine de roteamento (CLAUDE.md §6.4).
     routing = await aplicarRoteamento(contextFromWebhook(payload), realRoutingDeps);
@@ -910,14 +911,8 @@ export async function POST(request: NextRequest) {
       .set({ leadId: newLead.id })
       .where(eq(webhookIdempotency.id, claimId));
 
-    // 10. Duplicidades pendentes (revisão manual posterior).
-    if (leadExistenteId && cpfClean) {
-      await db.insert(duplicidadesPendentes).values({
-        novoLeadId: newLead.id,
-        leadExistenteId,
-        cpf: cpfClean,
-      });
-    }
+    // 10. CPF duplicado → duplicidades pendentes (revisão manual, não bloqueia).
+    leadExistenteId = await registrarDuplicidadeCpf(newLead.id, cpfClean);
 
     // 10b. Condomínio: dados próprios na tabela-irmã + duplicidade por CNPJ.
     if (newLead.produto === "CONDOMINIO") {

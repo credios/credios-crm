@@ -135,26 +135,6 @@ export const SOURCE_TO_PAID: Record<string, boolean> = Object.fromEntries(
 /** Set de sources canônicos (validação em runtime). */
 export const CANONICAL_SOURCE_SET = new Set(CANONICAL_SOURCES.map((s) => s.source));
 
-export function isCanonicalSource(s: string): boolean {
-  return CANONICAL_SOURCE_SET.has(s);
-}
-
-export function isChannel(s: string): s is Channel {
-  return (CHANNELS as readonly string[]).includes(s);
-}
-
-/**
- * `utm_source` bruto que resolve pra um source do canal "AI Assistant"
- * (ex: "chatgpt.com", "perplexity"). Usado pro flag `is_ai_assistant` dos
- * touches — o referrer sozinho não basta porque ChatGPT e similares abrem
- * links sem referrer HTTP, só com a tag na URL.
- */
-export function isAiUtmSource(utm: string | null | undefined): boolean {
-  if (!utm) return false;
-  const canonical = UTM_SOURCE_ALIASES[utm.trim().toLowerCase()];
-  return canonical ? SOURCE_TO_CHANNEL[canonical] === "AI Assistant" : false;
-}
-
 /**
  * Aliases de `utm_source` (lowercase) → source canônico.
  *

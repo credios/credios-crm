@@ -2,12 +2,6 @@ import { z } from "zod";
 
 import { PRODUTOS } from "@/lib/produtos";
 
-export const ACAO_TIPOS = [
-  "atribuir_usuario",
-  "round_robin_grupo",
-  "pool_nao_atribuido",
-] as const;
-
 export const ruleCondicoesSchema = z
   .object({
     valor_credito_min: z.number().int().nonnegative().optional(),

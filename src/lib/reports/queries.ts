@@ -11,6 +11,7 @@ import {
   type ReportFilters,
 } from "@/lib/validators/report";
 
+import { janelaRelatorios, RELATORIOS_CACHE_TAG } from "./atualizacao";
 import type { PeriodRange } from "./period";
 
 // As views materializadas (mv_leads_diarios / mv_fechados_diarios) saíram em
@@ -24,10 +25,8 @@ import type { PeriodRange } from "./period";
 //
 // Presets como "30d" usam `to: now`, que muda a cada milissegundo — sem
 // truncar, a chave mudaria em toda request e o cache nunca acertaria.
-// Truncamos pro DIA em Brasília (antes era a hora: todo período esfriava na
-// virada de cada hora). O frescor vem do TTL abaixo, que é stale-while-
-// revalidate: passado o TTL, a próxima visita recebe o valor guardado na hora
-// e o Next recalcula em segundo plano.
+// Truncamos pro DIA em Brasília. O frescor vem da janela de atualização
+// (9h e 18h, ver atualizacao.ts), que também entra na chave.
 function bucketDia(d: Date): string {
   return d.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
 }
@@ -46,6 +45,7 @@ function cacheKeyFor(
     String(f.valorMinCentavos ?? ""),
     String(f.valorMaxCentavos ?? ""),
     f.produto ?? "",
+    janelaRelatorios(),
   ];
   if (period) {
     parts.push(bucketDia(period.from), bucketDia(period.to));
@@ -53,11 +53,25 @@ function cacheKeyFor(
   return parts;
 }
 
-// TTL das queries dos dashboards: 10 min. É stale-while-revalidate (ver
-// bucketDia) e o cron /api/cron/aquecer-relatorios recalcula os períodos
-// padrão a cada 10 min — então quem abre a página quase sempre cai em cache
-// quente, com números de no máximo ~10 min atrás.
-const REPORT_CACHE_TTL = 600;
+// TTL das queries dos dashboards: só uma rede de segurança. Quem renova os
+// números é a janela na chave (vira às 9h e às 18h; o cron
+// /api/cron/aquecer-relatorios aquece a janela nova) e o botão "Atualizar
+// dados", que invalida RELATORIOS_CACHE_TAG.
+const REPORT_CACHE_TTL = 24 * 60 * 60;
+
+/**
+ * Quando os números da janela vigente foram calculados. Vai pro cache junto
+ * com as consultas (mesma janela, mesma tag): o botão "Atualizar dados" zera
+ * os dois juntos. Filtro calculado pela primeira vez depois mostra dado mais
+ * novo que este horário, nunca mais velho.
+ */
+export function fetchRelatoriosAtualizadosEm(): Promise<string> {
+  return unstable_cache(
+    async () => new Date().toISOString(),
+    ["reports:atualizado-em", janelaRelatorios()],
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
+  )();
+}
 
 function baseConds(rawFilters: ReportFilters) {
   const filters = normalizeFilters(rawFilters);
@@ -111,7 +125,7 @@ export type Kpis = {
 // 2 camadas de cache:
 //   - React.cache() deduplica por REQUEST (KpisSection + SaudeOperacionalSection
 //     chamam com mesmos args dentro do mesmo render → 1 execução só).
-//   - unstable_cache() persiste por TTL=120s entre requests diferentes.
+//   - unstable_cache() persiste entre requests até a próxima janela (9h/18h).
 // Resultado: primeira request paga, demais nesse minuto vêm em ms.
 export const fetchKpis = cache(async function fetchKpis(
   filters: ReportFilters,
@@ -120,7 +134,7 @@ export const fetchKpis = cache(async function fetchKpis(
   return unstable_cache(
     () => fetchKpisUncached(filters, period),
     cacheKeyFor("reports:kpis", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 });
 
@@ -203,7 +217,7 @@ export function fetchVolumePorDia(
   return unstable_cache(
     () => fetchVolumePorDiaUncached(filters, period),
     cacheKeyFor("reports:volume-por-dia", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -268,7 +282,7 @@ export async function fetchTempoMedioPorStatus(
   return unstable_cache(
     () => fetchTempoMedioPorStatusUncached(rawFilters, period),
     cacheKeyFor("reports:tempo-medio-status", rawFilters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -361,7 +375,7 @@ export function fetchPerformanceConsultores(
   return unstable_cache(
     () => fetchPerformanceConsultoresUncached(rawFilters, period),
     cacheKeyFor("reports:perf-consultores", rawFilters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -452,7 +466,7 @@ export function fetchPipelineAtivoPorStatus(
   return unstable_cache(
     () => fetchPipelineAtivoPorStatusUncached(filters),
     cacheKeyFor("reports:pipeline-ativo", filters),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -501,7 +515,7 @@ export async function fetchReceitaMensal(
   return unstable_cache(
     () => fetchReceitaMensalUncached(filters),
     cacheKeyFor("reports:receita-mensal", filters),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -590,7 +604,7 @@ export async function fetchSalesMetrics(
   return unstable_cache(
     () => fetchSalesMetricsUncached(filters, period),
     cacheKeyFor("reports:sales-metrics", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -683,7 +697,7 @@ export function fetchConversionRates(
   return unstable_cache(
     () => fetchConversionRatesUncached(filters, period),
     cacheKeyFor("reports:conversion", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -787,7 +801,7 @@ export function fetchLossReasons(
   return unstable_cache(
     () => fetchLossReasonsUncached(filters, period),
     cacheKeyFor("reports:loss-reasons", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -840,7 +854,7 @@ export function fetchOrigemROI(
   return unstable_cache(
     () => fetchOrigemROIUncached(filters, period),
     cacheKeyFor("reports:origem-roi", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -902,7 +916,7 @@ export function fetchSlaCompliance(
   return unstable_cache(
     () => fetchSlaComplianceUncached(rawFilters, period),
     cacheKeyFor("reports:sla-compliance", rawFilters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -1102,31 +1116,6 @@ export async function fetchHistoricoFechamentos(
 }
 
 // ============================================================================
-// Volume de leads atribuídos por dia (pra um consultor) — sem segmentar
-// ============================================================================
-
-export type VolumeAtribuidoPorDia = { dia: string; count: number };
-
-export async function fetchVolumeAtribuidoPorDia(
-  consultorId: string,
-  period: PeriodRange,
-): Promise<VolumeAtribuidoPorDia[]> {
-  const result = await db.execute<{ dia: string; count: string }>(sql.raw(`
-    SELECT
-      to_char(date_trunc('day', l.atribuido_em), 'YYYY-MM-DD') AS dia,
-      COUNT(*)::text AS count
-    FROM public.leads l
-    WHERE l.consultor_id = '${consultorId.replace(/'/g, "''")}'
-      AND l.atribuido_em IS NOT NULL
-      AND l.atribuido_em >= '${period.from.toISOString()}'
-      AND l.atribuido_em <= '${period.to.toISOString()}'
-    GROUP BY date_trunc('day', l.atribuido_em)
-    ORDER BY date_trunc('day', l.atribuido_em)
-  `));
-  return result.map((r) => ({ dia: r.dia, count: Number(r.count ?? 0) }));
-}
-
-// ============================================================================
 // Performance por estado (UF) — leads, R$, conversão
 // ============================================================================
 
@@ -1147,7 +1136,7 @@ export function fetchPerformancePorUf(
   return unstable_cache(
     () => fetchPerformancePorUfUncached(rawFilters, period),
     cacheKeyFor("reports:perf-uf", rawFilters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -1373,11 +1362,12 @@ export async function fetchTempoPercentis(
     () => fetchTempoPercentisUncached(period, produto),
     [
       "reports:tempo-percentis",
+      janelaRelatorios(),
       bucketDia(period.from),
       bucketDia(period.to),
       produto ?? "",
     ],
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -1515,12 +1505,13 @@ export async function fetchTopOrigensDetalhadas(
     () => fetchTopOrigensDetalhadasUncached(period, limit, produto),
     [
       "reports:top-origens",
+      janelaRelatorios(),
       bucketDia(period.from),
       bucketDia(period.to),
       String(limit),
       produto ?? "",
     ],
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -1594,7 +1585,7 @@ export async function fetchComparativoPeriodos(
       bucketDia(prev.from),
       bucketDia(prev.to),
     ],
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -1679,8 +1670,8 @@ export async function fetchSparkRevenue(
 }> {
   return unstable_cache(
     () => fetchSparkRevenueUncached(meses, produto),
-    ["reports:spark-revenue", String(meses), produto ?? ""],
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    ["reports:spark-revenue", String(meses), produto ?? "", janelaRelatorios()],
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -1788,7 +1779,7 @@ export async function fetchDistribuicoes(
     // `valores`). Sem o bump, código novo lê entrada velha sem `valores` e
     // o render quebra. Guard defensivo também em <ValoresBlock>.
     cacheKeyFor("reports:distribuicoes:v2", rawFilters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -1898,8 +1889,8 @@ export function fetchEsfriandoGlobal(
 ): Promise<{ count: number }> {
   return unstable_cache(
     () => fetchEsfriandoGlobalUncached(produto),
-    ["reports:esfriando-global", produto ?? ""],
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    ["reports:esfriando-global", produto ?? "", janelaRelatorios()],
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 }
 
@@ -2056,7 +2047,7 @@ export const fetchMqlSql = cache(async function fetchMqlSql(
   return unstable_cache(
     () => fetchMqlSqlUncached(filters, period),
     cacheKeyFor("reports:mql-sql", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 });
 
@@ -2106,7 +2097,7 @@ export const fetchMqlSqlPorOrigem = cache(async function fetchMqlSqlPorOrigem(
   return unstable_cache(
     () => fetchMqlSqlPorOrigemUncached(filters, period),
     cacheKeyFor("reports:mql-sql-origem", filters, period),
-    { revalidate: REPORT_CACHE_TTL, tags: ["reports:dashboards"] },
+    { revalidate: REPORT_CACHE_TTL, tags: [RELATORIOS_CACHE_TAG] },
   )();
 });
 

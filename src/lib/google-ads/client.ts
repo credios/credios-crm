@@ -91,11 +91,6 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-/** Reseta o cache do token (usado em testes/diagnóstico). */
-export function resetGoogleAdsTokenCache(): void {
-  tokenCache = null;
-}
-
 /**
  * Envia uma conversão (Lead Qualificado ou Negócio Fechado) via GCLID/WBRAID/
  * GBRAID para o Google Ads, usando a Data Manager API. Lança em qualquer falha

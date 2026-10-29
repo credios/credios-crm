@@ -19,16 +19,12 @@
 //   });
 // ============================================================================
 
-import { linkedinCapiAdapter } from "./linkedin";
 import { metaCapiAdapter } from "./meta";
-import { tiktokCapiAdapter } from "./tiktok";
 import type { CapiAdapter, CapiResult, LeadConversionInput } from "./types";
 
-const ADAPTERS: CapiAdapter[] = [
-  metaCapiAdapter,
-  tiktokCapiAdapter,
-  linkedinCapiAdapter,
-];
+// Só Meta. Os adapters de TikTok e LinkedIn saíram em 2026-10-28 (nenhum lead
+// dessas origens na história); voltam pelo git se houver campanha lá.
+const ADAPTERS: CapiAdapter[] = [metaCapiAdapter];
 
 export async function dispatchCapi(
   input: LeadConversionInput,
@@ -58,11 +54,6 @@ export async function dispatchCapi(
   }
 
   return results;
-}
-
-/** Retorna lista de plataformas configuradas (pra dashboard/debug). */
-export function listEnabledCapiPlatforms(): string[] {
-  return ADAPTERS.filter((a) => a.isEnabled()).map((a) => a.platform);
 }
 
 // ── Eventos de funil (qualificação/fechamento) ──────────────────────────────

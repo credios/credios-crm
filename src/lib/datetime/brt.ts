@@ -43,11 +43,6 @@ export function endOfDayBrt(d: string | Date): Date {
   return new Date(`${ymd}T23:59:59.999${BRT_OFFSET_SUFFIX}`);
 }
 
-export function endOfBusinessDayBrt(d: string | Date): Date {
-  const ymd = typeof d === "string" ? d : toYmdInBrt(d);
-  return new Date(`${ymd}T18:00:00.000${BRT_OFFSET_SUFFIX}`);
-}
-
 /**
  * Converte um Date pra string YYYY-MM-DD respeitando BRT (não UTC).
  * Usado quando o source é Date e o destino quer o mesmo "dia visto pelo
@@ -86,12 +81,4 @@ export function weekdayInBrt(d: string | Date): number {
 export function isBusinessDayBrt(d: string | Date = new Date()): boolean {
   const wd = weekdayInBrt(d);
   return wd >= 1 && wd <= 5;
-}
-
-export function previousBusinessDayYmdBrt(now: Date = new Date()): string {
-  let d = startOfDayBrt(now);
-  do {
-    d = new Date(d.getTime() - 24 * 60 * 60 * 1000);
-  } while (!isBusinessDayBrt(d));
-  return toYmdInBrt(d);
 }

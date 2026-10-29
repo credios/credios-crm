@@ -161,19 +161,6 @@ export function parseReferrer(
   };
 }
 
-/**
- * Versão simples — só retorna o source ou "Direct".
- * Usada quando a UI precisa de string única (ex: cookie de tracking).
- */
-export function parseReferrerSimple(
-  referrer: string | null | undefined,
-  currentHostname?: string | null,
-): string {
-  const match = parseReferrer(referrer, currentHostname);
-  if (!match) return "Direct";
-  return match.source;
-}
-
 /** Set de hostnames AI conhecidos (pra hint em outras lógicas). */
 export const AI_HOSTNAMES = new Set<string>([
   "chatgpt.com",
@@ -193,8 +180,3 @@ export const AI_HOSTNAMES = new Set<string>([
   "x.ai",
   "search.brave.com",
 ]);
-
-export function isAiReferrer(hostname: string): boolean {
-  const h = hostname.replace(/^www\./, "");
-  return AI_HOSTNAMES.has(h);
-}

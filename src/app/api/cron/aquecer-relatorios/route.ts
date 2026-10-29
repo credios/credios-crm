@@ -42,9 +42,11 @@ const PRESETS: PeriodoPreset[] = [
 ];
 
 /**
- * Vercel Cron a cada 10 min: recalcula o cache dos relatórios para todos os
- * períodos padrão, sem filtro extra. Assim a troca de período em /relatorios
- * e no painel executivo cai em cache quente em vez de recalcular tudo na hora.
+ * Vercel Cron às 9h e às 18h de Brasília (12h e 21h UTC, vercel.json): na
+ * virada, a janela de atualização muda (lib/reports/atualizacao.ts) e este
+ * cron calcula a janela nova para todos os períodos padrão, sem filtro extra.
+ * Assim a troca de período em /relatorios e no painel executivo cai em cache
+ * quente em vez de recalcular tudo na hora.
  *
  * Substitui o antigo /api/cron/refresh-mvs (as views materializadas saíram —
  * ver comentário no topo de src/lib/reports/queries.ts).
