@@ -308,8 +308,8 @@ export default async function LeadDetailPage({ params }: Props) {
             !isMarketing && (cgi || condominio)
               ? {
                   valorCreditoCentavos: lead.valorCreditoCentavos,
-                  iof: condominio || row.tipoPessoa === "Pessoa Jurídica" ? "PJ" : "PF",
-                  prazoSugeridoMeses: condominio?.prazoDesejadoMeses ?? null,
+                  produto: condominio ? "CONDOMINIO" : "CGI",
+                  tomador: condominio || row.tipoPessoa === "Pessoa Jurídica" ? "PJ" : "PF",
                 }
               : null
           }

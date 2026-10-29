@@ -2,8 +2,11 @@
 // Simulação do FUNDO (Musashi Capital FIDC) — motor de cálculo puro.
 //
 // Gerada pela equipe no detalhe do lead (CGI ou condomínio): quem gera
-// informa o valor e um ou mais prazos, cada um com a própria taxa. Nada vem
-// de config — o fundo ainda está em estruturação e a taxa é caso a caso.
+// informa o valor e um ou mais prazos, cada um com a própria taxa. O diálogo
+// já abre com os prazos e a taxa padrão abaixo, editáveis; nada vem de config.
+//
+// Marca: CGI sai como Musashi Capital; condomínio sai como Credios — o
+// condomínio não vê quem financia (decisão do owner, 2026-10-29).
 //
 // Por prazo: Tabela Price sobre crédito + IOF financiado (mesma conta da
 // simulação de condomínio do portal — `iofPrice`).
@@ -21,6 +24,9 @@ export const VALIDADE_SIMULACAO_FUNDO_DIAS = 30;
 export const MAX_PRAZOS_SIMULACAO_FUNDO = 10;
 /** Prazo máximo com que o fundo trabalha. */
 export const PRAZO_MAX_SIMULACAO_FUNDO = 90;
+/** Linhas com que o diálogo abre — todas na taxa padrão. */
+export const PRAZOS_PADRAO_SIMULACAO_FUNDO = [6, 12, 18, 24, 36, 48, 60] as const;
+export const TAXA_PADRAO_SIMULACAO_FUNDO_AM = 2.3;
 
 export type IndexacaoFundo = "pre" | "ipca";
 
@@ -41,13 +47,20 @@ export const IOF_FUNDO = {
 
 export type IofFundo = keyof typeof IOF_FUNDO;
 
-export const IOF_FUNDO_LABEL: Record<IofFundo, string> = {
+/** Tomador para a alíquota do IOF ("nenhum" = caixinha de IOF desmarcada:
+ *  cessão de crédito, nota comercial). */
+export const IOF_TOMADOR_LABEL: Record<Exclude<IofFundo, "nenhum">, string> = {
   PF: "Pessoa física (0,38% + 0,0082% a.d.)",
   PJ: "Pessoa jurídica (0,95% + 0,0082% a.d.)",
-  nenhum: "Sem IOF",
 };
 
 export type ProdutoSimulacaoFundo = "CGI" | "CONDOMINIO";
+
+export type MarcaSimulacaoFundo = "musashi" | "credios";
+
+export function marcaSimulacaoFundo(produto: ProdutoSimulacaoFundo): MarcaSimulacaoFundo {
+  return produto === "CONDOMINIO" ? "credios" : "musashi";
+}
 
 export type SimulacaoFundoInput = {
   /** Reais. */
@@ -90,16 +103,18 @@ export type SimulacaoFundoResult = SimulacaoFundoInput & {
   menorParcela: LinhaSimulacaoFundo;
 };
 
-export const CODIGO_SIMULACAO_FUNDO_REGEX = /^MC-\d{4}-\d{6}$/;
+/** MC = Musashi Capital; CR = Credios (condomínio — o prefixo não entrega o fundo). */
+export const CODIGO_SIMULACAO_FUNDO_REGEX = /^(MC|CR)-\d{4}-\d{6}$/;
 
 export function gerarCodigoSimulacaoFundo(
   ano: number,
+  marca: MarcaSimulacaoFundo,
   rand: () => number = Math.random,
 ): string {
   const seq = Math.floor(rand() * 1_000_000)
     .toString()
     .padStart(6, "0");
-  return `MC-${ano}-${seq}`;
+  return `${marca === "credios" ? "CR" : "MC"}-${ano}-${seq}`;
 }
 
 /** Soma dias a uma data YYYY-MM-DD, sem fuso no meio. */

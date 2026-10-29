@@ -7,6 +7,8 @@ import {
   buildSimulacaoFundo,
   CODIGO_SIMULACAO_FUNDO_REGEX,
   gerarCodigoSimulacaoFundo,
+  marcaSimulacaoFundo,
+  PRAZOS_PADRAO_SIMULACAO_FUNDO,
   type SimulacaoFundoInput,
   somaDiasYmd,
 } from "@/lib/simulador/fundo";
@@ -66,9 +68,29 @@ describe("simulação do fundo — cálculo", () => {
     expect(sim.validaAte).toBe("2026-11-27");
   });
 
-  it("código MC-AAAA-NNNNNN", () => {
-    expect(gerarCodigoSimulacaoFundo(2026, () => 0.000123)).toBe("MC-2026-000123");
-    expect(CODIGO_SIMULACAO_FUNDO_REGEX.test(gerarCodigoSimulacaoFundo(2026))).toBe(true);
+  it("código MC-AAAA-NNNNNN (CGI) ou CR-AAAA-NNNNNN (condomínio)", () => {
+    expect(gerarCodigoSimulacaoFundo(2026, "musashi", () => 0.000123)).toBe("MC-2026-000123");
+    expect(gerarCodigoSimulacaoFundo(2026, "credios", () => 0.000123)).toBe("CR-2026-000123");
+    expect(CODIGO_SIMULACAO_FUNDO_REGEX.test(gerarCodigoSimulacaoFundo(2026, "musashi"))).toBe(true);
+    expect(CODIGO_SIMULACAO_FUNDO_REGEX.test(gerarCodigoSimulacaoFundo(2026, "credios"))).toBe(true);
+  });
+
+  it("marca: condomínio sai como Credios, CGI como Musashi Capital", () => {
+    expect(marcaSimulacaoFundo("CONDOMINIO")).toBe("credios");
+    expect(marcaSimulacaoFundo("CGI")).toBe("musashi");
+  });
+
+  it("prazos padrão cabem nos limites do formulário", () => {
+    expect(PRAZOS_PADRAO_SIMULACAO_FUNDO).toEqual([6, 12, 18, 24, 36, 48, 60]);
+    expect(PRAZOS_PADRAO_SIMULACAO_FUNDO.length).toBeLessThanOrEqual(10);
+    expect(
+      simulacaoFundoSchema.safeParse({
+        valorCredito: 500_000,
+        prazos: PRAZOS_PADRAO_SIMULACAO_FUNDO.map((meses) => ({ meses, taxaAm: 2.3 })),
+        indexacao: "pre",
+        iof: "nenhum",
+      }).success,
+    ).toBe(true);
   });
 });
 
@@ -103,7 +125,7 @@ describe("simulação do fundo — validação", () => {
 });
 
 describe("simulação do fundo — PDF", () => {
-  it("gera uma página com as fontes da marca", async () => {
+  it("condomínio: uma página com a marca Credios, sem citar o fundo", async () => {
     const sim = buildSimulacaoFundo(
       {
         ...base,
@@ -113,17 +135,23 @@ describe("simulação do fundo — PDF", () => {
         cliente: { nome: "Condomínio Residencial Jardim das Acácias", cnpj: "11222333000181" },
         prazos: [12, 24, 36, 60, 90].map((meses) => ({ meses, taxaAm: 1.5 })),
       },
-      { codigo: "MC-2026-004217", geradaEm: "2026-10-28" },
+      { codigo: "CR-2026-004217", geradaEm: "2026-10-28" },
     );
     const bytes = await renderSimulacaoFundoPdf(sim);
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBe(1);
+    expect(doc.getAuthor()).toBe("Credios");
     expect(nomeArquivoSimulacaoFundo(sim)).toBe(
-      "Musashi_Capital_Simulacao_MC-2026-004217_CONDOMINIO_RESIDENCIAL_JARDIM_DAS_ACACIAS.pdf",
+      "Credios_Simulacao_CR-2026-004217_CONDOMINIO_RESIDENCIAL_JARDIM_DAS_ACACIAS.pdf",
     );
+    // Texto do PDF sai em fontes subsetadas (hex); o que vaza em claro são os
+    // metadados — e esses não podem citar o fundo.
+    const bruto = Buffer.from(bytes).toString("latin1");
+    expect(bruto).not.toMatch(/Musashi|Direitos Credit/i);
     if (process.env.SIMULACAO_FUNDO_PDF_OUT) {
       fs.writeFileSync(process.env.SIMULACAO_FUNDO_PDF_OUT, bytes);
       const um = buildSimulacaoFundo(base, { codigo: "MC-2026-000777", geradaEm: "2026-10-28" });
+      expect(nomeArquivoSimulacaoFundo(um)).toMatch(/^Musashi_Capital_Simulacao_MC-/);
       fs.writeFileSync(process.env.SIMULACAO_FUNDO_PDF_OUT.replace(".pdf", "-cgi.pdf"), await renderSimulacaoFundoPdf(um));
     }
   });

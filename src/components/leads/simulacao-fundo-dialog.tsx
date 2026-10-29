@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -27,23 +28,30 @@ import {
   buildSimulacaoFundo,
   INDEXACAO_FUNDO_LABEL,
   type IndexacaoFundo,
-  IOF_FUNDO_LABEL,
-  type IofFundo,
+  IOF_TOMADOR_LABEL,
   MAX_PRAZOS_SIMULACAO_FUNDO,
+  marcaSimulacaoFundo,
   PRAZO_MAX_SIMULACAO_FUNDO,
+  PRAZOS_PADRAO_SIMULACAO_FUNDO,
+  type ProdutoSimulacaoFundo,
+  TAXA_PADRAO_SIMULACAO_FUNDO_AM,
   VALIDADE_SIMULACAO_FUNDO_DIAS,
 } from "@/lib/simulador/fundo";
 
 // ═══════════════════════════════════════════════════════════
-// Simulação do fundo (Musashi Capital) — valor, pré-fixada ou IPCA +, um ou
-// mais prazos (até 90 meses) com a taxa de cada um e IOF; o servidor calcula e devolve o PDF pronto pra
-// enviar ao cliente. A parcela de cada linha aparece aqui antes de gerar.
+// Simulação do fundo — valor, pré-fixada ou IPCA +, um ou mais prazos (até
+// 90 meses) com a taxa de cada um e IOF opcional; o servidor calcula e
+// devolve o PDF pronto pra enviar ao cliente. Abre com 6 a 60 meses a 2,3%
+// a.m.; a parcela de cada linha aparece aqui antes de gerar.
 // ═══════════════════════════════════════════════════════════
+
+type Tomador = keyof typeof IOF_TOMADOR_LABEL;
 
 export type SimulacaoFundoDefaults = {
   valorCreditoCentavos: number | null;
-  iof: IofFundo;
-  prazoSugeridoMeses: number | null;
+  produto: ProdutoSimulacaoFundo;
+  /** Alíquota do IOF quando a caixinha está marcada. */
+  tomador: Tomador;
 };
 
 type Linha = { key: number; meses: string; taxa: string };
@@ -53,6 +61,11 @@ const parseTaxa = (s: string) => {
   const t = s.trim().replace(",", ".");
   return t === "" ? NaN : Number(t);
 };
+
+const TAXA_PADRAO = String(TAXA_PADRAO_SIMULACAO_FUNDO_AM).replace(".", ",");
+
+const linhasPadrao = (): Linha[] =>
+  PRAZOS_PADRAO_SIMULACAO_FUNDO.map((meses, key) => ({ key, meses: String(meses), taxa: TAXA_PADRAO }));
 
 const brl = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -80,15 +93,13 @@ export function SimulacaoFundoDialog({
   const [valor, setValor] = useState<number>(
     defaults.valorCreditoCentavos ? Math.round(defaults.valorCreditoCentavos / 100) : 0,
   );
-  const [iof, setIof] = useState<IofFundo>(defaults.iof);
+  // Sem IOF: cessão de crédito (condomínio) ou nota comercial (algumas PJ).
+  const [comIof, setComIof] = useState(true);
+  const [tomador, setTomador] = useState<Tomador>(defaults.tomador);
+  const iof = comIof ? tomador : "nenhum";
   const [indexacao, setIndexacao] = useState<IndexacaoFundo>("pre");
-  // Prazo desejado acima do teto do fundo entra já no teto.
-  const sugerido = defaults.prazoSugeridoMeses
-    ? Math.min(defaults.prazoSugeridoMeses, PRAZO_MAX_SIMULACAO_FUNDO)
-    : null;
-  const [linhas, setLinhas] = useState<Linha[]>([
-    { key: 0, meses: sugerido ? String(sugerido) : "", taxa: "" },
-  ]);
+  const [linhas, setLinhas] = useState<Linha[]>(linhasPadrao);
+  const marca = marcaSimulacaoFundo(defaults.produto) === "musashi" ? "Musashi Capital" : "Credios";
 
   const prazos = useMemo(
     () =>
@@ -135,7 +146,7 @@ export function SimulacaoFundoDialog({
     setLinhas((ls) => {
       const ultima = ls[ls.length - 1];
       const key = Math.max(...ls.map((l) => l.key)) + 1;
-      return [...ls, { key, meses: "", taxa: ultima?.taxa ?? "" }];
+      return [...ls, { key, meses: "", taxa: ultima?.taxa ?? TAXA_PADRAO }];
     });
   }
 
@@ -166,7 +177,7 @@ export function SimulacaoFundoDialog({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = nomeDoArquivo(res, "Simulacao_Musashi_Capital.pdf");
+      a.download = nomeDoArquivo(res, "Simulacao.pdf");
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -187,11 +198,11 @@ export function SimulacaoFundoDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Simulação do fundo</DialogTitle>
           <DialogDescription>
-            PDF com a marca da Musashi Capital para <strong>{leadNome}</strong>. Tabela Price,
+            PDF com a marca da {marca} para <strong>{leadNome}</strong>. Tabela Price,
             prazo de até {PRAZO_MAX_SIMULACAO_FUNDO} meses, válido por {VALIDADE_SIMULACAO_FUNDO_DIAS} dias.
           </DialogDescription>
         </DialogHeader>
@@ -229,20 +240,33 @@ export function SimulacaoFundoDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>IOF</Label>
-              <Select value={iof} onValueChange={(v) => setIof((v ?? "PF") as IofFundo)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue>{(v: unknown) => IOF_FUNDO_LABEL[v as IofFundo]}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(IOF_FUNDO_LABEL) as IofFundo[]).map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {IOF_FUNDO_LABEL[k]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="space-y-2 sm:col-span-2">
+              <Label className="flex items-center gap-2 font-normal">
+                <Checkbox
+                  checked={comIof}
+                  onCheckedChange={(v) => setComIof(v === true)}
+                  disabled={pending}
+                />
+                Adicionar IOF (Decreto 12.499/2025)
+              </Label>
+              {comIof ? (
+                <Select value={tomador} onValueChange={(v) => setTomador((v ?? "PF") as Tomador)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue>{(v: unknown) => IOF_TOMADOR_LABEL[v as Tomador]}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(IOF_TOMADOR_LABEL) as Tomador[]).map((k) => (
+                      <SelectItem key={k} value={k}>
+                        {IOF_TOMADOR_LABEL[k]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Sem IOF — para cessão de crédito ou nota comercial.
+                </p>
+              )}
             </div>
           </div>
 
@@ -268,7 +292,7 @@ export function SimulacaoFundoDialog({
                   inputMode="decimal"
                   value={l.taxa}
                   onChange={(e) => atualizar(l.key, "taxa", e.currentTarget.value.replace(/[^\d,.]/g, ""))}
-                  placeholder="1,49"
+                  placeholder={TAXA_PADRAO}
                   disabled={pending}
                 />
                 <span className="text-right font-mono text-sm tabular-nums">

@@ -9,7 +9,7 @@ import { buscarCondominio } from "@/lib/condominio/persist";
 import { todayYmdBrt } from "@/lib/datetime/brt";
 import { db } from "@/lib/db";
 import { ehCgi } from "@/lib/produtos";
-import { buildSimulacaoFundo, gerarCodigoSimulacaoFundo } from "@/lib/simulador/fundo";
+import { buildSimulacaoFundo, gerarCodigoSimulacaoFundo, marcaSimulacaoFundo } from "@/lib/simulador/fundo";
 import { nomeArquivoSimulacaoFundo, renderSimulacaoFundoPdf } from "@/lib/simulador/fundo-pdf";
 import { simulacaoFundoSchema } from "@/lib/validators/simulacao-fundo";
 
@@ -17,8 +17,8 @@ type Ctx = { params: Promise<{ id: string }> };
 
 /**
  * POST /api/leads/[id]/simulacao-fundo — gera o PDF da simulação do fundo
- * (Musashi Capital) com valor, prazos e taxas informados por quem gera, e
- * devolve o arquivo. Grava o evento na timeline com todos os parâmetros —
+ * com valor, prazos e taxas informados por quem gera, e devolve o arquivo.
+ * CGI sai com a marca Musashi Capital; condomínio, com a da Credios. Grava o evento na timeline com todos os parâmetros —
  * dá pra refazer o mesmo PDF a partir do metadata.
  */
 export async function POST(request: NextRequest, { params }: Ctx) {
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
 
   const cnpj = produto === "CONDOMINIO" ? ((await buscarCondominio(lead.id))?.cnpj ?? null) : null;
   const geradaEm = todayYmdBrt();
-  const codigo = gerarCodigoSimulacaoFundo(Number(geradaEm.slice(0, 4)));
+  const codigo = gerarCodigoSimulacaoFundo(Number(geradaEm.slice(0, 4)), marcaSimulacaoFundo(produto));
 
   const sim = buildSimulacaoFundo(
     {
