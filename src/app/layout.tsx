@@ -1,53 +1,52 @@
 import type { Metadata } from "next";
-import {
-  Plus_Jakarta_Sans,
-  Outfit,
-  Space_Grotesk,
-  Inter,
-  Fraunces,
-} from "next/font/google";
+import localFont from "next/font/local";
 
 import { PreferencesBootstrap } from "@/components/shared/preferences-bootstrap";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// Fontes no repositório (woff2 variável, subset latin do Google Fonts): com
+// next/font/google o build da Vercel falhava às vezes ao baixar a fonte.
+
+const jakarta = localFont({
+  src: "./fonts/PlusJakartaSans-latin.woff2",
+  weight: "400 700",
   variable: "--font-plus-jakarta-sans",
   display: "swap",
   preload: true,
 });
 
-const grotesk = Space_Grotesk({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+const grotesk = localFont({
+  src: "./fonts/SpaceGrotesk-latin.woff2",
+  weight: "500 700",
   variable: "--font-space-grotesk",
   display: "swap",
   preload: true,
 });
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500"],
+const inter = localFont({
+  src: "./fonts/Inter-latin.woff2",
+  weight: "400 500",
   variable: "--font-inter",
   display: "swap",
 });
 
-const outfit = Outfit({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const outfit = localFont({
+  src: "./fonts/Outfit-latin.woff2",
+  weight: "400 600",
   variable: "--font-outfit",
   display: "swap",
 });
 
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  style: ["normal", "italic"],
+const fraunces = localFont({
+  src: [
+    { path: "./fonts/Fraunces-latin.woff2", weight: "400 500", style: "normal" },
+    { path: "./fonts/Fraunces-Italic-latin.woff2", weight: "400 500", style: "italic" },
+  ],
   variable: "--font-fraunces",
   display: "swap",
+  adjustFontFallback: "Times New Roman",
 });
 
 export const metadata: Metadata = {

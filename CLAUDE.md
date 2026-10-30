@@ -838,4 +838,5 @@ Plano e números em `docs/plano-enxugar-crm.md`.
 - **LGPD:** o CRM é de uso interno exclusivo. O log de visualização de lead (`lead_visualizado`, §6.11) **não** será implementado.
 - **Saíram:** Portal VIP (`/vip/[token]` e a rota `complementos`), CAPI de LinkedIn e TikTok (só Meta), `/api/admin/restore-leads-from-payload`, o simulador simplificado antigo e o código morto apontado pelo knip.
 - **Duplicidade por CPF** roda em todo caminho que grava CPF (criação por webhook e manual, enriquecimento do simulador, edição): `src/lib/leads/duplicidade-cpf.ts`. Caminho novo que grave CPF tem que chamar `registrarDuplicidadeCpf`.
+- **Fontes no repositório** (`src/app/fonts/`, `next/font/local`, 2026-10-30): com `next/font/google` o build da Vercel falhava às vezes ao baixar a fonte. Não voltar a usar `next/font/google`.
 - **Ficam como estão:** Painel executivo, visões salvas, solicitação de score, Direct Data, `test-emails`/`desqualificar-lead`, tipos de interação, Atividades/Consultores e o cron `google-ads-retry`.
